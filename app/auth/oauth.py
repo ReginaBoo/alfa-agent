@@ -37,18 +37,11 @@ def exchange_code_for_token(code: str) -> TokenData:
         raise RuntimeError(f"Ошибка при получении токена: {e}") from e
 
 
-def get_cloud_id(access_token: str) -> str | None:
-    """Получение cloud_id через Atlassian API"""
-    try:
-        resp = requests.get(
-            "https://api.atlassian.com/oauth/token/accessible-resources",
-            headers={"Authorization": f"Bearer {access_token}"},
-            timeout=10
-        )
-        resp.raise_for_status()
-        resources = resp.json()
-        if resources:
-            return resources[0]["id"]
-        return None
-    except RequestException as e:
-        raise RuntimeError(f"Ошибка при получении cloud_id: {e}") from e
+# app/auth/oauth.py
+def get_cloud_resources(access_token: str) -> list:
+    """Получает список доступных ресурсов (сайтов)"""
+    url = "https://api.atlassian.com/oauth/token/accessible-resources"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.json()  # список ресурсов: [{id, url, name, ...}]

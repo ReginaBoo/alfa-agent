@@ -1,8 +1,15 @@
+import logging
 from fastapi import FastAPI
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.endpoints import auth_endpoints, jira_endpoints
 from app.db.base import Base
 from app.db.session import engine
+
+# Настройка логгирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Alpha Agent Backend")
 
@@ -13,20 +20,49 @@ app.include_router(jira_endpoints.router, prefix="/jira", tags=["Jira"])
 
 
 # --- Startup / Shutdown ---
+# --- Startup / Shutdown ---
 @app.on_event("startup")
 def on_startup():
-    print("Starting application...")
+    logger.info("Starting Alpha Agent Backend...")
     
-    # fallback если миграции не применили
-    Base.metadata.create_all(bind=engine)
+    # Проверяем подключение к БД
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            logger.info("Database connection successful")
+    except SQLAlchemyError as e:
+        logger.error(f"Database connection failed: {e}")
+        # В продакшене можно выбросить исключение
+        # raise e
     
-    print("Database connected")
+    logger.info("Alpha Agent Backend startup complete")
 
 
 @app.on_event("shutdown")
 def on_shutdown():
-    print("Shutting down application...")
+    logger.info("Shutting down Alpha Agent Backend...")
+    
+    # Закрываем пул соединений
+    engine.dispose()
+    logger.info("Database connections closed")
+
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    """Health check endpoint for monitoring"""
+    db_status = "unknown"
+    error = None
+    
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            db_status = "connected"
+    except SQLAlchemyError as e:
+        db_status = "disconnected"
+        error = str(e)
+    
+    return {
+        "status": "ok" if db_status == "connected" else "degraded",
+        "database": db_status,
+        "error": error
+    }
