@@ -76,34 +76,46 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 ## Архитектура проекта
 ```
 backend/
-├── alembic/ # Миграции базы данных
-│ ├── versions/ # Сценарии миграций
-│ ├── env.py # Настройка Alembic
-│ └── script.py.mako # Шаблон миграций
+├── alembic/                # Миграции базы данных
+│ ├── versions/                 # Сценарии миграций
+│ ├── env.py                    # Настройка Alembic
+│ └── script.py.mako            # Шаблон миграций
+│
 ├── app/
-│ ├── main.py # Точка входа FastAPI
-│ ├── auth/ # Работа с авторизацией
+│ ├── main.py                   # Точка входа FastAPI
+│ ├── auth/                     # Работа с авторизацией
 │ │ ├── models.py
 │ │ ├── oauth.py
 │ │ └── service.py
-│ ├── core/ # Основные настройки проекта
+│ │
+│ ├── core/                 # Основные настройки проекта
 │ │ ├── config.py
-│ │ └── security.py
-│ ├── db/ # Работа с БД
+│ │ ├── security.py
+│ │ └── dependencies.py         # get_current_user, get_valid_token
+│ │
+│ ├── db/                   # Работа с БД
 │ │ ├── base.py
 │ │ ├── models.py
 │ │ └── session.py
-│ ├── endpoints/ # API эндпоинты
-│ │ ├── auth_endpoints.py
-│ │ └── jira_endpoints.py
-│ ├── services/ # Логика работы с Jira
-│ │ └── jira_service.py
-│ └── storage/ # Временное хранилище токенов
-│ └── memory_store.py
-├── requirements.txt # Python зависимости
-├── Dockerfile # Docker образ
-├── docker-compose.yml # Компоновка контейнеров
-├── .env / .env.example # Настройки окружения
+│ │
+│ ├── endpoints/            # API эндпоинты
+│ │ ├── auth_endpoints.py       # login, callback (использует сервисы)
+│ │ └── jira_endpoints.py       # sites, projects (использует dependencies)
+│ │
+│ ├── services/             # Логика работы
+│ │ ├── jira_service.py
+│ │ ├── atlassian_service.py      # get_atlassian_user_info, get_working_sites
+│ │ ├── user_service.py           # get_or_create_user
+│ │ ├── token_service.py          # save_tokens_for_working_sites
+│ │ └── token_refresh_service.py  # refresh_token, update_user_tokens
+│ │
+│ └── storage/              # Временное хранилище токенов
+│   └── memory_store.py
+│
+├── requirements.txt        # Python зависимости
+├── Dockerfile              # Docker образ
+├── docker-compose.yml      # Компоновка контейнеров
+├── .env / .env.example     # Настройки окружения
 └── README.md
 ```
 
@@ -165,7 +177,8 @@ docker-compose down
 
 
 ## Проверка работы
-API бэкенда: http://localhost:8000/docs – Swagger документация
+API бэкенда: http://localhost
+:8000/docs – Swagger документация
 
 Авторизация: http://localhost:8000/auth/login
 
