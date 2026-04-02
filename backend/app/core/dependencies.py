@@ -1,28 +1,37 @@
 # app/core/dependencies.py
 from datetime import datetime
-from fastapi import Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import Depends, HTTPException, Request
+from sqlalchemy.orm import Session as DbSession
 
 from app.db.session import get_db
-from app.db.models import User, AtlassianToken
+from app.db.models import User, AtlassianToken, Session as SessionModel
 from app.services.token_refresh_service import TokenRefreshService
 
 
-def get_current_user(db: Session = Depends(get_db)) -> User:
+def get_current_user(request: Request, db: DbSession = Depends(get_db)) -> User:
     """
-    Получает текущего пользователя.
-    TODO: заменить на реальную аутентификацию (сессии, JWT)
+    Получает текущего пользователя по сессии из cookie.
+    Session token передаётся в куках: session_token=...
     """
-    user = db.query(User).first()
-    if not user:
-        raise HTTPException(status_code=401, detail="No user found. Please authenticate.")
-    return user
+    session_token = request.cookies.get("session_token")
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated: no session token")
+    
+    session = db.query(SessionModel).filter(
+        SessionModel.session_token == session_token,
+        SessionModel.expires_at > datetime.utcnow()
+    ).first()
+    
+    if not session:
+        raise HTTPException(status_code=401, detail="Session expired or invalid")
+
+    return session.user
 
 
 def get_valid_token(
     site_name: str = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: DbSession = Depends(get_db)
 ) -> AtlassianToken:
     """
     Получает валидный токен для указанного сайта.
@@ -56,7 +65,7 @@ def get_valid_token(
 def get_valid_token_by_cloud_id(
     cloud_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: DbSession = Depends(get_db)
 ) -> AtlassianToken:
     """
     Получает валидный токен по cloud_id (для Confluence, Bitbucket)

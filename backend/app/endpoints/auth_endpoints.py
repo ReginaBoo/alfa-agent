@@ -1,9 +1,11 @@
 # app/endpoints/auth_endpoints.py
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response 
 from fastapi.responses import RedirectResponse, JSONResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session as DbSession
 from datetime import datetime, timedelta
+import secrets
 
+from app.db.models import Session as SessionModel 
 from app.auth.oauth import get_authorization_url, exchange_code_for_token, get_cloud_resources
 from app.db.session import get_db
 from app.services.atlassian_service import get_atlassian_user_info, get_working_sites
@@ -21,7 +23,7 @@ def login():
 
 
 @router.get("/callback")
-async def callback(request: Request, db: Session = Depends(get_db)):
+async def callback(request: Request, db: DbSession = Depends(get_db)):
     code = request.query_params.get("code")
     state = request.query_params.get("state")
 
@@ -68,8 +70,20 @@ async def callback(request: Request, db: Session = Depends(get_db)):
             expires_at=expires_at
         )
 
-        # 8. Возвращаем ответ
-        return {
+        # 9. Создаём сессию для пользователя
+        session_token = secrets.token_urlsafe(32)  # безопасный случайный токен
+        session_expires = datetime.utcnow() + timedelta(days=7)  # сессия живёт 7 дней
+
+        new_session = SessionModel(
+            user_id=user.id,
+            session_token=session_token,
+            expires_at=session_expires
+        )
+        db.add(new_session)
+        db.commit()
+
+        # 10. Формируем ответ
+        response_data = {
             "success": True,
             "user": {
                 "id": user.id,
@@ -86,19 +100,20 @@ async def callback(request: Request, db: Session = Depends(get_db)):
                 }
                 for token in saved_tokens
             ],
-            "other_available_sites": [
-                {
-                    "cloud_id": r["id"],
-                    "site_url": r["url"],
-                    "site_name": r.get("name", "")
-                }
-                for r in all_resources if r["id"] not in [s.cloud_id for s in saved_tokens]
-            ],
-            "access_token": token_data.access_token,
-            "refresh_token": token_data.refresh_token,
-            "expires_in": token_data.expires_in,
-            "scope": token_data.scope
         }
+
+        # 11. Создаём Response с HTTP-only cookie
+        response = JSONResponse(content=response_data)
+        response.set_cookie(
+            key="session_token",
+            value=session_token,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            max_age=7 * 24 * 60 * 60
+        )
+
+        return response
 
     except Exception as e:
         return JSONResponse(
