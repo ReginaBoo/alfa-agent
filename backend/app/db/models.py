@@ -1,8 +1,7 @@
 # backend/app/db/models.py
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import relationship 
 from datetime import datetime
-
 from app.db.base import Base
 
 
@@ -23,18 +22,21 @@ class User(Base):
 class AtlassianToken(Base):
     __tablename__ = "atlassian_tokens"
     
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    atlassian_account_id = Column(String, index=True, nullable=False)  # лучше сделать NOT NULL
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    atlassian_account_id = Column(String, index=True, nullable=False)
     cloud_id = Column(String, index=True, nullable=False)
-    site_url = Column(String, nullable=True)  # может быть пустым, если не удалось получить
-    site_name = Column(String, nullable=True)  # человекочитаемое имя (опционально)
+    site_url = Column(String, nullable=True)
+    site_name = Column(String, nullable=True)
     access_token = Column(String, nullable=False)
     refresh_token = Column(String, nullable=False)
     expires_at = Column(DateTime, index=True, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    # Relationships
+    __table_args__ = (
+        UniqueConstraint('user_id', 'cloud_id', name='uq_user_cloud'),
+    )
+    
     user = relationship("User", back_populates="tokens")
 
 

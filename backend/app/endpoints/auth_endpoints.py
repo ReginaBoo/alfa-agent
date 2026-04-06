@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session as DbSession
 from datetime import datetime, timedelta
 import secrets
 
+from app.auth.models import AtlassianResource
 from app.db.models import Session as SessionModel 
 from app.auth.oauth import get_authorization_url, exchange_code_for_token, get_cloud_resources
 from app.db.session import get_db
@@ -25,17 +26,15 @@ def login():
 @router.get("/callback")
 async def callback(request: Request, db: DbSession = Depends(get_db)):
     code = request.query_params.get("code")
-    state = request.query_params.get("state")
-
     if not code:
         return JSONResponse({"error": "code not provided"}, status_code=400)
 
     try:
         # 1. Получаем токен
         token_data = exchange_code_for_token(code)
-
+        
         # 2. Получаем ВСЕ ресурсы
-        all_resources = get_cloud_resources(token_data.access_token)
+        all_resources: list[AtlassianResource] = get_cloud_resources(token_data.access_token)
         
         if not all_resources:
             raise Exception("No accessible resources found")
@@ -49,30 +48,25 @@ async def callback(request: Request, db: DbSession = Depends(get_db)):
         # 4. Получаем информацию о пользователе
         user_info = await get_atlassian_user_info(
             token_data.access_token, 
-            working_sites[0]["id"]
+            working_sites[0].id
         )
 
         # 5. Получаем или создаем пользователя
         user = get_or_create_user(db, user_info)
-
-        # 6. Рассчитываем expires_at
-        expires_at = None
-        if hasattr(token_data, "expires_in"):
-            expires_at = datetime.utcnow() + timedelta(seconds=token_data.expires_in)
+        expires_at = datetime.utcnow() + timedelta(seconds=token_data.expires_in)
 
         # 7. Сохраняем токены
         saved_tokens = save_tokens_for_working_sites(
             db=db,
             user_id=user.id,
-            atlassian_account_id=user_info["account_id"],
+            atlassian_account_id=user_info.account_id,  # ← через точку!
             token_data=token_data,
             working_sites=working_sites,
             expires_at=expires_at
         )
 
-        # 9. Создаём сессию для пользователя
-        session_token = secrets.token_urlsafe(32)  # безопасный случайный токен
-        session_expires = datetime.utcnow() + timedelta(days=7)  # сессия живёт 7 дней
+        session_token = secrets.token_urlsafe(32)
+        session_expires = datetime.utcnow() + timedelta(days=7)
 
         new_session = SessionModel(
             user_id=user.id,

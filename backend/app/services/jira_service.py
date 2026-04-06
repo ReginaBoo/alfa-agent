@@ -1,7 +1,7 @@
 import requests
 
 
-def get_accessible_resources(access_token: str):
+'''def get_accessible_resources(access_token: str):
     url = "https://api.atlassian.com/oauth/token/accessible-resources"
 
     headers = {
@@ -10,4 +10,4 @@ def get_accessible_resources(access_token: str):
     }
 
     response = requests.get(url, headers=headers)
-    return response.json()
+    return response.json()'''

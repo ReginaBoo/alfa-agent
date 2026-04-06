@@ -5,6 +5,7 @@ import logging
 
 from app.core.config import settings
 from app.db.models import AtlassianToken
+from app.auth.models import TokenData
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 class TokenRefreshService:
     
     @staticmethod
-    def refresh_token(refresh_token: str) -> dict:
+    def refresh_token(refresh_token: str) -> TokenData: 
         """Обновляет access_token через Atlassian API"""
         url = "https://auth.atlassian.com/oauth/token"
         data = {
@@ -29,11 +30,13 @@ class TokenRefreshService:
         result = response.json()
         logger.info(f"Token refresh successful, expires_in: {result.get('expires_in')}")
         
-        return {
-            "access_token": result["access_token"],
-            "refresh_token": result.get("refresh_token"),
-            "expires_in": result.get("expires_in", 3600)
-        }
+        return TokenData(
+            access_token=result["access_token"],
+            refresh_token=result.get("refresh_token", ""),
+            expires_in=result.get("expires_in", 3600),
+            scope=result.get("scope", ""),
+            token_type=result.get("token_type", "Bearer")
+        )
     
     @staticmethod
     def update_user_tokens(db: Session, user_id: int) -> bool:
@@ -55,14 +58,14 @@ class TokenRefreshService:
         refresh_token = tokens[0].refresh_token
         
         try:
-            new_tokens = TokenRefreshService.refresh_token(refresh_token)
-            expires_at = datetime.utcnow() + timedelta(seconds=new_tokens["expires_in"])
+            new_tokens: TokenData = TokenRefreshService.refresh_token(refresh_token)
+            expires_at = datetime.utcnow() + timedelta(seconds=new_tokens.expires_in)
             
             for token in tokens:
-                token.access_token = new_tokens["access_token"]
+                token.access_token = new_tokens.access_token
                 token.expires_at = expires_at
-                if new_tokens.get("refresh_token"):
-                    token.refresh_token = new_tokens["refresh_token"]
+                if new_tokens.refresh_token:
+                    token.refresh_token = new_tokens.refresh_token
             
             db.commit()
             

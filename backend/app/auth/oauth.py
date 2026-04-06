@@ -1,7 +1,7 @@
 import requests
 from requests.exceptions import RequestException
 from app.core.config import settings
-from app.auth.models import TokenData
+from app.auth.models import TokenData, AtlassianResource
 
 def get_authorization_url(state: str) -> str:
     return (
@@ -33,7 +33,6 @@ def exchange_code_for_token(code: str) -> TokenData:
         return TokenData(**data)
 
     except RequestException as e:
-        # Ловим ошибки сети, SSL и таймауты
         raise RuntimeError(f"Ошибка при получении токена: {e}") from e
 
 
@@ -44,4 +43,4 @@ def get_cloud_resources(access_token: str) -> list:
     headers = {"Authorization": f"Bearer {access_token}"}
     response = requests.get(url, headers=headers)
     response.raise_for_status()
-    return response.json()  # список ресурсов: [{id, url, name, ...}]
+    return [AtlassianResource(**r) for r in response.json()]
