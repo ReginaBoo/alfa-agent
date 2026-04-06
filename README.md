@@ -25,6 +25,15 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 - Токены для сайтов Atlassian (`atlassian_tokens`)
 - Сессии пользователей (`sessions`)
 
+
+### Jira API клиент
+- Типизированные Pydantic-модели (`JiraIssue`, `JiraProject`, `JiraUser`)
+- Поиск задач по JQL через новый эндпоинт `/rest/api/3/search/jql`
+- Создание и обновление задач
+- Получение истории изменений (changelog)
+- Автообновление токенов при истечении
+
+
 ### API endpoints
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
@@ -32,42 +41,100 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 | GET | `/auth/callback` | Callback после авторизации |
 | GET | `/jira/sites` | Список доступных сайтов |
 | GET | `/jira/projects` | Проекты Jira для указанного сайта |
+| GET | `/jira/issues` | Поиск задач по JQL |
+| GET | `/jira/issues/{key}` | Получить задачу по ключу |
+| POST | `/jira/issues` | Создать новую задачу |
+| POST | `/jira/issues/{key}/transitions` | Сменить статус задачи |
+| GET | `/jira/issues/{key}/changelog` | История изменений задачи |
 | GET | `/health` | Проверка состояния сервиса |
+
+
+> **Примечание:** Для поиска задач используется новый эндпоинт Atlassian `/rest/api/3/search/jql` (вместо устаревшего `/search`).
 
 ---
 
 ## Структура базы данных
-### Таблица `users` — пользователи
-Хранит информацию о пользователях, авторизованных через Atlassian.
 
+### Схема `identity` — пользователи и доступ
+
+#### Таблица `users`
 | Поле | Описание |
 |------|----------|
 | `id` | Уникальный ID пользователя |
-| `atlassian_account_id` | ID пользователя в Atlassian |
-| `email` | Email пользователя |
-| `display_name` | Имя пользователя |
+| `email` | Email пользователя (уникальный) |
+| `display_name` | Отображаемое имя |
 | `avatar_url` | Ссылка на аватар |
 | `created_at` | Дата регистрации |
+| `updated_at` | Дата обновления |
 
----
+#### Таблица `sessions`
+| Поле | Описание |
+|------|----------|
+| `id` | Уникальный ID сессии |
+| `user_id` | Внешний ключ → users.id |
+| `session_token` | Уникальный токен сессии |
+| `expires_at` | Срок действия |
+| `client_type` | Тип клиента (web/desktop) |
+| `created_at` | Дата создания |
 
-### Таблица `atlassian_tokens` — токены доступа
-Хранит OAuth токены для доступа к Jira/Confluence API.
-
+#### Таблица `integration_tokens`
 | Поле | Описание |
 |------|----------|
 | `id` | Уникальный ID записи |
-| `user_id` | Ссылка на пользователя (внешний ключ → users.id) |
-| `atlassian_account_id` | ID пользователя в Atlassian (для быстрого поиска) |
-| `cloud_id` | ID сайта (рабочего пространства) |
-| `site_name` | Имя сайта (например, "mycompany") |
-| `site_url` | URL сайта (https://mycompany.atlassian.net) |
-| `access_token` | Токен доступа (живет 1 час) |
-| `refresh_token` | Токен для обновления (живет 90 дней) |
-| `expires_at` | Дата истечения access_token |
-| `created_at` | Дата создания записи |
+| `user_id` | Внешний ключ → users.id |
+| `provider` | Тип (jira, github, confluence) |
+| `provider_user_id` | ID пользователя во внешней системе |
+| `instance_id` | ID инстанса (cloud_id для Jira) |
+| `instance_name` | Имя сайта (для UI) |
+| `instance_url` | URL сайта |
+| `access_token` | Токен доступа |
+| `refresh_token` | Токен обновления |
+| `expires_at` | Срок действия |
+| `meta` | Дополнительные данные (JSONB) |
+| `created_at` | Дата создания |
+| `updated_at` | Дата обновления |
 
-**Особенность:** У одного пользователя может быть несколько записей — по одной на каждый сайт. Однако `access_token` и `refresh_token` одинаковые для всех записей, так как один токен работает для всех сайтов пользователя.
+### Схема `raw` — сырые события
+
+#### Таблица `raw_events`
+| Поле | Описание |
+|------|----------|
+| `id` | Уникальный ID |
+| `source` | Источник (jira, confluence, github) |
+| `event_type` | Тип события |
+| `external_id` | ID во внешней системе |
+| `project_integration_id` | Связь с проектом |
+| `payload` | Полный JSON ответа API |
+| `timestamp` | Время события |
+| `created_at` | Дата записи |
+
+### Схема `normalized` — нормализованные данные
+
+#### Таблица `jira_issues`
+| Поле | Описание |
+|------|----------|
+| `id` | Уникальный ID |
+| `project_integration_id` | Связь с интеграцией |
+| `issue_key` | Ключ задачи (PROJ-123) |
+| `project_key` | Ключ проекта |
+| `summary` | Заголовок |
+| `status` | Статус |
+| `status_category` | Категория статуса |
+| `assignee_account_id` | ID исполнителя |
+| `assignee_user_id` | Внешний ключ → external_users |
+| `reporter_account_id` | ID автора |
+| `priority` | Приоритет |
+| `issue_type` | Тип задачи |
+| `story_points` | Story Points (оценка сложности) |
+| `original_estimate` | Оценка в часах |
+| `time_spent` | Затрачено времени |
+| `remaining_estimate` | Осталось времени |
+| `due_date` | Дедлайн |
+| `created_at` | Дата создания |
+| `updated_at` | Дата обновления |
+| `last_synced_at` | Дата синхронизации |
+| `is_deleted` | Флаг удаления |
+| `snapshot_version` | Версия снимка |
 
 ---
 
@@ -76,46 +143,52 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 ## Архитектура проекта
 ```
 backend/
-├── alembic/                # Миграции базы данных
-│ ├── versions/                 # Сценарии миграций
-│ ├── env.py                    # Настройка Alembic
-│ └── script.py.mako            # Шаблон миграций
+├── alembic/ # Миграции базы данных
+│ ├── versions/ # Сценарии миграций
+│ ├── env.py # Настройка Alembic
+│ └── script.py.mako # Шаблон миграций
 │
 ├── app/
-│ ├── main.py                   # Точка входа FastAPI
-│ ├── auth/                     # Работа с авторизацией
-│ │ ├── models.py
-│ │ ├── oauth.py
-│ │ └── service.py
+│ ├── main.py # Точка входа FastAPI
 │ │
-│ ├── core/                 # Основные настройки проекта
-│ │ ├── config.py
-│ │ ├── security.py
-│ │ └── dependencies.py         # get_current_user, get_valid_token
+│ ├── auth/ # Авторизация
+│ │ ├── models.py # TokenData, AtlassianResource, UserInfo
+│ │ └── oauth.py # OAuth flow
 │ │
-│ ├── db/                   # Работа с БД
-│ │ ├── base.py
-│ │ ├── models.py
-│ │ └── session.py
+│ ├── core/ # Основные настройки
+│ │ ├── config.py # Переменные окружения
+│ │ ├── security.py # Хэширование и безопасность
+│ │ └── dependencies.py # get_current_user, get_valid_token
 │ │
-│ ├── endpoints/            # API эндпоинты
-│ │ ├── auth_endpoints.py       # login, callback (использует сервисы)
-│ │ └── jira_endpoints.py       # sites, projects (использует dependencies)
+│ ├── db/ # Работа с БД
+│ │ ├── base.py # Базовая модель
+│ │ ├── session.py # Сессии БД
+│ │ └── models/ # SQLAlchemy модели
+│ │ ├── identity.py # users, sessions, integration_tokens
+│ │ ├── raw.py # raw_events
+│ │ └── normalized.py # jira_issues
 │ │
-│ ├── services/             # Логика работы
-│ │ ├── jira_service.py
-│ │ ├── atlassian_service.py      # get_atlassian_user_info, get_working_sites
-│ │ ├── user_service.py           # get_or_create_user
-│ │ ├── token_service.py          # save_tokens_for_working_sites
-│ │ └── token_refresh_service.py  # refresh_token, update_user_tokens
+│ ├── endpoints/ # API эндпоинты
+│ │ ├── auth_endpoints.py # login, callback
+│ │ └── jira_endpoints.py # sites, projects, issues
 │ │
-│ └── storage/              # Временное хранилище токенов
-│   └── memory_store.py
+│ ├── jira/ # Jira интеграция
+│ │ ├── models.py # Pydantic-модели
+│ │ └── client.py # JiraClient (типизированный)
+│ │
+│ ├── services/ # Бизнес-логика
+│ │ ├── atlassian_service.py # get_user_info, get_working_sites
+│ │ ├── token_service.py # save_tokens_for_working_sites
+│ │ ├── token_refresh_service.py # refresh_token, update_user_tokens
+│ │ └── user_service.py # get_or_create_user
+│ │
+│ └── storage/ # Временное хранилище
+│ └── memory_store.py
 │
-├── requirements.txt        # Python зависимости
-├── Dockerfile              # Docker образ
-├── docker-compose.yml      # Компоновка контейнеров
-├── .env / .env.example     # Настройки окружения
+├── requirements.txt # Python зависимости
+├── Dockerfile # Docker образ
+├── docker-compose.yml # Компоновка контейнеров
+├── .env / .env.example # Настройки окружения
 └── README.md
 ```
 

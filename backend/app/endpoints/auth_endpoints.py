@@ -45,6 +45,14 @@ async def callback(request: Request, db: DbSession = Depends(get_db)):
         if not working_sites:
             raise Exception("Token does not work for any accessible resource")
         
+        print("ALL RESOURCES:")
+        for r in all_resources:
+            print(r.id, r.url, r.name)
+
+        print("WORKING SITES:")
+        for r in working_sites:
+            print(r.id, r.url, r.name)
+        
         # 4. Получаем информацию о пользователе
         user_info = await get_atlassian_user_info(
             token_data.access_token, 
@@ -55,11 +63,11 @@ async def callback(request: Request, db: DbSession = Depends(get_db)):
         user = get_or_create_user(db, user_info)
         expires_at = datetime.utcnow() + timedelta(seconds=token_data.expires_in)
 
-        # 7. Сохраняем токены
+        # 6. Сохраняем токены
         saved_tokens = save_tokens_for_working_sites(
             db=db,
             user_id=user.id,
-            atlassian_account_id=user_info.account_id,  # ← через точку!
+            atlassian_account_id=user_info.account_id,
             token_data=token_data,
             working_sites=working_sites,
             expires_at=expires_at
@@ -76,27 +84,26 @@ async def callback(request: Request, db: DbSession = Depends(get_db)):
         db.add(new_session)
         db.commit()
 
-        # 10. Формируем ответ
+        # 7. Формируем ответ (без atlassian_account_id)
         response_data = {
             "success": True,
             "user": {
                 "id": user.id,
-                "account_id": user.atlassian_account_id,
                 "email": user.email,
                 "name": user.display_name
             },
             "sites": [
                 {
-                    "cloud_id": token.cloud_id,
-                    "site_url": token.site_url,
-                    "site_name": token.site_name,
+                    "cloud_id": token.instance_id,
+                    "site_url": token.instance_url,
+                    "site_name": token.instance_name,
                     "token_id": token.id
                 }
                 for token in saved_tokens
             ],
         }
 
-        # 11. Создаём Response с HTTP-only cookie
+        # 8. Создаём Response с HTTP-only cookie
         response = JSONResponse(content=response_data)
         response.set_cookie(
             key="session_token",

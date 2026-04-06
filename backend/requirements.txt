@@ -11,3 +11,4 @@ alembic
 pydantic
 passlib[bcrypt]
 cryptography
+tenacity==8.2.3

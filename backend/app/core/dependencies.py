@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session as DbSession
 
 from app.db.session import get_db
-from app.db.models import User, AtlassianToken, Session as SessionModel
+from app.db.models import User, IntegrationToken, Session as SessionModel
 from app.services.token_refresh_service import TokenRefreshService
 
 
@@ -29,60 +29,62 @@ def get_current_user(request: Request, db: DbSession = Depends(get_db)) -> User:
 
 
 def get_valid_token(
-    site_name: str = None,
+    instance_name: str = None,
     current_user: User = Depends(get_current_user),
     db: DbSession = Depends(get_db)
-) -> AtlassianToken:
+) -> IntegrationToken:
     """
-    Получает валидный токен для указанного сайта.
+    Получает валидный токен для указанного сайта (по instance_name).
     Если токен истек, автоматически обновляет.
     """
-    query = db.query(AtlassianToken).filter(
-        AtlassianToken.user_id == current_user.id
+    query = db.query(IntegrationToken).filter(
+        IntegrationToken.user_id == current_user.id,
+        IntegrationToken.provider == "jira"
     )
     
-    if site_name:
-        query = query.filter(AtlassianToken.site_name == site_name)
+    if instance_name:
+        query = query.filter(IntegrationToken.instance_name == instance_name)
     
     token = query.first()
     
     if not token:
         raise HTTPException(
             status_code=404,
-            detail=f"No token found for site '{site_name}'"
+            detail=f"No token found for site '{instance_name}'"
         )
     
     # Проверяем, не истек ли токен
     if token.expires_at and token.expires_at <= datetime.utcnow():
-        print(f"Token expired at {token.expires_at}, refreshing...")
+        from app.services.token_refresh_service import TokenRefreshService
         TokenRefreshService.update_user_tokens(db, current_user.id)
         db.refresh(token)
-        print(f"Token refreshed, new expires: {token.expires_at}")
     
     return token
 
 
-def get_valid_token_by_cloud_id(
-    cloud_id: str,
+def get_valid_token_by_instance_id(
+    instance_id: str,
     current_user: User = Depends(get_current_user),
     db: DbSession = Depends(get_db)
-) -> AtlassianToken:
+) -> IntegrationToken:
     """
-    Получает валидный токен по cloud_id (для Confluence, Bitbucket)
+    Получает валидный токен по instance_id (cloud_id для Jira).
     """
-    token = db.query(AtlassianToken).filter(
-        AtlassianToken.user_id == current_user.id,
-        AtlassianToken.cloud_id == cloud_id
+    token = db.query(IntegrationToken).filter(
+        IntegrationToken.user_id == current_user.id,
+        IntegrationToken.instance_id == instance_id,
+        IntegrationToken.provider == "jira"
     ).first()
     
     if not token:
         raise HTTPException(
             status_code=404,
-            detail=f"No token found for cloud_id '{cloud_id}'"
+            detail=f"No token found for instance_id '{instance_id}'"
         )
     
     # Проверяем, не истек ли токен
     if token.expires_at and token.expires_at <= datetime.utcnow():
+        from app.services.token_refresh_service import TokenRefreshService
         TokenRefreshService.update_user_tokens(db, current_user.id)
         db.refresh(token)
     

@@ -4,7 +4,7 @@ import requests
 import logging
 
 from app.core.config import settings
-from app.db.models import AtlassianToken
+from app.db.models import IntegrationToken
 from app.auth.models import TokenData
 
 logger = logging.getLogger(__name__)
@@ -43,8 +43,8 @@ class TokenRefreshService:
         """Обновляет все токены пользователя"""
         logger.info(f"Starting token refresh for user {user_id}")
         
-        tokens = db.query(AtlassianToken).filter(
-            AtlassianToken.user_id == user_id
+        tokens = db.query(IntegrationToken).filter(
+            IntegrationToken.user_id == user_id
         ).all()
         
         if not tokens:

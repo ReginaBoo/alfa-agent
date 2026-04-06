@@ -2,11 +2,11 @@ from app.db.session import SessionLocal
 import datetime
 from datetime import timedelta
 
-from app.db.models import AtlassianToken 
+from app.db.models import IntegrationToken 
 
 def save_token(user_id, cloud_id, data):
     db = SessionLocal()
-    token = AtlassianToken(  # было: Token
+    token = IntegrationToken(  # было: Token
         user_id=user_id,
         cloud_id=cloud_id,
         access_token=data["access_token"],

@@ -6,13 +6,12 @@ from app.auth.models import UserInfo
 
 def get_or_create_user(db: Session, user_info: UserInfo) -> User:
     """Получает существующего пользователя или создает нового"""
-    user = db.query(User).filter(
-        User.atlassian_account_id == user_info.account_id 
-    ).first()
+    # Ищем по email (уникальное поле)
+    user = db.query(User).filter(User.email == user_info.email).first()
     
     if not user:
+        # Создаём нового пользователя (без atlassian_account_id)
         user = User(
-            atlassian_account_id=user_info.account_id,
             email=user_info.email,
             display_name=user_info.display_name,
             avatar_url=user_info.picture
