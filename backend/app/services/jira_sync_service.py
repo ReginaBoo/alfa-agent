@@ -99,8 +99,9 @@ class JiraSyncService:
                     priority=fields.get("priority", {}).get("name") if fields.get("priority") else None,
                     issue_type=fields.get("issuetype", {}).get("name") if fields.get("issuetype") else None,
                     story_points=story_points,
-                    created_at=datetime.utcnow(),
-                    updated_at=datetime.utcnow(),
+                    due_date=fields.get("duedate"),  # ДОБАВИТЬ ЭТУ СТРОКУ
+                    created_at=fields.get("created"),  # ИЗМЕНИТЬ: использовать дату из Jira
+                    updated_at=fields.get("updated"),  # ИЗМЕНИТЬ: использовать дату из Jira
                     last_synced_at=datetime.utcnow()
                 )
                 self.db.add(new_issue)

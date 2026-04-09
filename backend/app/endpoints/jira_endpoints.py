@@ -3,11 +3,44 @@
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from typing import Optional
+
+from app.db.session import get_db
+from app.db.models import IntegrationToken
+from app.core.dependencies import get_current_user
 
 router = APIRouter()
 
 
 # ================= HELPERS =================
+
+def get_token(instance_name: str, db: Session, user_id: int) -> IntegrationToken:
+    """Получает токен по имени сайта"""
+    token = db.query(IntegrationToken).filter(
+        IntegrationToken.instance_name == instance_name,
+        IntegrationToken.user_id == user_id,
+        IntegrationToken.provider == "jira"
+    ).first()
+    
+    if not token:
+        raise HTTPException(status_code=404, detail="Jira site not found")
+    
+    return token
+
+
+def get_token_by_instance_id(instance_id: str, db: Session, user_id: int) -> IntegrationToken:
+    """Получает токен по cloud_id"""
+    token = db.query(IntegrationToken).filter(
+        IntegrationToken.instance_id == instance_id,
+        IntegrationToken.user_id == user_id,
+        IntegrationToken.provider == "jira"
+    ).first()
+    
+    if not token:
+        raise HTTPException(status_code=404, detail="Jira site not found")
+    
+    return token
+
 
 async def _make_jira_request(
     token: IntegrationToken,
@@ -38,7 +71,7 @@ async def _make_jira_request(
             if response.status_code == 401 and attempt == 0:
                 # Обновляем токен
                 from app.services.token_refresh_service import TokenRefreshService
-                TokenRefreshService.update_user_tokens(db, user_id)
+                await TokenRefreshService.update_user_tokens_async(db, user_id)
                 # Получаем новый токен
                 token = get_token_by_instance_id(token.instance_id, db, user_id)
                 headers["Authorization"] = f"Bearer {token.access_token}"
@@ -50,7 +83,33 @@ async def _make_jira_request(
         raise HTTPException(401, "Token refresh failed")
 
 
-# ================= PROJECTS (асинхронно) =================
+# ================= SITES =================
+
+@router.get("/sites")
+def get_sites(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    tokens = db.query(IntegrationToken).filter(
+        IntegrationToken.user_id == current_user.id,
+        IntegrationToken.provider == "jira"
+    ).all()
+
+    return {
+        "success": True,
+        "sites": [
+            {
+                "cloud_id": t.instance_id,
+                "site_name": t.instance_name,
+                "site_url": t.instance_url,
+                "expires_at": t.expires_at.isoformat() if t.expires_at else None
+            }
+            for t in tokens
+        ]
+    }
+
+
+# ================= PROJECTS =================
 
 @router.get("/projects")
 async def get_projects(
@@ -88,7 +147,7 @@ async def search_issues(
     jql: str = Query(...),
     start_at: int = Query(0, ge=0),
     max_results: int = Query(50, ge=1, le=100),
-    fields: Optional[str] = Query("*all"),  # По умолчанию все поля
+    fields: Optional[str] = Query("*all"),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -98,7 +157,7 @@ async def search_issues(
         "jql": jql,
         "startAt": start_at,
         "maxResults": max_results,
-        "fields": fields  # Включает Story Points
+        "fields": fields
     }
     
     try:
