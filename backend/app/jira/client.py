@@ -37,13 +37,27 @@ class JiraClient:
     ) -> Dict[str, Any]:
         """
         Выполняет запрос к Jira API с автоматическим обновлением токена.
+        
+        Args:
+            cloud_id: ID сайта Atlassian
+            endpoint: Эндпоинт API (начинается с /)
+            method: HTTP метод (GET, POST, PUT, DELETE)
+            params: Query параметры
+            json: JSON тело запроса
+            user_id: ID пользователя в нашей системе
+            
+        Returns:
+            Dict[str, Any]: JSON ответ от API
         """
-        # Получаем валидный токен для указанного cloud_id
+        # Получаем валидный токен
         token = await self.token_service.get_valid_token(
             user_id=user_id,
             provider="jira",
             instance_id=cloud_id
         )
+        
+        if not token:
+            raise ValueError(f"No valid token for cloud_id {cloud_id}")
         
         url = f"{self.base_url}/{cloud_id}{endpoint}"
         headers = {
@@ -53,6 +67,7 @@ class JiraClient:
         }
         
         async with httpx.AsyncClient(timeout=self.timeout) as client:
+            # Первая попытка
             response = await client.request(
                 method=method,
                 url=url,
@@ -61,15 +76,25 @@ class JiraClient:
                 json=json
             )
             
-            # Если токен протух — обновляем и пробуем ещё раз
+            # Если токен протух — обновляем и пробуем ещё раз (максимум 1 раз)
             if response.status_code == 401:
+                # Обновляем токены пользователя
                 await self.token_service.refresh_user_tokens(user_id)
+                
+                # Получаем новый токен
                 token = await self.token_service.get_valid_token(
                     user_id=user_id,
                     provider="jira",
                     instance_id=cloud_id
                 )
+                
+                if not token:
+                    raise ValueError(f"Failed to refresh token for cloud_id {cloud_id}")
+                
+                # Обновляем заголовок
                 headers["Authorization"] = f"Bearer {token.access_token}"
+                
+                # Повторяем запрос
                 response = await client.request(
                     method=method,
                     url=url,
@@ -78,6 +103,7 @@ class JiraClient:
                     json=json
                 )
             
+            # Проверяем статус
             response.raise_for_status()
             return response.json()
     
@@ -167,6 +193,9 @@ class JiraClient:
         
         if fields:
             params["fields"] = ",".join(fields)
+        else:
+            # По умолчанию запрашиваем все поля (включая Story Points)
+            params["fields"] = "*all"
         
         data = await self._request(
             cloud_id=cloud_id,

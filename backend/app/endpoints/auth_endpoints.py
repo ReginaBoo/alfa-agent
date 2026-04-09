@@ -6,12 +6,13 @@ from datetime import datetime, timedelta
 import secrets
 
 from app.auth.models import AtlassianResource
-from app.db.models import Session as SessionModel 
+from app.db.models import Session as SessionModel, User
 from app.auth.oauth import get_authorization_url, exchange_code_for_token, get_cloud_resources
 from app.db.session import get_db
 from app.services.atlassian_service import get_atlassian_user_info, get_working_sites
 from app.services.user_service import get_or_create_user
 from app.services.token_service import save_tokens_for_working_sites
+from app.core.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -121,3 +122,38 @@ async def callback(request: Request, db: DbSession = Depends(get_db)):
             {"error": "Internal server error", "details": str(e)}, 
             status_code=500
         )
+
+
+@router.get("/me")
+async def get_current_user_info(
+    current_user: User = Depends(get_current_user)
+):
+    """Возвращает информацию о текущем пользователе"""
+    return {
+        "success": True,
+        "user": {
+            "id": current_user.id,
+            "email": current_user.email,
+            "name": current_user.display_name,
+            "avatar_url": current_user.avatar_url
+        }
+    }
+
+
+@router.post("/logout")
+async def logout(
+    request: Request,
+    response: Response,
+    db: DbSession = Depends(get_db)
+):
+    """Выход из системы — удаляет сессию"""
+    session_token = request.cookies.get("session_token")
+    
+    if session_token:
+        db.query(SessionModel).filter(
+            SessionModel.session_token == session_token
+        ).delete()
+        db.commit()
+    
+    response.delete_cookie("session_token")
+    return {"success": True, "message": "Logged out"}

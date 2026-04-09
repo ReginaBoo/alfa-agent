@@ -4,6 +4,8 @@ from app.auth.models import TokenData, AtlassianResource
 from datetime import datetime, timedelta
 from typing import Optional
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 
 def save_tokens_for_working_sites(
@@ -62,3 +64,50 @@ def save_tokens_for_working_sites(
         db.refresh(token)
     
     return saved_tokens
+
+
+
+class TokenService:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+    
+    async def get_valid_token(
+        self, 
+        user_id: int, 
+        provider: str, 
+        instance_id: str
+    ) -> Optional[IntegrationToken]:
+        """Асинхронно получает валидный токен"""
+        
+        # Асинхронный запрос к БД
+        result = await self.db.execute(
+            select(IntegrationToken).where(
+                IntegrationToken.user_id == user_id,
+                IntegrationToken.provider == provider,
+                IntegrationToken.instance_id == instance_id
+            )
+        )
+        token = result.scalar_one_or_none()
+        
+        if not token:
+            return None
+        
+        # Проверяем срок действия
+        if token.expires_at and token.expires_at <= datetime.utcnow():
+            await self.refresh_user_tokens(user_id)
+            # Повторно получаем токен
+            result = await self.db.execute(
+                select(IntegrationToken).where(
+                    IntegrationToken.user_id == user_id,
+                    IntegrationToken.provider == provider,
+                    IntegrationToken.instance_id == instance_id
+                )
+            )
+            token = result.scalar_one_or_none()
+        
+        return token
+    
+    async def refresh_user_tokens(self, user_id: int) -> bool:
+        """Асинхронно обновляет все токены пользователя"""
+        from app.services.token_refresh_service import TokenRefreshService
+        return await TokenRefreshService.update_user_tokens_async(self.db, user_id)

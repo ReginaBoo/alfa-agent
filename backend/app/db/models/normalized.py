@@ -12,13 +12,14 @@ class JiraIssue(Base):
     )
     
     id = Column(Integer, primary_key=True)
-    project_integration_id = Column(Integer, nullable=False, index=True)
+    project_integration_id = Column(Integer, nullable=True, index=True)
     issue_key = Column(String(255), unique=True, nullable=False, index=True)
     project_key = Column(String(255), nullable=False, index=True)  # ← добавил поле
     summary = Column(Text, nullable=False)
     status = Column(String(100), nullable=False, index=True)  # ← добавил индекс
     status_category = Column(String(50), nullable=True)
     assignee_account_id = Column(String(255), nullable=True, index=True)  # ← добавил индекс
+    assignee_name = Column(String(255), nullable=True)
     assignee_user_id = Column(Integer, nullable=True)
     reporter_account_id = Column(String(255), nullable=True)
     priority = Column(String(50), nullable=True)

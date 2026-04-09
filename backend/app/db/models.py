@@ -1,5 +1,5 @@
 # backend/app/db/models.py
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, UniqueConstraint, Float, Text, JSON
 from sqlalchemy.orm import relationship 
 from datetime import datetime
 from app.db.base import Base

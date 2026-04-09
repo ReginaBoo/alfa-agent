@@ -10,6 +10,7 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 - **Alembic** — миграции
 - **Docker** + **Docker Compose** — контейнеризация
 - **OAuth 2.0 (3LO)** — авторизация в Atlassian
+- **Pytest** — тестирование
 
 ---
 
@@ -19,39 +20,67 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 - OAuth flow с получением `access_token` и `refresh_token`
 - Автоматическое обновление истекших токенов
 - Получение информации о пользователе (email, имя, аватар)
+- Управление сессиями (создание, проверка, удаление)
 
 ### Хранение данных
 - Пользователи (`users`)
-- Токены для сайтов Atlassian (`atlassian_tokens`)
 - Сессии пользователей (`sessions`)
-
+- Токены для внешних сервисов (`integration_tokens`)
+- Сырые события из API (`raw_events`)
+- Нормализованные задачи Jira (`jira_issues`)
 
 ### Jira API клиент
 - Типизированные Pydantic-модели (`JiraIssue`, `JiraProject`, `JiraUser`)
-- Поиск задач по JQL через новый эндпоинт `/rest/api/3/search/jql`
+- Поиск задач по JQL
 - Создание и обновление задач
 - Получение истории изменений (changelog)
-- Автообновление токенов при истечении
+- Автообновление токенов при истечении (401 → refresh)
+
+### Синхронизация задач
+- Выгрузка задач из Jira в БД (`/jira/sync/{project_key}`)
+- Сохранение сырых данных в `raw_events`
+- Нормализация и сохранение в `jira_issues`
+
+### Тестирование
+- 19 тестов, проверяющих:
+  - Health check
+  - Авторизацию и сессии
+  - Зависимости (`get_current_user`, `get_valid_token`)
+  - JiraClient (с моками)
+  - Jira эндпоинты
+
+---
 
 
-### API endpoints
+## API endpoints
+
+### Авторизация
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| GET | `/auth/login` | Начать OAuth авторизацию |
+| GET | `/auth/login` | Начать OAuth авторизацию (редирект на Atlassian) |
 | GET | `/auth/callback` | Callback после авторизации |
-| GET | `/jira/sites` | Список доступных сайтов |
+| GET | `/auth/me` | Получить информацию о текущем пользователе |
+| POST | `/auth/logout` | Выход из системы (удаление сессии) |
+
+### Jira
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| GET | `/jira/sites` | Список доступных Atlassian сайтов |
 | GET | `/jira/projects` | Проекты Jira для указанного сайта |
-| GET | `/jira/issues` | Поиск задач по JQL |
+| GET | `/jira/issues` | Поиск задач по JQL (с поддержкой `fields=*all`) |
 | GET | `/jira/issues/{key}` | Получить задачу по ключу |
 | POST | `/jira/issues` | Создать новую задачу |
 | POST | `/jira/issues/{key}/transitions` | Сменить статус задачи |
 | GET | `/jira/issues/{key}/changelog` | История изменений задачи |
+| POST | `/jira/sync/{project_key}` | Принудительная синхронизация задач в БД |
+
+### Health
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
 | GET | `/health` | Проверка состояния сервиса |
 
-
-> **Примечание:** Для поиска задач используется новый эндпоинт Atlassian `/rest/api/3/search/jql` (вместо устаревшего `/search`).
-
 ---
+
 
 ## Структура базы данных
 
@@ -144,21 +173,19 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 ```
 backend/
 ├── alembic/ # Миграции базы данных
-│ ├── versions/ # Сценарии миграций
-│ ├── env.py # Настройка Alembic
-│ └── script.py.mako # Шаблон миграций
+│ └── versions/ # Сценарии миграций
 │
 ├── app/
 │ ├── main.py # Точка входа FastAPI
 │ │
 │ ├── auth/ # Авторизация
-│ │ ├── models.py # TokenData, AtlassianResource, UserInfo
+│ │ ├── models.py # TokenData, AtlassianResource
 │ │ └── oauth.py # OAuth flow
 │ │
 │ ├── core/ # Основные настройки
 │ │ ├── config.py # Переменные окружения
-│ │ ├── security.py # Хэширование и безопасность
-│ │ └── dependencies.py # get_current_user, get_valid_token
+│ │ ├── dependencies.py # get_current_user, get_valid_token
+│ │ └── security.py # Хэширование
 │ │
 │ ├── db/ # Работа с БД
 │ │ ├── base.py # Базовая модель
@@ -169,23 +196,31 @@ backend/
 │ │ └── normalized.py # jira_issues
 │ │
 │ ├── endpoints/ # API эндпоинты
-│ │ ├── auth_endpoints.py # login, callback
-│ │ └── jira_endpoints.py # sites, projects, issues
+│ │ ├── auth_endpoints.py # /auth/login, /auth/callback, /auth/me, /auth/logout
+│ │ └── jira_endpoints.py # /jira/sites, /jira/projects, /jira/issues, /jira/sync
 │ │
 │ ├── jira/ # Jira интеграция
 │ │ ├── models.py # Pydantic-модели
-│ │ └── client.py # JiraClient (типизированный)
+│ │ └── client.py # JiraClient с автопродлением токенов
 │ │
-│ ├── services/ # Бизнес-логика
-│ │ ├── atlassian_service.py # get_user_info, get_working_sites
-│ │ ├── token_service.py # save_tokens_for_working_sites
-│ │ ├── token_refresh_service.py # refresh_token, update_user_tokens
-│ │ └── user_service.py # get_or_create_user
-│ │
-│ └── storage/ # Временное хранилище
-│ └── memory_store.py
+│ └── services/ # Бизнес-логика
+│ ├── atlassian_service.py # get_user_info, get_working_sites
+│ ├── token_service.py # TokenService, save_tokens
+│ ├── token_refresh_service.py # refresh_token, update_user_tokens
+│ ├── user_service.py # get_or_create_user
+│ └── jira_sync_service.py # синхронизация задач в БД
 │
-├── requirements.txt # Python зависимости
+├── tests/ # Тесты (19 tests passing)
+│ ├── conftest.py # Фикстуры для тестов
+│ ├── test_health.py # Health check тесты
+│ ├── test_auth.py # Тесты авторизации
+│ ├── test_dependencies.py # Тесты зависимостей
+│ ├── test_jira_client.py # Тесты JiraClient
+│ └── test_jira_endpoints.py # Тесты Jira эндпоинтов
+│
+├── requirements.txt # Основные зависимости
+├── requirements-dev.txt # Зависимости для разработки (pytest и др.)
+├── pytest.ini # Конфигурация pytest
 ├── Dockerfile # Docker образ
 ├── docker-compose.yml # Компоновка контейнеров
 ├── .env / .env.example # Настройки окружения
@@ -245,6 +280,27 @@ docker-compose logs -f backend
 
 # Остановка
 docker-compose down
+
+# Запуск тестов
+docker-compose exec backend pytest tests/ -v
+
+# Запуск конкретного теста
+docker-compose exec backend pytest tests/test_health.py -v
+```
+
+## Тестирование
+
+```
+# Установка тестовых зависимостей
+pip install -r requirements-dev.txt
+
+# Запуск всех тестов
+pytest tests/ -v
+
+# Запуск с покрытием
+pytest tests/ --cov=app --cov-report=term-missing
+
+# Результат: 19 тестов проходят, 2 с моками требуют доработки
 ```
 
 

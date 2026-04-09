@@ -2,6 +2,8 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 import requests
 import logging
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.core.config import settings
 from app.db.models import IntegrationToken
@@ -39,42 +41,31 @@ class TokenRefreshService:
         )
     
     @staticmethod
-    def update_user_tokens(db: Session, user_id: int) -> bool:
-        """Обновляет все токены пользователя"""
-        logger.info(f"Starting token refresh for user {user_id}")
+    async def update_user_tokens_async(db: AsyncSession, user_id: int) -> bool:
+        """Асинхронное обновление всех токенов пользователя"""
         
-        tokens = db.query(IntegrationToken).filter(
-            IntegrationToken.user_id == user_id
-        ).all()
+        # Асинхронный запрос
+        result = await db.execute(
+            select(IntegrationToken).where(
+                IntegrationToken.user_id == user_id
+            )
+        )
+        tokens = result.scalars().all()
         
         if not tokens:
-            logger.warning(f"No tokens found for user {user_id}")
             return False
         
-        old_token_prefix = tokens[0].access_token[:30] if tokens[0].access_token else "None"
-        old_expires = tokens[0].expires_at
-        logger.info(f"Old token: {old_token_prefix}..., expires: {old_expires}")
+        # Синхронный вызов API (requests) — можно оставить синхронным
+        # или заменить на httpx.AsyncClient
+        new_tokens = TokenRefreshService.refresh_token(tokens[0].refresh_token)
         
-        refresh_token = tokens[0].refresh_token
+        expires_at = datetime.utcnow() + timedelta(seconds=new_tokens.expires_in)
         
-        try:
-            new_tokens: TokenData = TokenRefreshService.refresh_token(refresh_token)
-            expires_at = datetime.utcnow() + timedelta(seconds=new_tokens.expires_in)
-            
-            for token in tokens:
-                token.access_token = new_tokens.access_token
-                token.expires_at = expires_at
-                if new_tokens.refresh_token:
-                    token.refresh_token = new_tokens.refresh_token
-            
-            db.commit()
-            
-            new_token_prefix = tokens[0].access_token[:30]
-            logger.info(f"New token: {new_token_prefix}..., expires: {expires_at}")
-            logger.info(f"Updated {len(tokens)} tokens for user {user_id}")
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to refresh token: {e}")
-            return False
+        for token in tokens:
+            token.access_token = new_tokens.access_token
+            token.expires_at = expires_at
+            if new_tokens.refresh_token:
+                token.refresh_token = new_tokens.refresh_token
+        
+        await db.commit()
+        return True
