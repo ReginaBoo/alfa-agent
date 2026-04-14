@@ -1,11 +1,11 @@
 # app/services/token_service.py
+from datetime import datetime, timedelta
+from typing import Optional, List
+from sqlalchemy.orm import Session
+from sqlalchemy import select
+
 from app.db.models import IntegrationToken
 from app.auth.models import TokenData, AtlassianResource
-from datetime import datetime, timedelta
-from typing import Optional
-from sqlalchemy.orm import Session
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 
 def save_tokens_for_working_sites(
@@ -13,11 +13,12 @@ def save_tokens_for_working_sites(
     user_id: int,
     atlassian_account_id: str,
     token_data: TokenData,
-    working_sites: list[AtlassianResource],
+    working_sites: List[AtlassianResource],
     expires_at: Optional[datetime] = None
-) -> list[IntegrationToken]:
+) -> List[IntegrationToken]:
     """
     Сохраняет токены для всех рабочих сайтов пользователя.
+    Синхронная версия — для использования в эндпоинтах.
     """
     saved_tokens = []
     
@@ -25,15 +26,15 @@ def save_tokens_for_working_sites(
         expires_at = datetime.utcnow() + timedelta(seconds=token_data.expires_in)
     
     for resource in working_sites:
-        # Проверяем существующую запись
-        existing = db.query(IntegrationToken).filter(
-            IntegrationToken.user_id == user_id,
-            IntegrationToken.provider == "jira",
-            IntegrationToken.instance_id == resource.id
-        ).first()
+        existing = db.execute(
+            select(IntegrationToken).where(
+                IntegrationToken.user_id == user_id,
+                IntegrationToken.provider == "jira",  # или динамически, если нужно
+                IntegrationToken.instance_id == resource.id
+            )
+        ).scalar_one_or_none()
         
         if existing:
-            # Обновляем существующую запись
             existing.access_token = token_data.access_token
             existing.refresh_token = token_data.refresh_token
             existing.expires_at = expires_at
@@ -43,7 +44,6 @@ def save_tokens_for_working_sites(
             existing.updated_at = datetime.utcnow()
             saved_tokens.append(existing)
         else:
-            # Создаём новую запись
             new_token = IntegrationToken(
                 user_id=user_id,
                 provider="jira",
@@ -66,48 +66,55 @@ def save_tokens_for_working_sites(
     return saved_tokens
 
 
-
 class TokenService:
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    """Сервис для работы с токенами — синхронная версия"""
     
-    async def get_valid_token(
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_valid_token(
         self, 
         user_id: int, 
         provider: str, 
         instance_id: str
     ) -> Optional[IntegrationToken]:
-        """Асинхронно получает валидный токен"""
-        
-        # Асинхронный запрос к БД
-        result = await self.db.execute(
-            select(IntegrationToken).where(
-                IntegrationToken.user_id == user_id,
-                IntegrationToken.provider == provider,
-                IntegrationToken.instance_id == instance_id
-            )
-        )
-        token = result.scalar_one_or_none()
-        
+        """Синхронно получает валидный токен. При необходимости обновляет."""
+        token = self._fetch_token(user_id, provider, instance_id)
         if not token:
             return None
         
-        # Проверяем срок действия
         if token.expires_at and token.expires_at <= datetime.utcnow():
-            await self.refresh_user_tokens(user_id)
-            # Повторно получаем токен
-            result = await self.db.execute(
-                select(IntegrationToken).where(
-                    IntegrationToken.user_id == user_id,
-                    IntegrationToken.provider == provider,
-                    IntegrationToken.instance_id == instance_id
-                )
-            )
-            token = result.scalar_one_or_none()
-        
+            self._refresh_and_update(user_id)
+            token = self._fetch_token(user_id, provider, instance_id)
+            
         return token
-    
-    async def refresh_user_tokens(self, user_id: int) -> bool:
-        """Асинхронно обновляет все токены пользователя"""
+
+    def _fetch_token(self, user_id: int, provider: str, instance_id: str) -> Optional[IntegrationToken]:
+        """
+        Ищет токен. 
+        Для Atlassian-продуктов (jira/confluence) допускаем cross-provider поиск,
+        так как токен доступа единый.
+        """
+        # 1. Сначала ищем точное совпадение
+        stmt = select(IntegrationToken).where(
+            IntegrationToken.user_id == user_id,
+            IntegrationToken.provider == provider,
+            IntegrationToken.instance_id == instance_id
+        )
+        token = self.db.execute(stmt).scalar_one_or_none()
+        
+        # 2. Если не нашли и это Atlassian-сервисы — пробуем провайдер "jira" как фолбэк
+        if not token and provider in ("confluence", "atlassian"):
+            stmt = select(IntegrationToken).where(
+                IntegrationToken.user_id == user_id,
+                IntegrationToken.provider == "jira",  # Фолбэк: единый токен
+                IntegrationToken.instance_id == instance_id
+            )
+            token = self.db.execute(stmt).scalar_one_or_none()
+            
+        return token
+
+    def _refresh_and_update(self, user_id: int) -> bool:
+        """Обновляет токены в БД и коммитит изменения"""
         from app.services.token_refresh_service import TokenRefreshService
-        return await TokenRefreshService.update_user_tokens_async(self.db, user_id)
+        return TokenRefreshService.update_user_tokens(self.db, user_id)

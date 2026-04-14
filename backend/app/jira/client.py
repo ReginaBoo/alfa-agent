@@ -50,9 +50,9 @@ class JiraClient:
             Dict[str, Any]: JSON ответ от API
         """
         # Получаем валидный токен
-        token = await self.token_service.get_valid_token(
+        token = self.token_service.get_valid_token(
             user_id=user_id,
-            provider="jira",
+            provider="jira",  # или "confluence"
             instance_id=cloud_id
         )
         
@@ -79,12 +79,12 @@ class JiraClient:
             # Если токен протух — обновляем и пробуем ещё раз (максимум 1 раз)
             if response.status_code == 401:
                 # Обновляем токены пользователя
-                await self.token_service.refresh_user_tokens(user_id)
+                self.token_service._refresh_and_update(user_id)
                 
                 # Получаем новый токен
-                token = await self.token_service.get_valid_token(
+                token = self.token_service.get_valid_token(
                     user_id=user_id,
-                    provider="jira",
+                    provider="jira",  # или "confluence"
                     instance_id=cloud_id
                 )
                 

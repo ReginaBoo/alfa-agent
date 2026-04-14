@@ -30,13 +30,13 @@ class Settings(BaseSettings):
     ATLASSIAN_CLIENT_ID: str
     ATLASSIAN_CLIENT_SECRET: str
     ATLASSIAN_REDIRECT_URI: str = "http://localhost:8000/auth/callback"
-    SCOPES: str = "read:jira-user read:jira-work offline_access"
+    SCOPES: str = "read:jira-user read:jira-work read:confluence-space:confluence read:confluence-content:confluence read:confluence-props:confluence offline_access"
 
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production"
     
     REDIS_URL: str = "redis://redis:6379/0" 
-    
+
     @property
     def DATABASE_URL(self) -> str:
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
