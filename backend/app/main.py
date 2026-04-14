@@ -6,6 +6,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.endpoints import auth_endpoints, jira_endpoints
 from app.db.base import Base
 from app.db.session import engine
+from app.endpoints import health
+from app.endpoints import worker_test
 
 # Настройка логгирования
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +19,8 @@ app = FastAPI(title="Alpha Agent Backend")
 # --- Подключение роутеров ---
 app.include_router(auth_endpoints.router, prefix="/auth", tags=["Auth"])
 app.include_router(jira_endpoints.router, prefix="/jira", tags=["Jira"])
-
+app.include_router(health.router, tags=["Health"])
+app.include_router(worker_test.router, prefix="/worker", tags=["Worker"])
 
 # --- Startup / Shutdown ---
 # --- Startup / Shutdown ---

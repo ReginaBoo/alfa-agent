@@ -28,7 +28,7 @@ services:
     volumes:
       - timescale_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres", "redis-cli"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -59,6 +59,8 @@ services:
       - TIMESCALE_USER=postgres
       - TIMESCALE_PASSWORD=postgres
       - TIMESCALE_DB=metrics_db
+      - REDIS_URL=redis://redis:6379/0
+      - RQ_REDIS_URL=redis://redis:6379/0 
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -66,7 +68,38 @@ services:
       sh -c "alembic upgrade head &&
              python scripts/init_timescale.py &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"  # для доступа с хоста (опционально)
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - default
+  worker:
+    build: .
+    command: rq worker sync_jira sync_confluence calculate_metrics
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - RQ_REDIS_URL=redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   timescale_data:
+  redis_data:

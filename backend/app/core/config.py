@@ -34,7 +34,9 @@ class Settings(BaseSettings):
 
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production"
-
+    
+    REDIS_URL: str = "redis://redis:6379/0" 
+    
     @property
     def DATABASE_URL(self) -> str:
         return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
