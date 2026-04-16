@@ -59,49 +59,86 @@ class JiraSyncService:
         issues = data.get("issues", [])
         
         created_count = 0
+        updated_count = 0
         
         for issue in issues:
+            issue_key = issue.get("key")
+            if not issue_key:
+                continue
+            
             # 1. СОХРАНЯЕМ СЫРЫЕ ДАННЫЕ в raw_events
             raw_event = RawEvent(
                 source="jira",
                 event_type="issue",
                 external_id=issue.get("id"),
                 project_integration_id=None,
-                payload=issue,  # полный JSON ответа
+                payload=issue,
                 timestamp=datetime.utcnow()
             )
             self.db.add(raw_event)
             
             # 2. Проверяем, существует ли уже нормализованная задача
             existing = self.db.query(JiraIssue).filter(
-                JiraIssue.issue_key == issue.get("key")
+                JiraIssue.issue_key == issue_key
             ).first()
             
-            if not existing:
-                # 3. НОРМАЛИЗУЕМ и сохраняем в jira_issues
-                fields = issue.get("fields", {})
-                
-                # Извлекаем Story Points
-                story_points = None
-                for field_name in ["customfield_10002", "customfield_10016"]:
-                    if field_name in fields:
-                        story_points = fields.get(field_name)
+            fields = issue.get("fields", {})
+            
+            # Извлекаем Story Points (с проверкой на пустые значения)
+            story_points = None
+            for field_name in ["customfield_10002", "customfield_10016"]:
+                if field_name in fields:
+                    val = fields.get(field_name)
+                    # Проверяем, что значение не пустое и не список
+                    if val is not None and not isinstance(val, list):
+                        story_points = float(val) if isinstance(val, (int, float)) else None
                         break
-                
+            
+            assignee = fields.get("assignee")
+            assignee_account_id = assignee.get("accountId") if assignee else None
+            assignee_name = assignee.get("displayName") if assignee else None
+            
+            priority = fields.get("priority")
+            priority_name = priority.get("name") if priority else None
+            
+            issuetype = fields.get("issuetype")
+            issue_type_name = issuetype.get("name") if issuetype else None
+            
+            status = fields.get("status")
+            status_name = status.get("name") if status else None
+            status_category = status.get("statusCategory", {}).get("name") if status else None
+            
+            if existing:
+                # Обновляем существующую задачу
+                existing.summary = fields.get("summary")
+                existing.status = status_name
+                existing.status_category = status_category
+                existing.assignee_account_id = assignee_account_id
+                existing.assignee_name = assignee_name
+                existing.priority = priority_name
+                existing.issue_type = issue_type_name
+                if story_points is not None:
+                    existing.story_points = story_points
+                existing.due_date = fields.get("duedate")
+                existing.updated_at = fields.get("updated")
+                existing.last_synced_at = datetime.utcnow()
+                updated_count += 1
+            else:
+                # Создаём новую задачу
                 new_issue = JiraIssue(
-                    issue_key=issue.get("key"),
+                    issue_key=issue_key,
                     project_key=project_key,
                     summary=fields.get("summary"),
-                    status=fields.get("status", {}).get("name"),
-                    status_category=fields.get("status", {}).get("statusCategory", {}).get("name"),
-                    assignee_account_id=fields.get("assignee", {}).get("accountId") if fields.get("assignee") else None,
-                    assignee_name=fields.get("assignee", {}).get("displayName") if fields.get("assignee") else None,
-                    priority=fields.get("priority", {}).get("name") if fields.get("priority") else None,
-                    issue_type=fields.get("issuetype", {}).get("name") if fields.get("issuetype") else None,
+                    status=status_name,
+                    status_category=status_category,
+                    assignee_account_id=assignee_account_id,
+                    assignee_name=assignee_name,
+                    priority=priority_name,
+                    issue_type=issue_type_name,
                     story_points=story_points,
-                    due_date=fields.get("duedate"),  # ДОБАВИТЬ ЭТУ СТРОКУ
-                    created_at=fields.get("created"),  # ИЗМЕНИТЬ: использовать дату из Jira
-                    updated_at=fields.get("updated"),  # ИЗМЕНИТЬ: использовать дату из Jira
+                    due_date=fields.get("duedate"),
+                    created_at=fields.get("created"),
+                    updated_at=fields.get("updated"),
                     last_synced_at=datetime.utcnow()
                 )
                 self.db.add(new_issue)
@@ -111,8 +148,8 @@ class JiraSyncService:
         
         return {
             "created": created_count,
-            "updated": 0,
-            "total": created_count,
+            "updated": updated_count,
+            "total": created_count + updated_count,
             "project_key": project_key,
             "instance_name": instance_name
         }

@@ -3,13 +3,30 @@
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
+from pydantic import BaseModel
 
 from app.db.session import get_db
 from app.db.models import IntegrationToken
 from app.core.dependencies import get_current_user
 
 router = APIRouter()
+
+
+# ================= MODELS =================
+
+class CreateIssueRequest(BaseModel):
+    project_key: str
+    summary: str
+    issue_type: str = "Task"
+    description: Optional[str] = None
+    assignee_account_id: Optional[str] = None
+    priority: Optional[str] = None
+    labels: Optional[List[str]] = None
+
+
+class TransitionRequest(BaseModel):
+    transition_id: str
 
 
 # ================= HELPERS =================
@@ -59,7 +76,7 @@ async def _make_jira_request(
     }
     
     async with httpx.AsyncClient(timeout=30.0) as client:
-        for attempt in range(2):  # Максимум 2 попытки
+        for attempt in range(2):
             response = await client.request(
                 method=method,
                 url=url,
@@ -69,10 +86,8 @@ async def _make_jira_request(
             )
             
             if response.status_code == 401 and attempt == 0:
-                # Обновляем токен
                 from app.services.token_refresh_service import TokenRefreshService
                 await TokenRefreshService.update_user_tokens_async(db, user_id)
-                # Получаем новый токен
                 token = get_token_by_instance_id(token.instance_id, db, user_id)
                 headers["Authorization"] = f"Bearer {token.access_token}"
                 continue
@@ -139,7 +154,7 @@ async def get_projects(
         raise HTTPException(502, f"Jira API error: {str(e)}")
 
 
-# ================= ISSUES (с Story Points) =================
+# ================= ISSUES SEARCH =================
 
 @router.get("/issues")
 async def search_issues(
@@ -163,7 +178,7 @@ async def search_issues(
     try:
         data = await _make_jira_request(
             token=token,
-            path="search",
+            path="search/jql",
             params=params,
             db=db,
             user_id=current_user.id
@@ -176,3 +191,174 @@ async def search_issues(
         }
     except httpx.HTTPStatusError as e:
         raise HTTPException(502, f"Jira API error: {str(e)}")
+
+
+# ================= GET ISSUE BY KEY =================
+
+@router.get("/issues/{issue_key}")
+async def get_issue(
+    issue_key: str,
+    instance_name: str = Query(...),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    token = get_token(instance_name, db, current_user.id)
+    
+    try:
+        data = await _make_jira_request(
+            token=token,
+            path=f"issue/{issue_key}",
+            db=db,
+            user_id=current_user.id
+        )
+        
+        return {
+            "success": True,
+            "issue": data
+        }
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(502, f"Jira API error: {str(e)}")
+
+
+# ================= CREATE ISSUE =================
+
+@router.post("/issues")
+async def create_issue(
+    instance_name: str = Query(...),
+    issue_data: CreateIssueRequest = None,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    token = get_token(instance_name, db, current_user.id)
+    
+    payload = {
+        "fields": {
+            "project": {"key": issue_data.project_key},
+            "summary": issue_data.summary,
+            "issuetype": {"name": issue_data.issue_type}
+        }
+    }
+    
+    if issue_data.description:
+        payload["fields"]["description"] = {
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [
+                        {"type": "text", "text": issue_data.description}
+                    ]
+                }
+            ]
+        }
+    
+    if issue_data.assignee_account_id:
+        payload["fields"]["assignee"] = {"accountId": issue_data.assignee_account_id}
+    
+    if issue_data.priority:
+        payload["fields"]["priority"] = {"name": issue_data.priority}
+    
+    if issue_data.labels:
+        payload["fields"]["labels"] = issue_data.labels
+    
+    try:
+        data = await _make_jira_request(
+            token=token,
+            path="issue",
+            method="POST",
+            json_data=payload,
+            db=db,
+            user_id=current_user.id
+        )
+        
+        return {
+            "success": True,
+            "issue_key": data.get("key"),
+            "issue_id": data.get("id")
+        }
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(502, f"Jira API error: {str(e)}")
+
+
+# ================= TRANSITION ISSUE =================
+
+@router.post("/issues/{issue_key}/transitions")
+async def transition_issue(
+    issue_key: str,
+    instance_name: str = Query(...),
+    transition: TransitionRequest = None,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    token = get_token(instance_name, db, current_user.id)
+    
+    payload = {"transition": {"id": transition.transition_id}}
+    
+    try:
+        await _make_jira_request(
+            token=token,
+            path=f"issue/{issue_key}/transitions",
+            method="POST",
+            json_data=payload,
+            db=db,
+            user_id=current_user.id
+        )
+        
+        return {"success": True}
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(502, f"Jira API error: {str(e)}")
+
+
+# ================= ISSUE CHANGELOG =================
+
+@router.get("/issues/{issue_key}/changelog")
+async def get_issue_changelog(
+    issue_key: str,
+    instance_name: str = Query(...),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    token = get_token(instance_name, db, current_user.id)
+    
+    try:
+        data = await _make_jira_request(
+            token=token,
+            path=f"issue/{issue_key}/changelog",
+            db=db,
+            user_id=current_user.id
+        )
+        
+        return {
+            "success": True,
+            "changelog": data
+        }
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(502, f"Jira API error: {str(e)}")
+
+
+# ================= SYNC ISSUES TO DB =================
+
+@router.post("/sync/{project_key}")
+def sync_issues(
+    project_key: str,
+    instance_name: str = Query(...),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Принудительная синхронизация задач проекта в БД"""
+    from app.services.jira_sync_service import JiraSyncService
+    try:
+        sync_service = JiraSyncService(db)
+        result = sync_service.sync_project_issues(
+            user_id=current_user.id,
+            instance_name=instance_name,
+            project_key=project_key
+        )
+        return {
+            "success": True,
+            "message": f"Synced {result['total']} issues",
+            "details": result
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Sync failed: {str(e)}")

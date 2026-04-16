@@ -53,6 +53,16 @@ async def callback(request: Request, db: DbSession = Depends(get_db)):
         print("WORKING SITES:")
         for r in working_sites:
             print(r.id, r.url, r.name)
+
+        unique_sites = {}
+        for site in working_sites:
+            if site.id not in unique_sites:
+                unique_sites[site.id] = site
+        working_sites = list(unique_sites.values())
+        
+        print("UNIQUE WORKING SITES:")
+        for r in working_sites:
+            print(r.id, r.url, r.name)
         
         # 4. Получаем информацию о пользователе
         user_info = await get_atlassian_user_info(
@@ -64,6 +74,15 @@ async def callback(request: Request, db: DbSession = Depends(get_db)):
         user = get_or_create_user(db, user_info)
         expires_at = datetime.utcnow() + timedelta(seconds=token_data.expires_in)
 
+        # Удаляем старые токены пользователя (чтобы избежать дублей)
+        from app.db.models import IntegrationToken
+        deleted_count = db.query(IntegrationToken).filter(
+            IntegrationToken.user_id == user.id,
+            IntegrationToken.provider == "jira"
+        ).delete()
+        db.commit()
+        print(f"Deleted {deleted_count} old tokens for user {user.id}")
+        
         # 6. Сохраняем токены
         saved_tokens = save_tokens_for_working_sites(
             db=db,

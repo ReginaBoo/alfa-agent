@@ -5,7 +5,7 @@ from typing import Optional
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
-        extra="ignore"  # Игнорируем лишние поля
+        extra="ignore"
     )
 
     # App
@@ -17,25 +17,26 @@ class Settings(BaseSettings):
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = "postgres"
     POSTGRES_HOST: str = "db"
-    POSTGRES_PORT: int = 5432  # Внутренний порт контейнера!
+    POSTGRES_PORT: int = 5432
 
     # TimescaleDB (метрики)
     TIMESCALE_DB: str = "metrics_db"
     TIMESCALE_USER: str = "postgres"
     TIMESCALE_PASSWORD: str = "postgres"
     TIMESCALE_HOST: str = "timescaledb"
-    TIMESCALE_PORT: int = 5432  # Внутренний порт контейнера!
+    TIMESCALE_PORT: int = 5432
 
     # Atlassian
     ATLASSIAN_CLIENT_ID: str
     ATLASSIAN_CLIENT_SECRET: str
     ATLASSIAN_REDIRECT_URI: str = "http://localhost:8000/auth/callback"
-    SCOPES: str = "read:jira-user read:jira-work read:confluence-space:confluence read:confluence-content:confluence read:confluence-props:confluence offline_access"
+    # Добавлен write:jira-work для редактирования задач
+    SCOPES: str = "read:jira-user read:jira-work write:jira-work read:confluence-user read:confluence-space.summary read:confluence-props read:confluence-content.summary search:confluence read:confluence-content.all read:space:confluence offline_access"
 
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production"
     
-    REDIS_URL: str = "redis://redis:6379/0" 
+    REDIS_URL: str = "redis://redis:6379/0"
 
     @property
     def DATABASE_URL(self) -> str:

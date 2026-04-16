@@ -4,7 +4,7 @@ from app.core.config import settings
 from app.auth.models import TokenData, AtlassianResource
 
 def get_authorization_url(state: str) -> str:
-    return (
+    url = (
         f"https://auth.atlassian.com/authorize?"
         f"audience=api.atlassian.com&"
         f"client_id={settings.ATLASSIAN_CLIENT_ID}&"
@@ -12,6 +12,8 @@ def get_authorization_url(state: str) -> str:
         f"redirect_uri={settings.ATLASSIAN_REDIRECT_URI}&"
         f"state={state}&response_type=code&prompt=consent"
     )
+    print(f"[DEBUG] Authorization URL with scopes: {settings.SCOPES}")
+    return url
 
 def exchange_code_for_token(code: str) -> TokenData:
     """Обмен кода на токен с Atlassian с обработкой ошибок"""

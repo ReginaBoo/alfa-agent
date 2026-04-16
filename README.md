@@ -5,7 +5,9 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 ## Технологии
 
 - **Python 3.11** + **FastAPI** — веб-фреймворк
-- **PostgreSQL 15** — база данных
+- **PostgreSQL 15** — основная база данных
+- **TimescaleDB** — временные ряды для метрик
+- **Redis** — очереди задач и кэширование
 - **SQLAlchemy** — ORM
 - **Alembic** — миграции
 - **Docker** + **Docker Compose** — контейнеризация
@@ -21,6 +23,7 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 - Автоматическое обновление истекших токенов
 - Получение информации о пользователе (email, имя, аватар)
 - Управление сессиями (создание, проверка, удаление)
+- Поддержка Jira и Confluence API
 
 ### Хранение данных
 - Пользователи (`users`)
@@ -35,20 +38,42 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 - Создание и обновление задач
 - Получение истории изменений (changelog)
 - Автообновление токенов при истечении (401 → refresh)
+- **Поддержка Story Points** (`customfield_10016`)
+
+### Confluence API клиент
+- Получение списка пространств
+- Получение страниц с пагинацией
+- Получение содержимого страниц
+- Поиск через CQL
+- История версий и комментарии
 
 ### Синхронизация задач
 - Выгрузка задач из Jira в БД (`/jira/sync/{project_key}`)
 - Сохранение сырых данных в `raw_events`
 - Нормализация и сохранение в `jira_issues`
 
+### Метрики и дашборды
+- **Workload Index (WI)** — индекс загрузки сотрудников
+  - Суммирование Story Points в открытых задачах
+  - Расчёт средней скорости закрытия задач
+  - Конвертация типа задачи в вес (Bug=2, Task=3, Story=5)
+  - Штраф за многозадачность (>3 задач → +20% за каждую)
+  - Сохранение в `user_metrics` и `metrics_raw`
+- **GET /dashboard/digest** — главная страница дайджеста
+- **GET /dashboard/health** — проверка статуса дашборда
+
+### Фоновые задачи
+- Redis + RQ очереди
+- Worker для асинхронной обработки
+- Тестовые задачи для проверки
+
 ### Тестирование
-- 19 тестов, проверяющих:
+- 18+ тестов, проверяющих:
   - Health check
   - Авторизацию и сессии
   - Зависимости (`get_current_user`, `get_valid_token`)
   - JiraClient (с моками)
   - Jira эндпоинты
-
 ---
 
 
@@ -68,11 +93,23 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 | GET | `/jira/sites` | Список доступных Atlassian сайтов |
 | GET | `/jira/projects` | Проекты Jira для указанного сайта |
 | GET | `/jira/issues` | Поиск задач по JQL (с поддержкой `fields=*all`) |
-| GET | `/jira/issues/{key}` | Получить задачу по ключу |
+| GET | `/jira/issues/{issue_key}` | Получить задачу по ключу |
 | POST | `/jira/issues` | Создать новую задачу |
 | POST | `/jira/issues/{key}/transitions` | Сменить статус задачи |
 | GET | `/jira/issues/{key}/changelog` | История изменений задачи |
 | POST | `/jira/sync/{project_key}` | Принудительная синхронизация задач в БД |
+
+### Дашборды
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| GET | `/dashboard/digest` | Главная страница с метриками проектов |
+| GET | `/dashboard/health` | Проверка статуса дашборда |
+
+### Worker (очереди)
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| POST | `/worker/test` | Отправить тестовую задачу в очередь |
+| GET | `/worker/job/{job_id}` | Проверить статус задачи |
 
 ### Health
 | Метод | Endpoint | Описание |
@@ -165,6 +202,36 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 | `is_deleted` | Флаг удаления |
 | `snapshot_version` | Версия снимка |
 
+
+### Схема `public` (TimescaleDB) — метрики
+
+#### Таблица `user_metrics`
+| Поле | Описание |
+|------|----------|
+| `id` | Уникальный ID |
+| `user_id` | ID пользователя |
+| `project_id` | ID проекта |
+| `period_start` | Начало периода |
+| `period_end` | Конец периода |
+| `workload_index` | Индекс загрузки (WI) |
+| `activity_score` | Оценка активности |
+| `tasks_completed` | Выполненные задачи |
+| `commits_count` | Количество коммитов |
+| `sla_score` | SLA Score |
+| `calculated_at` | Дата расчёта |
+
+#### Таблица `metrics_raw` (гипертаблица)
+| Поле | Описание |
+|------|----------|
+| `time` | Временная метка |
+| `project_id` | ID проекта |
+| `user_id` | ID пользователя |
+| `metric_name` | Название метрики |
+| `value` | Значение |
+| `dimensions` | Дополнительные параметры (JSONB) |
+| `metric_version` | Версия расчёта |
+| `is_final` | Флаг финальности |
+
 ---
 
 
@@ -185,41 +252,62 @@ backend/
 │ ├── core/ # Основные настройки
 │ │ ├── config.py # Переменные окружения
 │ │ ├── dependencies.py # get_current_user, get_valid_token
-│ │ └── security.py # Хэширование
+│ │ ├── security.py # Хэширование
+│ │ └── statuses.py # Статусы и веса типов задач
 │ │
 │ ├── db/ # Работа с БД
 │ │ ├── base.py # Базовая модель
 │ │ ├── session.py # Сессии БД
+│ │ ├── timescale.py # Подключение к TimescaleDB
 │ │ └── models/ # SQLAlchemy модели
 │ │ ├── identity.py # users, sessions, integration_tokens
 │ │ ├── raw.py # raw_events
-│ │ └── normalized.py # jira_issues
+│ │ ├── normalized.py # jira_issues
+│ │ └── metrics.py # user_metrics, project_metrics, metrics_raw
 │ │
 │ ├── endpoints/ # API эндпоинты
-│ │ ├── auth_endpoints.py # /auth/login, /auth/callback, /auth/me, /auth/logout
-│ │ └── jira_endpoints.py # /jira/sites, /jira/projects, /jira/issues, /jira/sync
+│ │ ├── auth_endpoints.py # /auth/*
+│ │ ├── jira_endpoints.py # /jira/*
+│ │ ├── dashboard_endpoints.py # /dashboard/*
+│ │ ├── health.py # /health
+│ │ └── worker_test.py # /worker/*
 │ │
 │ ├── jira/ # Jira интеграция
 │ │ ├── models.py # Pydantic-модели
 │ │ └── client.py # JiraClient с автопродлением токенов
 │ │
-│ └── services/ # Бизнес-логика
-│ ├── atlassian_service.py # get_user_info, get_working_sites
-│ ├── token_service.py # TokenService, save_tokens
-│ ├── token_refresh_service.py # refresh_token, update_user_tokens
-│ ├── user_service.py # get_or_create_user
-│ └── jira_sync_service.py # синхронизация задач в БД
+│ ├── confluence/ # Confluence интеграция
+│ │ ├── models.py # Pydantic-модели
+│ │ └── client.py # ConfluenceClient с автопродлением токенов
+│ │
+│ ├── services/ # Бизнес-логика
+│ │ ├── atlassian_service.py # get_user_info, get_working_sites
+│ │ ├── token_service.py # TokenService, save_tokens
+│ │ ├── token_refresh_service.py # refresh_token, update_user_tokens
+│ │ ├── user_service.py # get_or_create_user
+│ │ ├── jira_sync_service.py # синхронизация задач в БД
+│ │ └── metrics/ # Метрики
+│ │ └── workload_index.py # расчёт Workload Index
+│ │
+│ └── workers/ # Фоновые задачи
+│ ├── queues.py # Настройка очередей Redis
+│ └── tasks.py # Задачи для воркеров
 │
-├── tests/ # Тесты (19 tests passing)
+├── scripts/ # Вспомогательные скрипты
+│ └── init_timescale.py # Инициализация TimescaleDB
+│
+├── tests/ # Тесты
 │ ├── conftest.py # Фикстуры для тестов
 │ ├── test_health.py # Health check тесты
 │ ├── test_auth.py # Тесты авторизации
 │ ├── test_dependencies.py # Тесты зависимостей
 │ ├── test_jira_client.py # Тесты JiraClient
-│ └── test_jira_endpoints.py # Тесты Jira эндпоинтов
+│ ├── test_jira_endpoints.py # Тесты Jira эндпоинтов
+│ └── confluence/ # Тесты Confluence
+│ └── test_confluence_client.py
 │
 ├── requirements.txt # Основные зависимости
-├── requirements-dev.txt # Зависимости для разработки (pytest и др.)
+├── requirements-dev.txt # Зависимости для разработки
 ├── pytest.ini # Конфигурация pytest
 ├── Dockerfile # Docker образ
 ├── docker-compose.yml # Компоновка контейнеров
