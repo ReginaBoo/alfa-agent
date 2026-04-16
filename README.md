@@ -31,6 +31,7 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 - Токены для внешних сервисов (`integration_tokens`)
 - Сырые события из API (`raw_events`)
 - Нормализованные задачи Jira (`jira_issues`)
+- Нормализованные страницы Confluence (`confluence_pages`)
 
 ### Jira API клиент
 - Типизированные Pydantic-модели (`JiraIssue`, `JiraProject`, `JiraUser`)
@@ -41,16 +42,18 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 - **Поддержка Story Points** (`customfield_10016`)
 
 ### Confluence API клиент
-- Получение списка пространств
+- Получение списка пространств (API v2)
 - Получение страниц с пагинацией
 - Получение содержимого страниц
 - Поиск через CQL
 - История версий и комментарии
+- Синхронизация страниц в БД (`/confluence/sync/{space_id}`)
 
-### Синхронизация задач
+### Синхронизация данных
 - Выгрузка задач из Jira в БД (`/jira/sync/{project_key}`)
+- Выгрузка страниц из Confluence в БД (`/confluence/sync/{space_id}`)
 - Сохранение сырых данных в `raw_events`
-- Нормализация и сохранение в `jira_issues`
+- Нормализация и сохранение в соответствующие таблицы
 
 ### Метрики и дашборды
 - **Workload Index (WI)** — индекс загрузки сотрудников
@@ -59,8 +62,15 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
   - Конвертация типа задачи в вес (Bug=2, Task=3, Story=5)
   - Штраф за многозадачность (>3 задач → +20% за каждую)
   - Сохранение в `user_metrics` и `metrics_raw`
+- **SLA Score** — процент задач, закрытых в срок
+- **Project Health Score** — общее здоровье проекта (0-100%)
 - **GET /dashboard/digest** — главная страница дайджеста
 - **GET /dashboard/health** — проверка статуса дашборда
+
+### Метрики документации (Confluence)
+- **Freshness** — свежесть документации (% страниц, обновлённых за 6 месяцев)
+- **Knowledge Distribution** — распределение авторства страниц
+- **Coverage** — покрытие задач документацией (% задач Jira со ссылками на Confluence)
 
 ### Фоновые задачи
 - Redis + RQ очереди
@@ -98,6 +108,15 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 | POST | `/jira/issues/{key}/transitions` | Сменить статус задачи |
 | GET | `/jira/issues/{key}/changelog` | История изменений задачи |
 | POST | `/jira/sync/{project_key}` | Принудительная синхронизация задач в БД |
+
+
+### Confluence
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| GET | `/confluence/spaces` | Список пространств Confluence |
+| GET | `/confluence/pages` | Страницы с фильтрацией по пространству |
+| GET | `/confluence/pages/{page_id}/content` | Содержимое страницы |
+| POST | `/confluence/sync/{space_id}` | Синхронизация страниц пространства в БД |
 
 ### Дашборды
 | Метод | Endpoint | Описание |
@@ -187,21 +206,30 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 | `status` | Статус |
 | `status_category` | Категория статуса |
 | `assignee_account_id` | ID исполнителя |
-| `assignee_user_id` | Внешний ключ → external_users |
-| `reporter_account_id` | ID автора |
+| `assignee_name` | Имя исполнителя |
 | `priority` | Приоритет |
 | `issue_type` | Тип задачи |
 | `story_points` | Story Points (оценка сложности) |
-| `original_estimate` | Оценка в часах |
-| `time_spent` | Затрачено времени |
-| `remaining_estimate` | Осталось времени |
 | `due_date` | Дедлайн |
 | `created_at` | Дата создания |
 | `updated_at` | Дата обновления |
 | `last_synced_at` | Дата синхронизации |
-| `is_deleted` | Флаг удаления |
-| `snapshot_version` | Версия снимка |
 
+#### Таблица `confluence_pages`
+| Поле | Описание |
+|------|----------|
+| `id` | ID страницы |
+| `space_id` | ID пространства |
+| `space_key` | Ключ пространства |
+| `title` | Заголовок страницы |
+| `author_id` | ID автора |
+| `version` | Номер версии |
+| `status` | Статус |
+| `parent_id` | ID родительской страницы |
+| `created_at` | Дата создания |
+| `updated_at` | Дата обновления |
+| `content` | HTML содержимое |
+| `last_synced_at` | Дата синхронизации |
 
 ### Схема `public` (TimescaleDB) — метрики
 
@@ -262,13 +290,15 @@ backend/
 │ │ └── models/ # SQLAlchemy модели
 │ │ ├── identity.py # users, sessions, integration_tokens
 │ │ ├── raw.py # raw_events
-│ │ ├── normalized.py # jira_issues
+│ │ ├── normalized.py # jira_issues, confluence_pages
 │ │ └── metrics.py # user_metrics, project_metrics, metrics_raw
 │ │
 │ ├── endpoints/ # API эндпоинты
 │ │ ├── auth_endpoints.py # /auth/*
 │ │ ├── jira_endpoints.py # /jira/*
+│ │ ├── confluence_endpoints.py # /confluence/*
 │ │ ├── dashboard_endpoints.py # /dashboard/*
+│ │ ├── docs_metrics_endpoints.py # /docs-metrics/*
 │ │ ├── health.py # /health
 │ │ └── worker_test.py # /worker/*
 │ │
@@ -285,9 +315,12 @@ backend/
 │ │ ├── token_service.py # TokenService, save_tokens
 │ │ ├── token_refresh_service.py # refresh_token, update_user_tokens
 │ │ ├── user_service.py # get_or_create_user
-│ │ ├── jira_sync_service.py # синхронизация задач в БД
+│ │ ├── jira_sync_service.py # синхронизация задач Jira в БД
+│ │ ├── confluence_sync_service.py # синхронизация страниц Confluence в БД
 │ │ └── metrics/ # Метрики
-│ │ └── workload_index.py # расчёт Workload Index
+│ │ ├── workload_index.py # расчёт Workload Index
+│ │ ├── sla_score.py # расчёт SLA Score
+│ │ └── health_score.py # расчёт Project Health Score
 │ │
 │ └── workers/ # Фоновые задачи
 │ ├── queues.py # Настройка очередей Redis

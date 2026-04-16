@@ -1,6 +1,6 @@
 # app/confluence/models.py
 from datetime import datetime
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 from pydantic import BaseModel, Field
 
 
@@ -11,42 +11,41 @@ class ConfluenceUser(BaseModel):
     profile_picture: Optional[str] = Field(None, alias="profilePicture")
 
 
+class ConfluencePageVersion(BaseModel):
+    """Версия страницы"""
+    number: int
+    message: str = ""
+    minor_edit: bool = Field(False, alias="minorEdit")
+    author_id: Optional[str] = Field(None, alias="authorId")
+    created_at: Optional[datetime] = Field(None, alias="createdAt")
+    ncs_step_version: Optional[str] = Field(None, alias="ncsStepVersion")
+
+
+class ConfluencePage(BaseModel):
+    """Страница Confluence (API v2)"""
+    id: str
+    title: str
+    status: str = "current"
+    space_id: str = Field(..., alias="spaceId")
+    parent_id: Optional[str] = Field(None, alias="parentId")
+    parent_type: Optional[str] = Field(None, alias="parentType")
+    position: Optional[int] = None
+    author_id: Optional[str] = Field(None, alias="authorId")
+    owner_id: Optional[str] = Field(None, alias="ownerId")
+    last_owner_id: Optional[str] = Field(None, alias="lastOwnerId")
+    created_at: Optional[datetime] = Field(None, alias="createdAt")
+    version: ConfluencePageVersion
+    body: Optional[Dict[str, Any]] = {}
+    links: Optional[Dict[str, str]] = Field(None, alias="_links")
+    
+    class Config:
+        populate_by_name = True
+        validate_by_name = True  # вместо allow_population_by_field_name
+
+
 class ConfluenceSpace(BaseModel):
     id: str
     key: str
     name: str
-    type: str  # "global", "personal"
-    status: str  # "current", "archived"
-
-
-class ConfluencePageVersion(BaseModel):
-    number: int
-    when: datetime
-    message: Optional[str] = None
-    by: Optional[ConfluenceUser] = None
-
-
-class ConfluencePage(BaseModel):
-    id: str
-    title: str
-    type: str  # "page", "blogpost"
-    status: str  # "current", "draft", "trashed"
-    space: ConfluenceSpace
-    version: ConfluencePageVersion
-    created: datetime
-    updated: datetime
-    author: Optional[ConfluenceUser] = None
-    
-    # Содержимое — может быть в разных форматах
-    body: Optional[dict] = None  # format="storage" (raw HTML-like)
-    view_body: Optional[str] = None  # format="view" (rendered HTML)
-    
-    # Ссылки
-    links: Optional[dict] = None
-    
-    @property
-    def url(self) -> Optional[str]:
-        """Получаем прямой URL на страницу"""
-        if self.links and self.links.get("webui"):
-            return self.links["webui"]
-        return None
+    type: str
+    status: str

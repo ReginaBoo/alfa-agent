@@ -34,3 +34,31 @@ class JiraIssue(Base):
     last_synced_at = Column(DateTime, default=datetime.utcnow)
     is_deleted = Column(Boolean, default=False)
     snapshot_version = Column(Integer, default=1)
+
+
+
+
+class ConfluencePage(Base):
+    __tablename__ = "confluence_pages"
+    __table_args__ = (
+        Index("idx_confluence_pages_space", "space_id"),
+        Index("idx_confluence_pages_author", "author_id"),
+        Index("idx_confluence_pages_updated", "updated_at"),
+        {"schema": "normalized"}
+    )
+    
+    id = Column(String(50), primary_key=True)  # page_id из Confluence
+    space_id = Column(String(50), nullable=False, index=True)
+    space_key = Column(String(255), nullable=True)
+    title = Column(Text, nullable=False)
+    author_id = Column(String(255), nullable=True, index=True)
+    author_name = Column(String(255), nullable=True)
+    version = Column(Integer, default=1)
+    status = Column(String(50), default="current")
+    parent_id = Column(String(50), nullable=True)
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False, index=True)
+    content = Column(Text, nullable=True)  # HTML содержимое
+    content_format = Column(String(50), default="storage")
+    last_synced_at = Column(DateTime, default=datetime.utcnow)
+    is_deleted = Column(Boolean, default=False)

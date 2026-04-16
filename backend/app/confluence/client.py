@@ -85,6 +85,33 @@ class ConfluenceClient:
         )
         return [ConfluenceSpace(**space) for space in data.get("results", [])]
     
+
+
+    async def get_pages(
+        self,
+        cloud_id: str,
+        limit: int = 25,
+        start: int = 0,
+        expand: str = "version,space",
+        user_id: Optional[int] = None
+    ) -> List[ConfluencePage]:
+        """Получает страницы с пагинацией (со всех пространств)"""
+        params = {
+            "limit": limit,
+            "start": start,
+            "expand": expand
+        }
+        
+        data = await self._request(
+            cloud_id=cloud_id,
+            endpoint="/wiki/api/v2/pages",
+            method="GET",
+            params=params,
+            user_id=user_id
+        )
+    
+        return [ConfluencePage(**page) for page in data.get("results", [])]
+    
     async def get_pages_by_space(
         self,
         cloud_id: str,
@@ -115,21 +142,26 @@ class ConfluenceClient:
         self,
         cloud_id: str,
         page_id: str,
-        format: str = "storage",  # "storage" | "view" | "export_view"
+        format: str = "storage",
         user_id: Optional[int] = None
     ) -> Dict[str, Any]:
-        """Получает содержимое страницы в нужном формате"""
-        params = {"body-format": format}
+        """Получает содержимое страницы через API v2"""
+        params = {
+            "body-format": format,
+            "include-version": "true"
+        }
         
         data = await self._request(
             cloud_id=cloud_id,
-            endpoint=f"/wiki/api/v2/pages/{page_id}/body",
+            endpoint=f"/wiki/api/v2/pages/{page_id}",
             method="GET",
             params=params,
             user_id=user_id
         )
         
-        return data  # Возвращаем как есть — структура зависит от формата
+        # Извлекаем тело страницы
+        body = data.get("body", {})
+        return body.get(format, {})
     
     async def search_pages_cql(
         self,

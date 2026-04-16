@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     ATLASSIAN_CLIENT_SECRET: str
     ATLASSIAN_REDIRECT_URI: str = "http://localhost:8000/auth/callback"
     # Добавлен write:jira-work для редактирования задач
-    SCOPES: str = "read:jira-user read:jira-work write:jira-work read:confluence-user read:confluence-space.summary read:confluence-props read:confluence-content.summary search:confluence read:confluence-content.all read:space:confluence offline_access"
+    SCOPES: str = "read:jira-user read:jira-work write:jira-work read:confluence-user read:confluence-space.summary read:confluence-props read:confluence-content.summary search:confluence read:confluence-content.all read:space:confluence read:page:confluence offline_access"
 
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production"
