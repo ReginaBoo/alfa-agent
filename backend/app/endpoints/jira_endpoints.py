@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from app.db.session import get_db
 from app.db.models import IntegrationToken
 from app.core.dependencies import get_current_user
+from app.workers.queues import sync_jira_queue
+from app.workers.tasks import sync_jira_task
 
 router = APIRouter()
 
@@ -362,3 +364,40 @@ def sync_issues(
         }
     except Exception as e:
         raise HTTPException(500, f"Sync failed: {str(e)}")
+
+
+
+@router.post("/sync-async/{project_key}")
+async def sync_issues_async(
+    project_key: str,
+    instance_name: str = Query(...),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Асинхронная синхронизация задач проекта в БД через очередь.
+    Возвращает job_id для отслеживания статуса.
+    """
+    try:
+        # Добавляем задачу в очередь
+        job = sync_jira_queue.enqueue(
+            sync_jira_task,
+            args=(current_user.id, instance_name, project_key),
+            job_timeout="300s",  # 5 минут на выполнение
+            result_ttl=3600,      # результат хранится час
+            failure_ttl=3600      # ошибки тоже хранятся час
+        )
+        
+        return {
+            "success": True,
+            "message": f"Sync for project {project_key} queued",
+            "data": {
+                "job_id": job.id,
+                "status": "queued",
+                "project_key": project_key,
+                "instance_name": instance_name
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to queue sync: {str(e)}")

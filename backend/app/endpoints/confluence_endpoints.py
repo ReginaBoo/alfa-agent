@@ -9,6 +9,8 @@ from app.db.models import IntegrationToken
 from app.core.dependencies import get_current_user
 from app.services.token_service import TokenService
 from app.confluence.client import ConfluenceClient
+from app.workers.queues import sync_confluence_queue
+from app.workers.tasks import sync_confluence_task
 
 router = APIRouter()
 
@@ -149,3 +151,39 @@ async def sync_confluence_pages(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+
+@router.post("/sync-async/{space_id}")
+async def sync_confluence_async(
+    space_id: str,
+    space_key: Optional[str] = Query(None),
+    instance_name: str = Query(...),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Асинхронная синхронизация страниц пространства Confluence в БД через очередь.
+    Возвращает job_id для отслеживания статуса.
+    """
+    try:
+        job = sync_confluence_queue.enqueue(
+            sync_confluence_task,
+            args=(current_user.id, instance_name, space_id, space_key),
+            job_timeout="300s",
+            result_ttl=3600,
+            failure_ttl=3600
+        )
+        
+        return {
+            "success": True,
+            "message": f"Sync for space {space_id} queued",
+            "data": {
+                "job_id": job.id,
+                "status": "queued",
+                "space_id": space_id,
+                "instance_name": instance_name
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to queue sync: {str(e)}")

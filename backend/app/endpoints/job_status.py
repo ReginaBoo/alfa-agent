@@ -1,7 +1,8 @@
 # app/endpoints/job_status.py
 
 from fastapi import APIRouter, HTTPException
-from rq.job import Job
+from sqlalchemy.orm import Session
+
 from app.workers.queues import redis_conn
 
 router = APIRouter()
@@ -13,6 +14,7 @@ def get_job_status(job_id: str):
     Проверяет статус задачи по job_id.
     """
     try:
+        from rq.job import Job
         job = Job.fetch(job_id, connection=redis_conn)
         
         result = {
@@ -33,5 +35,11 @@ def get_job_status(job_id: str):
         
         return result
         
+    except ImportError:
+        # Если rq не установлен
+        return {
+            "success": False,
+            "error": "RQ not installed. Run: pip install rq redis"
+        }
     except Exception as e:
         raise HTTPException(status_code=404, detail=f"Job not found: {str(e)}")

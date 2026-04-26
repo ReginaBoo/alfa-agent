@@ -89,14 +89,27 @@ services:
       - .env
     environment:
       - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/app_db
+      - TIMESCALE_URL=postgresql://postgres:postgres@timescaledb:5432/metrics_db
+      - REDIS_URL=redis://redis:6379/0
       - RQ_REDIS_URL=redis://redis:6379/0
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=app_db
+      - TIMESCALE_HOST=timescaledb
+      - TIMESCALE_PORT=5432
+      - TIMESCALE_USER=postgres
+      - TIMESCALE_PASSWORD=postgres
+      - TIMESCALE_DB=metrics_db
     volumes:
       - .:/app
     depends_on:
       redis:
         condition: service_healthy
-      backend:
-        condition: service_started
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

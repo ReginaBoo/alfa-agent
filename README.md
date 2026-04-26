@@ -1,6 +1,6 @@
 # Alpha Agent Backend
 
-Backend-сервис для интеграции с Atlassian (Jira/Confluence) через OAuth 2.0. Обеспечивает хранение токенов пользователей и доступ к данным проектов.
+Backend-сервис для интеграции с Atlassian (Jira/Confluence) через OAuth 2.0. Обеспечивает хранение токенов пользователей, доступ к данным проектов, расчёт метрик и асинхронную обработку через очереди.
 
 ## Технологии
 
@@ -12,6 +12,7 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 - **Alembic** — миграции
 - **Docker** + **Docker Compose** — контейнеризация
 - **OAuth 2.0 (3LO)** — авторизация в Atlassian
+- **RQ (Redis Queue)** — фоновые задачи
 - **Pytest** — тестирование
 
 ---
@@ -47,13 +48,20 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 - Получение содержимого страниц
 - Поиск через CQL
 - История версий и комментарии
-- Синхронизация страниц в БД (`/confluence/sync/{space_id}`)
+- Синхронизация страниц в БД
 
 ### Синхронизация данных
-- Выгрузка задач из Jira в БД (`/jira/sync/{project_key}`)
-- Выгрузка страниц из Confluence в БД (`/confluence/sync/{space_id}`)
+- Выгрузка задач из Jira в БД (синхронно и асинхронно)
+- Выгрузка страниц из Confluence в БД (синхронно и асинхронно)
 - Сохранение сырых данных в `raw_events`
 - Нормализация и сохранение в соответствующие таблицы
+
+### Фоновые задачи (Очереди Redis + Worker)
+- **Три очереди:** `sync_jira`, `sync_confluence`, `calculate_metrics`
+- **Worker** в отдельном контейнере для асинхронной обработки
+- **Мгновенный ответ API** — задача уходит в очередь, пользователь не ждёт
+- **Отслеживание статуса** по `job_id`
+- **Надёжность** — задача не теряется при падении воркера
 
 ### Метрики и дашборды
 - **Workload Index (WI)** — индекс загрузки сотрудников
@@ -70,22 +78,17 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 ### Метрики документации (Confluence)
 - **Freshness** — свежесть документации (% страниц, обновлённых за 6 месяцев)
 - **Knowledge Distribution** — распределение авторства страниц
-- **Coverage** — покрытие задач документацией (% задач Jira со ссылками на Confluence)
-
-### Фоновые задачи
-- Redis + RQ очереди
-- Worker для асинхронной обработки
-- Тестовые задачи для проверки
+- **Coverage** — покрытие задач документацией
 
 ### Тестирование
-- 18+ тестов, проверяющих:
+- 20+ тестов, проверяющих:
   - Health check
   - Авторизацию и сессии
   - Зависимости (`get_current_user`, `get_valid_token`)
-  - JiraClient (с моками)
-  - Jira эндпоинты
----
+  - JiraClient и ConfluenceClient (с моками)
+  - Jira и Confluence эндпоинты
 
+---
 
 ## API endpoints
 
@@ -102,13 +105,13 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 |-------|----------|----------|
 | GET | `/jira/sites` | Список доступных Atlassian сайтов |
 | GET | `/jira/projects` | Проекты Jira для указанного сайта |
-| GET | `/jira/issues` | Поиск задач по JQL (с поддержкой `fields=*all`) |
+| GET | `/jira/issues` | Поиск задач по JQL |
 | GET | `/jira/issues/{issue_key}` | Получить задачу по ключу |
 | POST | `/jira/issues` | Создать новую задачу |
-| POST | `/jira/issues/{key}/transitions` | Сменить статус задачи |
-| GET | `/jira/issues/{key}/changelog` | История изменений задачи |
-| POST | `/jira/sync/{project_key}` | Принудительная синхронизация задач в БД |
-
+| POST | `/jira/issues/{issue_key}/transitions` | Сменить статус задачи |
+| GET | `/jira/issues/{issue_key}/changelog` | История изменений задачи |
+| POST | `/jira/sync/{project_key}` | Синхронизация задач в БД (синхронно) |
+| POST | `/jira/sync-async/{project_key}` | Синхронизация задач в БД (асинхронно) |
 
 ### Confluence
 | Метод | Endpoint | Описание |
@@ -116,7 +119,8 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 | GET | `/confluence/spaces` | Список пространств Confluence |
 | GET | `/confluence/pages` | Страницы с фильтрацией по пространству |
 | GET | `/confluence/pages/{page_id}/content` | Содержимое страницы |
-| POST | `/confluence/sync/{space_id}` | Синхронизация страниц пространства в БД |
+| POST | `/confluence/sync/{space_id}` | Синхронизация страниц в БД (синхронно) |
+| POST | `/confluence/sync-async/{space_id}` | Синхронизация страниц в БД (асинхронно) |
 
 ### Дашборды
 | Метод | Endpoint | Описание |
@@ -124,11 +128,18 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 | GET | `/dashboard/digest` | Главная страница с метриками проектов |
 | GET | `/dashboard/health` | Проверка статуса дашборда |
 
-### Worker (очереди)
+### Метрики документации
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| GET | `/docs-metrics/freshness` | Свежесть документации |
+| GET | `/docs-metrics/knowledge-distribution` | Распределение авторства |
+| GET | `/docs-metrics/coverage` | Покрытие задач документацией |
+
+### Очереди (Worker)
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
 | POST | `/worker/test` | Отправить тестовую задачу в очередь |
-| GET | `/worker/job/{job_id}` | Проверить статус задачи |
+| GET | `/job/{job_id}` | Проверить статус задачи по job_id |
 
 ### Health
 | Метод | Endpoint | Описание |
@@ -431,4 +442,5 @@ API бэкенда: http://localhost
 :8000/docs – Swagger документация
 
 Авторизация: http://localhost:8000/auth/login
+
 
