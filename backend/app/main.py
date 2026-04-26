@@ -11,6 +11,7 @@ from app.endpoints import worker_test
 from app.endpoints import dashboard_endpoints
 from app.endpoints import confluence_endpoints
 from app.endpoints import job_status
+from app.endpoints import metrics_endpoints
 
 # Настройка логгирования
 logging.basicConfig(level=logging.INFO)
@@ -27,6 +28,7 @@ app.include_router(worker_test.router, prefix="/worker", tags=["Worker"])
 app.include_router(dashboard_endpoints.router, prefix="/dashboard", tags=["Dashboard"])
 app.include_router(confluence_endpoints.router, prefix="/confluence", tags=["Confluence"])
 app.include_router(job_status.router, tags=["Job Status"])
+app.include_router(metrics_endpoints.router, prefix="/metrics", tags=["Metrics"])
 
 # --- Startup / Shutdown ---
 @app.on_event("startup")

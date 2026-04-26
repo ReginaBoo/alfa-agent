@@ -85,3 +85,75 @@ def sync_confluence_task(user_id: int, instance_name: str, space_id: str, space_
     except Exception as e:
         logger.error(f"Confluence sync failed for space {space_id}: {e}")
         raise
+
+
+
+
+def calculate_metrics_task(user_id: int, project_key: str) -> dict:
+    """
+    Фоновая задача для пересчёта метрик проекта.
+    Выполняется в воркере.
+    """
+    logger.info(f"Starting metrics calculation for project {project_key}, user {user_id}")
+    
+    try:
+        db = SessionLocal()
+        
+        from app.services.metrics.workload_index import calculate_workload_index
+        from app.services.metrics.sla_score import calculate_sla_score
+        from app.services.metrics.health_score import calculate_health_score, save_health_score
+        from app.db.models import JiraIssue
+        
+        # Находим assignee_id (исполнителя) для проекта
+        assignee = db.query(JiraIssue.assignee_account_id).filter(
+            JiraIssue.project_key == project_key,
+            JiraIssue.assignee_account_id.isnot(None)
+        ).first()
+        
+        if not assignee:
+            logger.warning(f"No assignee found for project {project_key}")
+            return {
+                "status": "skipped",
+                "project_key": project_key,
+                "reason": "No assignee found"
+            }
+        
+        assignee_id = assignee[0]
+        
+        # 1. Workload Index
+        wi = calculate_workload_index(
+            db=db,
+            assignee_account_id=assignee_id,
+            project_key=project_key,
+            weeks=2
+        )
+        logger.info(f"WI for {project_key}: {wi}")
+        
+        # 2. SLA Score
+        sla_result = calculate_sla_score(db, project_key=project_key)
+        logger.info(f"SLA for {project_key}: {sla_result['sla_score']}%")
+        
+        # 3. Health Score
+        health = calculate_health_score(db, project_key=project_key)
+        logger.info(f"Health for {project_key}: {health['health_score']}")
+        
+        # 4. Сохраняем Health Score в project_health
+        save_health_score(db, project_key, health)
+        
+        db.close()
+        
+        return {
+            "status": "completed",
+            "project_key": project_key,
+            "workload_index": wi,
+            "sla_score": sla_result['sla_score'],
+            "health_score": health['health_score'],
+            "health_status": health['status_text'],
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Metrics calculation failed for {project_key}: {e}")
+        raise
+
+

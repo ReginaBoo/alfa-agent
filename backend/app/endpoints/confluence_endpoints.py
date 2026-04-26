@@ -62,7 +62,6 @@ async def get_pages(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Возвращает страницы Confluence (сырые данные)"""
     client, cloud_id = get_confluence_client(db, current_user.id, instance_name)
     
     try:
@@ -83,12 +82,17 @@ async def get_pages(
                 user_id=current_user.id
             )
         
+        results = data.get("results", [])
+        has_next = len(results) == limit  # Если вернулось limit записей, вероятно есть ещё
+        
         return {
             "success": True,
-            "data": data.get("results", []),
+            "data": results,
             "meta": {
                 "limit": limit,
-                "start": start
+                "start": start,
+                "has_next": has_next,
+                "next_start": start + limit if has_next else None
             }
         }
     except Exception as e:

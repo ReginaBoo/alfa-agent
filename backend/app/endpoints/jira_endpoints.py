@@ -131,6 +131,7 @@ def get_sites(
 @router.get("/projects")
 async def get_projects(
     instance_name: str = Query(...),
+    search: Optional[str] = Query(None, description="Поиск по имени проекта (не чувствителен к регистру)"),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -144,13 +145,23 @@ async def get_projects(
             user_id=current_user.id
         )
         
+        projects = [
+            {"id": p.get("id"), "key": p.get("key"), "name": p.get("name")}
+            for p in data
+        ]
+        
+        # Фильтрация по имени (если передан параметр search)
+        if search:
+            search_lower = search.lower()
+            projects = [
+                p for p in projects 
+                if search_lower in p["name"].lower()
+            ]
+        
         return {
             "success": True,
-            "total_projects": len(data),
-            "projects": [
-                {"id": p.get("id"), "key": p.get("key"), "name": p.get("name")}
-                for p in data
-            ]
+            "total_projects": len(projects),
+            "projects": projects
         }
     except httpx.HTTPStatusError as e:
         raise HTTPException(502, f"Jira API error: {str(e)}")
@@ -318,12 +329,15 @@ async def transition_issue(
 async def get_issue_changelog(
     issue_key: str,
     instance_name: str = Query(...),
+    start_at: int = Query(0, ge=0, description="Начало выборки"),
+    max_results: int = Query(50, ge=1, le=100, description="Количество записей"),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     token = get_token(instance_name, db, current_user.id)
     
     try:
+        # Получаем полный changelog
         data = await _make_jira_request(
             token=token,
             path=f"issue/{issue_key}/changelog",
@@ -331,9 +345,19 @@ async def get_issue_changelog(
             user_id=current_user.id
         )
         
+        values = data.get("values", [])
+        total = len(values)
+        
+        # Пагинация
+        paginated_values = values[start_at:start_at + max_results]
+        
         return {
             "success": True,
-            "changelog": data
+            "total": total,
+            "start_at": start_at,
+            "max_results": max_results,
+            "has_next": start_at + max_results < total,
+            "changelog": paginated_values
         }
     except httpx.HTTPStatusError as e:
         raise HTTPException(502, f"Jira API error: {str(e)}")
