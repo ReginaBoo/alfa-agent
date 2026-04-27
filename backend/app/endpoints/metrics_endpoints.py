@@ -290,3 +290,234 @@ def get_team_focus(
         "data": result,
         "project_key": project_key
     }
+
+@router.get("/workload/{project_key}")
+def get_workload_index(
+    project_key: str,
+    assignee_account_id: Optional[str] = Query(None),
+    weeks: int = Query(2, ge=1, le=4),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает Workload Index для сотрудников проекта.
+    
+    WI < 0.7 — недогруз (синий)
+    WI 0.7-1.1 — оптимально (зелёный)
+    WI > 1.1 — перегруз (красный)
+    """
+    from app.services.metrics.workload_index import calculate_workload_index, get_workload_status
+    from app.db.models import JiraIssue
+    
+    query = db.query(JiraIssue.assignee_account_id).filter(
+        JiraIssue.project_key == project_key,
+        JiraIssue.assignee_account_id.isnot(None)
+    ).distinct()
+    
+    if assignee_account_id:
+        query = query.filter(JiraIssue.assignee_account_id == assignee_account_id)
+    
+    assignees = query.all()
+    
+    if not assignees:
+        raise HTTPException(status_code=404, detail=f"No assignees found for project {project_key}")
+    
+    result = []
+    for (assignee_id,) in assignees:
+        wi = calculate_workload_index(db, assignee_id, project_key, weeks)
+        status_info = get_workload_status(wi) if wi else {}
+        
+        result.append({
+            "assignee_account_id": assignee_id,
+            "workload_index": wi,
+            "status": status_info.get('status'),
+            "status_text": status_info.get('status_text'),
+            "color": status_info.get('color')
+        })
+    
+    # Сортируем по убыванию нагрузки
+    result.sort(key=lambda x: x['workload_index'] or 0, reverse=True)
+    
+    return {
+        "success": True,
+        "data": result,
+        "project_key": project_key,
+        "weeks": weeks
+    }
+
+@router.get("/activity/{project_key}")
+def get_activity_score(
+    project_key: str,
+    assignee_account_id: Optional[str] = Query(None),
+    period_days: int = Query(30, ge=7, le=90),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает Activity Score сотрудников (0-100).
+    
+    Компоненты:
+    - Закрытые задачи (макс 50 баллов)
+    - Обновления задач (макс 30 баллов)
+    - Созданные задачи (макс 20 баллов)
+    """
+    from app.services.metrics.activity_score import calculate_activity_score
+    from app.db.models import JiraIssue
+    
+    query = db.query(JiraIssue.assignee_account_id).filter(
+        JiraIssue.project_key == project_key,
+        JiraIssue.assignee_account_id.isnot(None)
+    ).distinct()
+    
+    if assignee_account_id:
+        query = query.filter(JiraIssue.assignee_account_id == assignee_account_id)
+    
+    assignees = query.all()
+    
+    if not assignees:
+        raise HTTPException(status_code=404, detail=f"No assignees found for project {project_key}")
+    
+    result = []
+    for (assignee_id,) in assignees:
+        activity = calculate_activity_score(db, assignee_id, project_key, period_days)
+        
+        # Определяем уровень активности
+        if activity >= 70:
+            level = "high"
+            level_text = "Высокая"
+        elif activity >= 40:
+            level = "medium"
+            level_text = "Средняя"
+        else:
+            level = "low"
+            level_text = "Низкая"
+        
+        result.append({
+            "assignee_account_id": assignee_id,
+            "activity_score": activity,
+            "level": level,
+            "level_text": level_text
+        })
+    
+    # Сортируем по убыванию активности
+    result.sort(key=lambda x: x['activity_score'], reverse=True)
+    
+    return {
+        "success": True,
+        "data": result,
+        "project_key": project_key,
+        "period_days": period_days
+    }
+
+
+@router.get("/sla/{project_key}")
+def get_sla_score(
+    project_key: str,
+    assignee_account_id: Optional[str] = Query(None),
+    period_days: int = Query(30, ge=7, le=90),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает SLA Score — процент задач, закрытых в срок.
+    """
+    from app.services.metrics.sla_score import calculate_sla_score
+    
+    result = calculate_sla_score(
+        db=db,
+        project_key=project_key,
+        assignee_account_id=assignee_account_id,
+        period_days=period_days
+    )
+    
+    # Определяем уровень SLA
+    sla = result['sla_score']
+    if sla >= 90:
+        level = "excellent"
+        level_text = "Отлично"
+    elif sla >= 70:
+        level = "good"
+        level_text = "Хорошо"
+    elif sla >= 50:
+        level = "warning"
+        level_text = "Требует внимания"
+    else:
+        level = "critical"
+        level_text = "Критично"
+    
+    return {
+        "success": True,
+        "data": {
+            "sla_score": sla,
+            "level": level,
+            "level_text": level_text,
+            "total_closed": result['total_closed'],
+            "on_time": result['on_time'],
+            "late": result['late']
+        },
+        "project_key": project_key,
+        "period_days": period_days
+    }
+
+
+@router.get("/health/{project_key}")
+def get_project_health(
+    project_key: str,
+    period_days: int = Query(30, ge=7, le=90),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает Project Health Score (0-100).
+    
+    Компоненты:
+    - SLA Score (30%)
+    - Stability Score (30%)
+    - Workload Balance (30%)
+    - Deadline Stability (10%)
+    """
+    from app.services.metrics.health_score import calculate_health_score
+    from app.services.metrics.sla_score import calculate_sla_score
+    from app.services.metrics.workload_index import calculate_workload_index
+    from app.db.models import JiraIssue
+    
+    # Получаем компоненты
+    sla = calculate_sla_score(db, project_key=project_key, period_days=period_days)
+    health = calculate_health_score(db, project_key=project_key)
+    
+    # Получаем средний WI для оценки Workload Balance
+    assignees = db.query(JiraIssue.assignee_account_id).filter(
+        JiraIssue.project_key == project_key,
+        JiraIssue.assignee_account_id.isnot(None)
+    ).distinct().all()
+    
+    wi_values = []
+    for (assignee_id,) in assignees:
+        wi = calculate_workload_index(db, assignee_id, project_key, weeks=2)
+        if wi:
+            wi_values.append(wi)
+    
+    workload_balance = 100
+    if wi_values and len(wi_values) > 1:
+        # Чем меньше разброс, тем лучше
+        max_wi = max(wi_values)
+        min_wi = min(wi_values)
+        if max_wi > 0:
+            workload_balance = max(0, 100 - ((max_wi - min_wi) / max_wi * 100))
+        workload_balance = round(workload_balance, 1)
+    
+    return {
+        "success": True,
+        "data": {
+            "health_score": health['health_score'],
+            "status": health['status'],
+            "status_text": health['status_text'],
+            "components": {
+                "sla_score": sla['sla_score'],
+                "stability_score": health['components']['stability_score'],
+                "workload_balance": workload_balance,
+                "deadline_stability": health['components']['deadline_stability']
+            }
+        },
+        "project_key": project_key
+    }
