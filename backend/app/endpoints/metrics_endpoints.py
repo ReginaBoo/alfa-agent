@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 
 from app.db.session import get_db
 from app.core.dependencies import get_current_user
@@ -117,4 +117,176 @@ def calculate_all_metrics_async(
         "data": {
             "jobs": jobs
         }
+    }
+
+
+@router.get("/progress/{issue_key}")
+def get_issue_progress(
+    issue_key: str,
+    instance_name: str = Query(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает прогресс задачи в процентах
+    Прогресс = time_spent / original_estimate * 100
+    """
+    from app.db.models import JiraIssue
+    
+    issue = db.query(JiraIssue).filter(JiraIssue.issue_key == issue_key).first()
+    
+    if not issue:
+        raise HTTPException(status_code=404, detail=f"Issue {issue_key} not found")
+    
+    progress = 0
+    if issue.original_estimate and issue.original_estimate > 0:
+        progress = min(round((issue.time_spent or 0) / issue.original_estimate * 100, 1), 100)
+    
+    return {
+        "success": True,
+        "data": {
+            "issue_key": issue_key,
+            "original_estimate_hours": issue.original_estimate,
+            "time_spent_hours": issue.time_spent,
+            "progress_percent": progress,
+            "status": issue.status
+        }
+    }
+
+
+@router.get("/lead-time/{project_key}")
+def get_lead_time(
+    project_key: str,
+    assignee_account_id: Optional[str] = Query(None),
+    period_days: int = Query(30, ge=1, le=90),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает среднее время цикла задачи (Lead Time) в часах
+    """
+    from app.services.metrics.lead_time import calculate_lead_time
+    
+    result = calculate_lead_time(
+        db=db,
+        project_key=project_key,
+        assignee_account_id=assignee_account_id,
+        period_days=period_days
+    )
+    
+    return {
+        "success": True,
+        "data": result,
+        "project_key": project_key
+    }
+
+@router.get("/task-plan/{project_key}")
+def get_task_plan(
+    project_key: str,
+    assignee_account_id: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает план по задачам проекта:
+    - Оценка (original_estimate)
+    - Затрачено (time_spent)
+    - Осталось (remaining_estimate)
+    - Прогресс (%)
+    """
+    from app.db.models import JiraIssue
+    
+    query = db.query(JiraIssue).filter(
+        JiraIssue.project_key == project_key
+    )
+    
+    if assignee_account_id:
+        query = query.filter(JiraIssue.assignee_account_id == assignee_account_id)
+    
+    issues = query.all()
+    
+    result = []
+    for issue in issues:
+        progress = 0
+        if issue.original_estimate and issue.original_estimate > 0:
+            progress = min(round((issue.time_spent or 0) / issue.original_estimate * 100, 1), 100)
+        
+        result.append({
+            "issue_key": issue.issue_key,
+            "summary": issue.summary,
+            "status": issue.status,
+            "original_estimate_hours": issue.original_estimate,
+            "time_spent_hours": issue.time_spent,
+            "remaining_estimate_hours": issue.remaining_estimate,
+            "progress_percent": progress
+        })
+    
+    return {
+        "success": True,
+        "data": result,
+        "total": len(result),
+        "project_key": project_key
+    }
+
+
+@router.get("/focus/{project_key}")
+def get_team_focus(
+    project_key: str,
+    period_days: int = Query(30, ge=1, le=90),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает фокусировку команды:
+    - Новые фичи (Story, Task)
+    - Рефакторинг/Долг
+    - Баги (Bug)
+    """
+    from app.db.models import JiraIssue
+    from datetime import datetime, timedelta
+    
+    cutoff_date = datetime.utcnow() - timedelta(days=period_days)
+    
+    issues = db.query(JiraIssue).filter(
+        JiraIssue.project_key == project_key,
+        JiraIssue.created_at >= cutoff_date
+    ).all()
+    
+    total = len(issues)
+    
+    # Категоризация по типам задач
+    categories = {
+        "new_features": 0,      # Story, Task, Epic
+        "refactoring": 0,       # Refactoring, Technical debt
+        "bugs": 0               # Bug
+    }
+    
+    for issue in issues:
+        issue_type = issue.issue_type.lower() if issue.issue_type else ""
+        
+        if issue_type in ["story", "task", "epic", "feature"]:
+            categories["new_features"] += 1
+        elif issue_type in ["bug", "defect", "error"]:
+            categories["bugs"] += 1
+        elif issue_type in ["refactoring", "technical debt", "chore"]:
+            categories["refactoring"] += 1
+        else:
+            # По умолчанию считаем новой фичей
+            categories["new_features"] += 1
+    
+    # Расчёт процентов
+    result = {}
+    for key, count in categories.items():
+        result[key] = {
+            "count": count,
+            "percent": round(count / total * 100, 1) if total > 0 else 0
+        }
+    
+    result["total_tasks"] = total
+    result["period_days"] = period_days
+    
+    return {
+        "success": True,
+        "data": result,
+        "project_key": project_key
     }

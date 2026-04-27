@@ -11,6 +11,7 @@ from app.db.models import IntegrationToken
 from app.core.dependencies import get_current_user
 from app.workers.queues import sync_jira_queue
 from app.workers.tasks import sync_jira_task
+from app.services.project_sync_service import sync_projects_from_jira
 
 router = APIRouter()
 
@@ -131,13 +132,27 @@ def get_sites(
 @router.get("/projects")
 async def get_projects(
     instance_name: str = Query(...),
-    search: Optional[str] = Query(None, description="Поиск по имени проекта (не чувствителен к регистру)"),
+    search: Optional[str] = Query(None, description="Поиск по имени проекта"),
+    sync_to_db: bool = Query(True, description="Синхронизировать проекты с БД"),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     token = get_token(instance_name, db, current_user.id)
     
     try:
+        # Синхронизация с БД (если включена)
+        if sync_to_db:
+            sync_result = sync_projects_from_jira(
+                db=db,
+                user_id=current_user.id,
+                instance_name=instance_name,
+                token_instance_id=token.instance_id,
+                token_access_token=token.access_token
+            )
+        else:
+            sync_result = None
+        
+        # Получаем проекты из Jira API для ответа
         data = await _make_jira_request(
             token=token,
             path="project",
@@ -150,19 +165,21 @@ async def get_projects(
             for p in data
         ]
         
-        # Фильтрация по имени (если передан параметр search)
+        # Фильтрация по имени
         if search:
             search_lower = search.lower()
-            projects = [
-                p for p in projects 
-                if search_lower in p["name"].lower()
-            ]
+            projects = [p for p in projects if search_lower in p["name"].lower()]
         
-        return {
+        result = {
             "success": True,
             "total_projects": len(projects),
             "projects": projects
         }
+        
+        if sync_result:
+            result["sync"] = sync_result
+        
+        return result
     except httpx.HTTPStatusError as e:
         raise HTTPException(502, f"Jira API error: {str(e)}")
 

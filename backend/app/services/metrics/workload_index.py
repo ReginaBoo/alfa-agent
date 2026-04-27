@@ -13,6 +13,8 @@ from datetime import datetime, timedelta
 from app.db.models import JiraIssue
 from app.core.statuses import OPEN_STATUSES, CLOSED_STATUS, IN_PROGRESS_STATUSES, get_issue_weight
 from app.db.timescale import get_timescale_db
+from app.services.project_service import get_project_id_by_key
+from app.services.metrics.activity_score import calculate_activity_score, save_activity_score
 
 logger = logging.getLogger(__name__)
 
@@ -211,7 +213,9 @@ def save_workload_to_user_metrics(
         return
     
     user_id = token.user_id
-    project_id = 0  # TODO: добавить таблицу projects
+    
+    # ПОЛУЧАЕМ РЕАЛЬНЫЙ project_id
+    project_id = get_project_id_by_key(pg_db, project_key)
     
     # Сохраняем в TimescaleDB
     with Session(timescale_engine) as ts_db:
@@ -237,7 +241,7 @@ def save_workload_to_user_metrics(
             ts_db.add(new_metric)
         
         ts_db.commit()
-        logger.info(f"Saved WI {wi} to user_metrics for user {user_id}")
+        logger.info(f"Saved WI {wi} to user_metrics for user {user_id}, project {project_id}")
 
 
 def save_workload_to_metrics_raw(
@@ -252,11 +256,17 @@ def save_workload_to_metrics_raw(
     from app.db.timescale import timescale_engine
     from sqlalchemy.orm import Session
     
+    #  ПОЛУЧАЕМ РЕАЛЬНЫЙ project_id
+    from app.db.session import SessionLocal
+    pg_db = SessionLocal()
+    project_id = get_project_id_by_key(pg_db, project_key)
+    pg_db.close()
+    
     with Session(timescale_engine) as ts_db:
         raw_metric = MetricRaw(
             time=datetime.utcnow(),
-            project_id=0,
-            user_id=0,
+            project_id=project_id,
+            user_id=0,  # user_id будет позже
             metric_name='workload_index',
             value=wi,
             dimensions={
@@ -268,29 +278,33 @@ def save_workload_to_metrics_raw(
         ts_db.add(raw_metric)
         ts_db.commit()
     
-    logger.info(f"Saved WI {wi} to metrics_raw for {assignee_account_id}")
+    logger.info(f"Saved WI {wi} to metrics_raw for {assignee_account_id}, project {project_id}")
 
 
+# В функции calculate_and_save_workload_index добавьте после сохранения WI:
 def calculate_and_save_workload_index(
     db: Session,
     assignee_account_id: str,
     project_key: str,
     weeks: int = 2
 ) -> Optional[float]:
-    """Рассчитывает и сохраняет WI в обе БД"""
+    """Рассчитывает и сохраняет WI и Activity Score"""
     
     wi = calculate_workload_index(db, assignee_account_id, project_key, weeks)
     
     if wi is not None:
         period_end = datetime.utcnow()
         period_start = period_end - timedelta(weeks=weeks)
+        period_days = weeks * 7
         
-        # Сохраняем в user_metrics (без передачи db)
+        # Сохраняем WI
         save_workload_to_user_metrics(
             assignee_account_id, project_key, wi, period_start, period_end
         )
-        
-        # Сохраняем в metrics_raw
         save_workload_to_metrics_raw(assignee_account_id, project_key, wi, weeks)
+        
+        # Сохраняем Activity Score
+        activity_score = calculate_activity_score(db, assignee_account_id, project_key, period_days)
+        save_activity_score(db, assignee_account_id, project_key, activity_score, period_days)
     
     return wi

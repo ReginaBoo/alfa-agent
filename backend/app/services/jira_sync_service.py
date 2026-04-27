@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 from sqlalchemy.orm import Session
 from app.db.models import IntegrationToken, RawEvent, JiraIssue
+from app.db.models.normalized import IssueChangelog
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,8 @@ class JiraSyncService:
                 "jql": search_jql,
                 "startAt": 0,
                 "maxResults": 50,
-                "fields": "*all"
+                "fields": "*all",
+                "expand": "changelog"
             },
             timeout=30
         )
@@ -77,22 +79,50 @@ class JiraSyncService:
             )
             self.db.add(raw_event)
             
-            # 2. Проверяем, существует ли уже нормализованная задача
+            # 2. СОХРАНЯЕМ CHANGELOG (историю изменений)
+            changelog_data = issue.get('changelog', {})
+            for history in changelog_data.get('values', []):
+                for item in history.get('items', []):
+                    if item.get('field') == 'status':
+                        existing_changelog = self.db.query(IssueChangelog).filter(
+                            IssueChangelog.issue_key == issue_key,
+                            IssueChangelog.changed_at == history.get('created'),
+                            IssueChangelog.from_value == item.get('fromString'),
+                            IssueChangelog.to_value == item.get('toString')
+                        ).first()
+                        
+                        if not existing_changelog:
+                            changelog_entry = IssueChangelog(
+                                issue_key=issue_key,
+                                field_name='status',
+                                from_value=item.get('fromString'),
+                                to_value=item.get('toString'),
+                                changed_at=history.get('created'),
+                                author_account_id=history.get('author', {}).get('accountId') if history.get('author') else None
+                            )
+                            self.db.add(changelog_entry)
+            
+            # 3. Проверяем, существует ли уже нормализованная задача
             existing = self.db.query(JiraIssue).filter(
                 JiraIssue.issue_key == issue_key
             ).first()
             
             fields = issue.get("fields", {})
             
-            # Извлекаем Story Points (с проверкой на пустые значения)
+            # Извлекаем Story Points
             story_points = None
             for field_name in ["customfield_10002", "customfield_10016"]:
                 if field_name in fields:
                     val = fields.get(field_name)
-                    # Проверяем, что значение не пустое и не список
                     if val is not None and not isinstance(val, list):
                         story_points = float(val) if isinstance(val, (int, float)) else None
                         break
+            
+            # Извлекаем timetracking
+            timetracking = fields.get('timetracking', {})
+            original_estimate = timetracking.get('originalEstimateSeconds') or fields.get('timeoriginalestimate')
+            time_spent = timetracking.get('timeSpentSeconds') or fields.get('aggregatetimespent')
+            remaining_estimate = timetracking.get('remainingEstimateSeconds')
             
             assignee = fields.get("assignee")
             assignee_account_id = assignee.get("accountId") if assignee else None
@@ -122,6 +152,9 @@ class JiraSyncService:
                 existing.due_date = fields.get("duedate")
                 existing.updated_at = fields.get("updated")
                 existing.last_synced_at = datetime.utcnow()
+                existing.original_estimate = original_estimate
+                existing.time_spent = time_spent
+                existing.remaining_estimate = remaining_estimate
                 updated_count += 1
             else:
                 # Создаём новую задачу
@@ -139,7 +172,10 @@ class JiraSyncService:
                     due_date=fields.get("duedate"),
                     created_at=fields.get("created"),
                     updated_at=fields.get("updated"),
-                    last_synced_at=datetime.utcnow()
+                    last_synced_at=datetime.utcnow(),
+                    original_estimate=original_estimate,
+                    time_spent=time_spent,
+                    remaining_estimate=remaining_estimate
                 )
                 self.db.add(new_issue)
                 created_count += 1

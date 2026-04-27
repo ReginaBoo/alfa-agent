@@ -69,8 +69,17 @@ class JiraIssueFields(BaseModel):
     resolutiondate: Optional[datetime] = None
     
     # Story Points — может быть в разных кастомных полях
-    customfield_10002: Optional[float] = Field(None, alias="customfield_10002")  # Чаще всего здесь
-    customfield_10016: Optional[float] = Field(None, alias="customfield_10016")  # Альтернативное поле
+    customfield_10002: Optional[float] = Field(None, alias="customfield_10002")
+    customfield_10016: Optional[float] = Field(None, alias="customfield_10016")
+    
+    # 👇 ДОБАВИТЬ ЭТИ ПОЛЯ
+    # Timetracking (учёт времени)
+    timetracking: Optional[Dict[str, Any]] = None
+    aggregatetimespent: Optional[int] = Field(None, alias="aggregatetimespent")
+    aggregatetimeestimate: Optional[int] = Field(None, alias="aggregatetimeestimate")
+    timeoriginalestimate: Optional[int] = Field(None, alias="timeoriginalestimate")
+    timespent: Optional[int] = Field(None, alias="timespent")
+    # 👆 КОНЕЦ ДОБАВЛЕННЫХ ПОЛЕЙ
     
     # Для связи с Git (ключ задачи в сообщении коммита)
     labels: List[str] = Field(default_factory=list)

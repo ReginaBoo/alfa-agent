@@ -64,21 +64,27 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 - **Надёжность** — задача не теряется при падении воркера
 
 ### Метрики и дашборды
-- **Workload Index (WI)** — индекс загрузки сотрудников
-  - Суммирование Story Points в открытых задачах
-  - Расчёт средней скорости закрытия задач
-  - Конвертация типа задачи в вес (Bug=2, Task=3, Story=5)
-  - Штраф за многозадачность (>3 задач → +20% за каждую)
-  - Сохранение в `user_metrics` и `metrics_raw`
-- **SLA Score** — процент задач, закрытых в срок
-- **Project Health Score** — общее здоровье проекта (0-100%)
-- **GET /dashboard/digest** — главная страница дайджеста
-- **GET /dashboard/health** — проверка статуса дашборда
 
-### Метрики документации (Confluence)
-- **Freshness** — свежесть документации (% страниц, обновлённых за 6 месяцев)
-- **Knowledge Distribution** — распределение авторства страниц
-- **Coverage** — покрытие задач документацией
+#### Workload Index (WI) — индекс загрузки сотрудников
+- Суммирование веса задач в открытых статусах
+- Расчёт средней скорости закрытия за 2 недели
+- Конвертация типа задачи в вес (Bug=2, Task=3, Story=5)
+- Штраф за многозадачность (>3 задач → +20%)
+- Сохранение в `user_metrics` и `metrics_raw`
+
+#### Activity Score — активность сотрудника
+- Оценка от 0 до 100 на основе:
+  - Количество закрытых задач (50%)
+  - Количество обновлений задач (30%)
+  - Количество созданных задач (20%)
+
+#### SLA Score — процент задач, закрытых в срок
+
+#### Project Health Score — общее здоровье проекта (0-100%)
+
+#### Lead Time — среднее время цикла задачи
+
+#### Прогресс задачи — `time_spent / original_estimate * 100%`
 
 ### Тестирование
 - 20+ тестов, проверяющих:
@@ -128,12 +134,17 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 | GET | `/dashboard/digest` | Главная страница с метриками проектов |
 | GET | `/dashboard/health` | Проверка статуса дашборда |
 
-### Метрики документации
+#### Метрики
 | Метод | Endpoint | Описание |
 |-------|----------|----------|
-| GET | `/docs-metrics/freshness` | Свежесть документации |
-| GET | `/docs-metrics/knowledge-distribution` | Распределение авторства |
-| GET | `/docs-metrics/coverage` | Покрытие задач документацией |
+| GET | `/metrics/lead-time/{project_key}` | Среднее время цикла задачи |
+| GET | `/metrics/progress/{issue_key}` | Прогресс задачи в процентах |
+| GET | `/metrics/task-plan/{project_key}` | План по задачам (оценка, затраты, остаток) |
+| GET | `/metrics/focus/{project_key}` | Фокусировка команды по типам задач |
+| POST | `/metrics/calculate/{project_key}` | Пересчёт метрик (синхронно) |
+| POST | `/metrics/calculate-async/{project_key}` | Пересчёт метрик (асинхронно) |
+| POST | `/metrics/calculate-all-async` | Пересчёт метрик для всех проектов |
+
 
 ### Очереди (Worker)
 | Метод | Endpoint | Описание |
@@ -151,7 +162,7 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 
 ## Структура базы данных
 
-### Схема `identity` — пользователи и доступ
+## Схема `identity` — пользователи и доступ
 
 #### Таблица `users`
 | Поле | Описание |
@@ -190,7 +201,31 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 | `created_at` | Дата создания |
 | `updated_at` | Дата обновления |
 
-### Схема `raw` — сырые события
+
+## Схема `core` — проекты и связи
+
+#### Таблица `projects`
+| Поле | Описание |
+|------|----------|
+| `id` | Уникальный ID проекта |
+| `key` | Ключ проекта (SCRUM, FASAGM) |
+| `name` | Название проекта |
+| `description` | Описание |
+| `owner_id` | Владелец проекта |
+| `jira_project_key` | Связь с Jira |
+| `url` | URL проекта |
+| `category` | Категория проекта |
+| `is_active` | Активен/архивирован |
+| `created_at` | Дата создания |
+
+#### Таблица `user_projects`
+| Поле | Описание |
+|------|----------|
+| `user_id` | ID пользователя |
+| `project_id` | ID проекта |
+| `role` | Роль (owner, manager, viewer) |
+
+## Схема `raw` — сырые события
 
 #### Таблица `raw_events`
 | Поле | Описание |
@@ -210,39 +245,42 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 | Поле | Описание |
 |------|----------|
 | `id` | Уникальный ID |
-| `project_integration_id` | Связь с интеграцией |
 | `issue_key` | Ключ задачи (PROJ-123) |
 | `project_key` | Ключ проекта |
 | `summary` | Заголовок |
 | `status` | Статус |
-| `status_category` | Категория статуса |
 | `assignee_account_id` | ID исполнителя |
-| `assignee_name` | Имя исполнителя |
-| `priority` | Приоритет |
-| `issue_type` | Тип задачи |
-| `story_points` | Story Points (оценка сложности) |
+| `story_points` | Story Points |
+| `original_estimate` | Оригинальная оценка (часы) |
+| `time_spent` | Затраченное время (часы) |
+| `remaining_estimate` | Оставшееся время (часы) |
 | `due_date` | Дедлайн |
 | `created_at` | Дата создания |
 | `updated_at` | Дата обновления |
-| `last_synced_at` | Дата синхронизации |
+
+#### Таблица `issue_changelog`
+| Поле | Описание |
+|------|----------|
+| `id` | Уникальный ID |
+| `issue_key` | Ключ задачи |
+| `field_name` | Изменённое поле |
+| `from_value` | Было |
+| `to_value` | Стало |
+| `changed_at` | Время изменения |
+| `author_account_id` | Кто изменил |
 
 #### Таблица `confluence_pages`
 | Поле | Описание |
 |------|----------|
 | `id` | ID страницы |
 | `space_id` | ID пространства |
-| `space_key` | Ключ пространства |
 | `title` | Заголовок страницы |
 | `author_id` | ID автора |
-| `version` | Номер версии |
-| `status` | Статус |
-| `parent_id` | ID родительской страницы |
 | `created_at` | Дата создания |
 | `updated_at` | Дата обновления |
 | `content` | HTML содержимое |
-| `last_synced_at` | Дата синхронизации |
 
-### Схема `public` (TimescaleDB) — метрики
+## Схема `public` (TimescaleDB) — метрики
 
 #### Таблица `user_metrics`
 | Поле | Описание |
@@ -254,10 +292,28 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 | `period_end` | Конец периода |
 | `workload_index` | Индекс загрузки (WI) |
 | `activity_score` | Оценка активности |
-| `tasks_completed` | Выполненные задачи |
-| `commits_count` | Количество коммитов |
-| `sla_score` | SLA Score |
 | `calculated_at` | Дата расчёта |
+
+#### Таблица `project_metrics`
+| Поле | Описание |
+|------|----------|
+| `id` | Уникальный ID |
+| `project_id` | ID проекта |
+| `period_start` | Начало периода |
+| `period_end` | Конец периода |
+| `sla_score` | SLA Score |
+| `deadline_stability` | Стабильность дедлайнов |
+| `calculated_at` | Дата расчёта |
+
+#### Таблица `project_health`
+| Поле | Описание |
+|------|----------|
+| `id` | Уникальный ID |
+| `project_id` | ID проекта |
+| `period_start` | Начало периода |
+| `period_end` | Конец периода |
+| `health_score` | Health Score (0-100) |
+| `status` | Статус (green/yellow/red) |
 
 #### Таблица `metrics_raw` (гипертаблица)
 | Поле | Описание |
@@ -268,9 +324,6 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 | `metric_name` | Название метрики |
 | `value` | Значение |
 | `dimensions` | Дополнительные параметры (JSONB) |
-| `metric_version` | Версия расчёта |
-| `is_final` | Флаг финальности |
-
 ---
 
 

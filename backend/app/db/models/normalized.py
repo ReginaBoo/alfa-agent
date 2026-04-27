@@ -37,6 +37,26 @@ class JiraIssue(Base):
 
 
 
+class IssueChangelog(Base):
+    """История изменений задач Jira"""
+    __tablename__ = "issue_changelog"
+    __table_args__ = (
+        Index("idx_changelog_issue_key", "issue_key"),
+        Index("idx_changelog_field", "field_name"),
+        Index("idx_changelog_changed_at", "changed_at"),
+        {"schema": "normalized"}
+    )
+    
+    id = Column(Integer, primary_key=True)
+    issue_key = Column(String(255), nullable=False, index=True)
+    field_name = Column(String(100), nullable=False)
+    from_value = Column(String(255), nullable=True)
+    to_value = Column(String(255), nullable=True)
+    changed_at = Column(DateTime, nullable=False)
+    author_account_id = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 
 class ConfluencePage(Base):
     __tablename__ = "confluence_pages"
