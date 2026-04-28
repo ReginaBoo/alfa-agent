@@ -9,6 +9,7 @@ psycopg2-binary
 alembic
 rq>=1.15.0
 redis>=5.0.0
+apscheduler>=3.10.0
 
 pydantic
 passlib[bcrypt]

@@ -5,6 +5,7 @@ from datetime import datetime
 from app.db.session import SessionLocal
 from app.services.jira_sync_service import JiraSyncService
 import asyncio
+from app.db.models import IntegrationToken 
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,6 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None) ->
     Фоновая задача для синхронизации Jira проектов.
     
     Если project_key не указан — синхронизирует ВСЕ проекты пользователя.
-    Выполняется в воркере.
     """
     logger.info(f"Starting Jira sync for user {user_id}, instance {instance_name}")
     if project_key:
@@ -23,8 +23,7 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None) ->
     try:
         db = SessionLocal()
         
-        # Получаем токен для доступа к API
-        from app.db.models import IntegrationToken
+        # Получаем токен
         token = db.query(IntegrationToken).filter(
             IntegrationToken.user_id == user_id,
             IntegrationToken.instance_name == instance_name,
@@ -34,20 +33,15 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None) ->
         if not token:
             raise ValueError(f"Token not found for site {instance_name}")
         
-        # Получаем список всех проектов
-        from app.jira.client import JiraClient
-        from app.services.token_service import TokenService
-        
-        token_service = TokenService(db)
-        client = JiraClient(token_service)
-        
-        # Если project_key не указан — получаем все проекты
+        # Получаем список проектов (если project_key не указан)
         if not project_key:
-            projects = asyncio.run(client.get_projects(
-                cloud_id=token.instance_id,
-                user_id=user_id
-            ))
-            project_keys = [p.key for p in projects]
+            import requests
+            projects_url = f"https://api.atlassian.com/ex/jira/{token.instance_id}/rest/api/3/project"
+            headers = {"Authorization": f"Bearer {token.access_token}"}
+            response = requests.get(projects_url, headers=headers, timeout=30)
+            response.raise_for_status()
+            projects = response.json()
+            project_keys = [p["key"] for p in projects]
             logger.info(f"Found {len(project_keys)} projects: {project_keys}")
         else:
             project_keys = [project_key]
@@ -80,8 +74,6 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None) ->
                     "details": result
                 })
                 
-                logger.info(f"Project {p_key} synced: {result}")
-                
             except Exception as e:
                 logger.error(f"Failed to sync project {p_key}: {e}")
                 total_result["projects_synced"].append({
@@ -89,6 +81,7 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None) ->
                     "error": str(e)
                 })
         
+        db.commit()
         db.close()
         
         logger.info(f"Jira sync completed: {total_result}")
