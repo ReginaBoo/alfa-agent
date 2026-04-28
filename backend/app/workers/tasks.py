@@ -4,42 +4,103 @@ import logging
 from datetime import datetime
 from app.db.session import SessionLocal
 from app.services.jira_sync_service import JiraSyncService
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 
-def sync_jira_task(user_id: int, instance_name: str, project_key: str) -> dict:
+def sync_jira_task(user_id: int, instance_name: str, project_key: str = None) -> dict:
     """
     Фоновая задача для синхронизации Jira проектов.
+    
+    Если project_key не указан — синхронизирует ВСЕ проекты пользователя.
     Выполняется в воркере.
     """
-    logger.info(f"Starting Jira sync for project {project_key}, user {user_id}")
+    logger.info(f"Starting Jira sync for user {user_id}, instance {instance_name}")
+    if project_key:
+        logger.info(f"Project filter: {project_key}")
     
     try:
-        # Создаём сессию БД (воркер синхронный)
         db = SessionLocal()
+        
+        # Получаем токен для доступа к API
+        from app.db.models import IntegrationToken
+        token = db.query(IntegrationToken).filter(
+            IntegrationToken.user_id == user_id,
+            IntegrationToken.instance_name == instance_name,
+            IntegrationToken.provider == "jira"
+        ).first()
+        
+        if not token:
+            raise ValueError(f"Token not found for site {instance_name}")
+        
+        # Получаем список всех проектов
+        from app.jira.client import JiraClient
+        from app.services.token_service import TokenService
+        
+        token_service = TokenService(db)
+        client = JiraClient(token_service)
+        
+        # Если project_key не указан — получаем все проекты
+        if not project_key:
+            projects = asyncio.run(client.get_projects(
+                cloud_id=token.instance_id,
+                user_id=user_id
+            ))
+            project_keys = [p.key for p in projects]
+            logger.info(f"Found {len(project_keys)} projects: {project_keys}")
+        else:
+            project_keys = [project_key]
+        
+        # Синхронизируем каждый проект
+        from app.services.jira_sync_service import JiraSyncService
         sync_service = JiraSyncService(db)
         
-        result = sync_service.sync_project_issues(
-            user_id=user_id,
-            instance_name=instance_name,
-            project_key=project_key
-        )
+        total_result = {
+            "created": 0,
+            "updated": 0,
+            "total": 0,
+            "projects_synced": []
+        }
+        
+        for p_key in project_keys:
+            try:
+                logger.info(f"Syncing project {p_key}...")
+                result = sync_service.sync_project_issues(
+                    user_id=user_id,
+                    instance_name=instance_name,
+                    project_key=p_key
+                )
+                
+                total_result["created"] += result["created"]
+                total_result["updated"] += result["updated"]
+                total_result["total"] += result["total"]
+                total_result["projects_synced"].append({
+                    "project_key": p_key,
+                    "details": result
+                })
+                
+                logger.info(f"Project {p_key} synced: {result}")
+                
+            except Exception as e:
+                logger.error(f"Failed to sync project {p_key}: {e}")
+                total_result["projects_synced"].append({
+                    "project_key": p_key,
+                    "error": str(e)
+                })
         
         db.close()
         
-        logger.info(f"Jira sync completed for {project_key}: {result}")
-        
+        logger.info(f"Jira sync completed: {total_result}")
         return {
             "status": "completed",
-            "project_key": project_key,
             "instance_name": instance_name,
-            "details": result,
+            "details": total_result,
             "timestamp": datetime.utcnow().isoformat()
         }
         
     except Exception as e:
-        logger.error(f"Jira sync failed for {project_key}: {e}")
+        logger.error(f"Jira sync failed: {e}")
         raise
 
 def sync_confluence_task(user_id: int, instance_name: str, space_id: str, space_key: str = None) -> dict:

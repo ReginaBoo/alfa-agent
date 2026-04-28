@@ -410,13 +410,15 @@ def sync_issues(
 
 @router.post("/sync-async/{project_key}")
 async def sync_issues_async(
-    project_key: str,
+    project_key: str = None,  # ← сделал опциональным
     instance_name: str = Query(...),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Асинхронная синхронизация задач проекта в БД через очередь.
+    
+    Если project_key не указан — синхронизируются ВСЕ проекты пользователя.
     Возвращает job_id для отслеживания статуса.
     """
     try:
@@ -424,14 +426,16 @@ async def sync_issues_async(
         job = sync_jira_queue.enqueue(
             sync_jira_task,
             args=(current_user.id, instance_name, project_key),
-            job_timeout="300s",  # 5 минут на выполнение
-            result_ttl=3600,      # результат хранится час
-            failure_ttl=3600      # ошибки тоже хранятся час
+            job_timeout="600s",  # Увеличил до 10 минут (на случай многих проектов)
+            result_ttl=3600,
+            failure_ttl=3600
         )
+        
+        message = f"Sync for all projects queued" if not project_key else f"Sync for project {project_key} queued"
         
         return {
             "success": True,
-            "message": f"Sync for project {project_key} queued",
+            "message": message,
             "data": {
                 "job_id": job.id,
                 "status": "queued",
@@ -439,6 +443,37 @@ async def sync_issues_async(
                 "instance_name": instance_name
             }
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to queue sync: {str(e)}")
+
+
+# Добавь НОВЫЙ эндпоинт для синхронизации ВСЕХ проектов
+@router.post("/sync-all-async")
+async def sync_all_projects_async(
+    instance_name: str = Query(...),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Асинхронная синхронизация ВСЕХ проектов пользователя.
+    """
+    try:
+        job = sync_jira_queue.enqueue(
+            sync_jira_task,
+            args=(current_user.id, instance_name, None),  # None = все проекты
+            job_timeout="900s",  # 15 минут на все проекты
+            result_ttl=3600,
+            failure_ttl=3600
+        )
         
+        return {
+            "success": True,
+            "message": "Sync for all projects queued",
+            "data": {
+                "job_id": job.id,
+                "status": "queued",
+                "instance_name": instance_name
+            }
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to queue sync: {str(e)}")
