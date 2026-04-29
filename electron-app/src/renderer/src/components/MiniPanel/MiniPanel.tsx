@@ -1,21 +1,22 @@
 import { useState } from 'react';
-import { Header } from './HeaderPanel';
+import { Header } from './Header/Header';
 import { Tabs } from 'antd';
-import { Notifications } from './NotificationsPanel';
-import { ChatBot } from './ChatBotPanel';
+import { Notifications } from './Notifications/Notifications';
+import { ChatBot } from './ChatBot/ChatBot';
+import s from './MiniPanel.module.css';
 
 export const MiniPanel = () => {
   const [activeTab, setActiveTab] = useState('1');
 
   return (
-    <div className="app-container">
+    <div className={s.appContainer}>
       <Header onTabChange={(key) => setActiveTab(key)} />
 
-      <main className="content-area">
+      <main className={s.contentArea}>
         <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}
-          renderTabBar={() => <></>} // Скрываем стандартные вкладки
+          renderTabBar={() => <></>}
           animated={{ inkBar: true, tabPane: true }}
           items={[
             {

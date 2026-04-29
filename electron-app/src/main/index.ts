@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, Tray, Menu, nativeImage, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, Tray, Menu, nativeImage, ipcMain, screen } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import iconPath from '../../resources/icon.png?asset'
@@ -14,10 +14,21 @@ declare global {
     }
   }
 }
+
 function createWindow(): void {
+  const primaryDisplay = screen.getPrimaryDisplay()
+  const { width, height } = primaryDisplay.workAreaSize
+  const windowWidth = 300
+  const windowHeight = 500
+
+  const x = width - windowWidth - 5
+  const y = height - windowHeight - 5
+
   mainWindow = new BrowserWindow({
-    width: 400,
-    height: 600,
+    width: windowWidth,
+    height: windowHeight,
+    x: x,
+    y: y,
     show: false,
     autoHideMenuBar: true,
     alwaysOnTop: true,
