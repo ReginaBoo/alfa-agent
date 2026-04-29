@@ -11,6 +11,7 @@ from app.services.token_service import TokenService
 from app.confluence.client import ConfluenceClient
 from app.workers.queues import sync_confluence_queue
 from app.workers.tasks import sync_confluence_task
+from app.workers.tasks import sync_confluence_all_task
 
 router = APIRouter()
 
@@ -189,5 +190,42 @@ async def sync_confluence_async(
             }
         }
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to queue sync: {str(e)}")
+    
+@router.post("/sync-all-async")
+async def sync_all_spaces_async(
+    instance_name: str = Query(..., description="Имя сайта Confluence"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Асинхронная синхронизация ВСЕХ пространств Confluence пользователя.
+    
+    Реализует:
+    - Фильтрацию проектных пространств
+    - Пагинацию страниц
+    - Сохранение raw_events + версий + комментариев
+    
+    Возвращает job_id для отслеживания статуса.
+    """
+    try:
+        job = sync_confluence_queue.enqueue(
+            sync_confluence_all_task,
+            args=(current_user.id, instance_name),
+            job_timeout="1800s",  # 30 минут на все пространства
+            result_ttl=3600,
+            failure_ttl=3600
+        )
+        
+        return {
+            "success": True,
+            "message": f"Full Confluence sync queued for instance {instance_name}",
+            "data": {
+                "job_id": job.id,
+                "status": "queued",
+                "estimated_duration": "~5-30 min depending on content"
+            }
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to queue sync: {str(e)}")

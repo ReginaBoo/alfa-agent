@@ -1,4 +1,6 @@
 # app/confluence/client.py
+import logging
+
 import httpx
 from typing import List, Optional, Dict, Any
 from datetime import datetime
@@ -7,7 +9,7 @@ from app.core.config import settings
 from app.services.token_service import TokenService
 from app.confluence.models import ConfluencePage, ConfluenceSpace, ConfluencePageVersion
 
-
+logger = logging.getLogger(__name__)
 class ConfluenceClient:
     """Клиент для Confluence API с авто-обновлением токенов"""
     
@@ -223,3 +225,90 @@ class ConfluenceClient:
         )
         
         return data.get("results", [])
+    
+    async def get_page_versions(
+        self,
+        cloud_id: str,
+        page_id: str,
+        user_id: int
+    ) -> list[dict]:
+        """
+        Выгружает ВСЮ историю версий страницы через пагинацию.
+        """
+        versions = []
+        start = 0
+        limit = 50
+
+        while True:
+            data = await self._request(
+                cloud_id=cloud_id,
+                endpoint=f"/wiki/api/v2/pages/{page_id}/versions",
+                method="GET",
+                params={
+                    "limit": limit,
+                    "start": start
+                },
+                user_id=user_id
+            )
+
+            batch = data.get("results", [])
+            if not batch:
+                break
+
+            versions.extend(batch)
+
+            if len(batch) < limit:
+                break
+
+            start += limit
+
+        return versions
+    
+    async def get_page_comments(
+        self,
+        cloud_id: str,
+        page_id: str,
+        user_id: int
+    ) -> list[dict]:
+        """
+        Выгружает ВСЕ комментарии страницы:
+        footer-comments + inline-comments.
+        """
+        all_comments = []
+
+        for endpoint in [
+            f"/wiki/api/v2/pages/{page_id}/footer-comments",
+            f"/wiki/api/v2/pages/{page_id}/inline-comments"
+        ]:
+            start = 0
+            limit = 50
+
+            while True:
+                try:
+                    data = await self._request(
+                        cloud_id=cloud_id,
+                        endpoint=endpoint,
+                        method="GET",
+                        params={
+                            "limit": limit,
+                            "start": start,
+                            "body-format": "storage"
+                        },
+                        user_id=user_id
+                    )
+                except Exception as e:
+                    logger.warning(f"Comment endpoint failed {endpoint}: {e}")
+                    break
+
+                batch = data.get("results", [])
+                if not batch:
+                    break
+
+                all_comments.extend(batch)
+
+                if len(batch) < limit:
+                    break
+
+                start += limit
+
+        return all_comments
