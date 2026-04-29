@@ -15,18 +15,18 @@
 }
 
 .messageList::-webkit-scrollbar {
-  width: 8px;
+  background-color: #ffffff;
+  width: 7px;
 }
 
 .messageList::-webkit-scrollbar-thumb {
-  background: #459AFF;
+  background: #3460DC;
   border-radius: 10px;
   cursor: pointer;
 }
 
 .messageItem {
   display: flex;
-  margin-bottom: 12px;
 }
 
 .aiItem {
@@ -66,6 +66,7 @@
   padding: 12px;
   background: #ffffff;
   border-top: 1px solid #E2E8F0;
+  margin-bottom: 20px;
 }
 
 .inputGroup {

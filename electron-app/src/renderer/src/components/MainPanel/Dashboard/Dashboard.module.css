@@ -1,0 +1,59 @@
+.dashboardWrapper {
+  width: 100%;
+  padding: 20px;
+}
+
+
+.aiSection {
+  padding: 20px;
+  border-radius: 8px;
+  background-color: #ffffff;
+}
+
+.blueTitle {
+  margin: 0;
+  margin-bottom: 10px;
+
+  padding: 0;
+  color: #02489B !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+}
+
+.placeholder,
+.placeholderCard,
+.chartPlaceholder {
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+}
+
+.placeholderCard {
+  height: 200px;
+}
+
+.projectsGrid {
+  min-height: 180px;
+}
+
+.loadSection {
+  background: #ffffff;
+  padding: 20px;
+  width: auto;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.chartSection {
+  background: #ffffff;
+  padding: 20px;
+  min-height: 400px;
+  border-radius: 8px;
+  min-height: full;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}

@@ -18,8 +18,8 @@ declare global {
 function createWindow(): void {
   const primaryDisplay = screen.getPrimaryDisplay()
   const { width, height } = primaryDisplay.workAreaSize
-  const windowWidth = 300
-  const windowHeight = 500
+  const windowWidth = 320
+  const windowHeight = 520
 
   const x = width - windowWidth - 5
   const y = height - windowHeight - 5
@@ -34,6 +34,7 @@ function createWindow(): void {
     alwaysOnTop: true,
     frame: false,
     transparent: true,
+    hasShadow: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false

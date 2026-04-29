@@ -21,6 +21,7 @@
     "build:linux": "electron-vite build && electron-builder --linux"
   },
   "dependencies": {
+    "@ant-design/charts": "^2.6.7",
     "@ant-design/icons": "^6.2.2",
     "@ant-design/plots": "^2.6.8",
     "@electron-toolkit/preload": "^3.0.2",
