@@ -15,12 +15,13 @@
 }
 
 .messageList::-webkit-scrollbar {
-  width: 4px;
+  width: 8px;
 }
 
 .messageList::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
+  background: #459AFF;
   border-radius: 10px;
+  cursor: pointer;
 }
 
 .messageItem {
@@ -39,7 +40,6 @@
 .reverseRow {
   flex-direction: row-reverse !important;
 }
-
 
 
 .bubble {

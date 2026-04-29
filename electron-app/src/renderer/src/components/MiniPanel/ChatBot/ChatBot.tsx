@@ -24,7 +24,7 @@ export const ChatBot = () => {
 
     // Имитация ответа бота
     setTimeout(() => {
-      setMessages((prev) => [...prev, { role: 'ai', text: 'Запрос принят, обрабатываю...' }]);
+      setMessages((prev) => [...prev, { role: 'ai', text: 'Обрабатываю...' }]);
     }, 1000);
   };
 

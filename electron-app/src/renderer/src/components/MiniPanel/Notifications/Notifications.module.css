@@ -1,0 +1,67 @@
+.container {
+  padding: 12px;
+  height: calc(100vh - 36px);
+  overflow-y: auto;
+  background-color: #F8FAFC;
+}
+
+.notificationCard {
+  margin-bottom: 8px;
+  border-radius: 8px !important;
+  border-left: 4px solid transparent !important;
+  transition: all 0.3s ease;
+}
+
+/* Статус: Alert (Критический) */
+.statusAlert {
+  border-left-color: #ff4d4f !important;
+  background-color: #fff1f0;
+}
+
+/* Статус: Warning (Внимание) */
+.statusWarning {
+  border-left-color: #faad14 !important;
+  background-color: #fffbe6;
+}
+
+/* Статус: Обычный (New / Processing) */
+.statusDefault {
+  border-left-color: #1677ff !important;
+  background-color: #ffffff;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.taskText {
+  display: block;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #1E293B;
+
+  /* Магия сокращения текста */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+
+  /* Добавляем эти строки для исправления ошибки */
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.sourceText {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748B;
+
+  /* Если источник слишком длинный, обрежем в одну строку */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
