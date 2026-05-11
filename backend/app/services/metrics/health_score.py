@@ -192,8 +192,9 @@ def save_health_score(
     Сохраняет Health Score в таблицу project_health (TimescaleDB).
     Returns True если успешно, False если не найден project_id.
     """
-    period_end = datetime.utcnow()
-    period_start = period_end - timedelta(days=period_days)
+    from app.services.metrics.utils import get_metric_period
+
+    period_start, period_end = get_metric_period(period_days)
     
     project_id = _get_project_id(db, project_key)
     if project_id is None:
@@ -204,6 +205,7 @@ def save_health_score(
         # Проверяем, есть ли запись за этот период
         existing = ts_db.query(ProjectHealth).filter(
             ProjectHealth.project_id == project_id,
+            ProjectHealth.metric_type == 'project_health',
             ProjectHealth.period_start == period_start,
             ProjectHealth.period_end == period_end
         ).first()
@@ -211,14 +213,17 @@ def save_health_score(
         if existing:
             existing.health_score = health_data['health_score']
             existing.status = health_data['status']
+            existing.metric_type = 'project_health'  # ← ДОБАВИТЬ ЭТО
             existing.calculated_at = datetime.utcnow()
         else:
+            # В функции save_health_score(), при создании новой записи:
             new_record = ProjectHealth(
                 project_id=project_id,
                 period_start=period_start,
                 period_end=period_end,
                 health_score=health_data['health_score'],
                 status=health_data['status'],
+                metric_type='project_health',  # ← ДОБАВИТЬ ЭТО
                 calculated_at=datetime.utcnow()
             )
             ts_db.add(new_record)

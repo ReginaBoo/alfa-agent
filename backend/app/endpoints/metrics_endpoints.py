@@ -9,6 +9,7 @@ from app.core.dependencies import get_current_user
 from app.db.models import User, JiraIssue
 from app.workers.queues import calculate_metrics_queue
 from app.workers.tasks import calculate_metrics_task
+from app.services.metrics.doc_health_score import calculate_doc_health_score, save_doc_health_score
 
 router = APIRouter()
 
@@ -468,59 +469,57 @@ def get_project_health(
     db: Session = Depends(get_db)
 ):
     """
-    Возвращает Project Health Score (0-100).
-    
-    Компоненты:
-    - SLA Score (30%)
-    - Stability Score (30%)
-    - Workload Balance (30%)
-    - Deadline Stability (10%)
+    Возвращает обе метрики здоровья проекта:
+    - health_score: Project Health Score
+    - dhs_score: Documentation Health Score
     """
-    from app.services.metrics.health_score import calculate_health_score
-    from app.services.metrics.sla_score import calculate_sla_score
-    from app.services.metrics.workload_index import calculate_workload_index
-    from app.db.models import JiraIssue
+    from app.db.models.core import Project
+    from app.db.timescale import timescale_engine
+    from app.db.models.metrics import ProjectHealth
+    from sqlalchemy.orm import Session as TimescaleSession
+    from datetime import datetime, timedelta
     
-    # Получаем компоненты
-    sla = calculate_sla_score(db, project_key=project_key, period_days=period_days)
-    health = calculate_health_score(db, project_key=project_key)
+    project = db.query(Project).filter(Project.key == project_key).first()
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project '{project_key}' not found")
     
-    # Получаем средний WI для оценки Workload Balance
-    assignees = db.query(JiraIssue.assignee_account_id).filter(
-        JiraIssue.project_key == project_key,
-        JiraIssue.assignee_account_id.isnot(None)
-    ).distinct().all()
+    period_end = datetime.utcnow()
+    period_start = period_end - timedelta(days=period_days)
     
-    wi_values = []
-    for (assignee_id,) in assignees:
-        wi = calculate_workload_index(db, assignee_id, project_key, weeks=2)
-        if wi:
-            wi_values.append(wi)
+    result = {"success": True, "project_key": project_key, "period_days": period_days}
     
-    workload_balance = 100
-    if wi_values and len(wi_values) > 1:
-        # Чем меньше разброс, тем лучше
-        max_wi = max(wi_values)
-        min_wi = min(wi_values)
-        if max_wi > 0:
-            workload_balance = max(0, 100 - ((max_wi - min_wi) / max_wi * 100))
-        workload_balance = round(workload_balance, 1)
-    
-    return {
-        "success": True,
-        "data": {
-            "health_score": health['health_score'],
-            "status": health['status'],
-            "status_text": health['status_text'],
-            "components": {
-                "sla_score": sla['sla_score'],
-                "stability_score": health['components']['stability_score'],
-                "workload_balance": workload_balance,
-                "deadline_stability": health['components']['deadline_stability']
+    with TimescaleSession(timescale_engine) as ts_db:
+        # Project Health Score
+        ph = ts_db.query(ProjectHealth).filter(
+            ProjectHealth.project_id == project.id,
+            ProjectHealth.period_start >= period_start,
+            ProjectHealth.period_end <= period_end,
+            ProjectHealth.metric_type == "project_health"  # ← добавим это поле
+        ).order_by(ProjectHealth.calculated_at.desc()).first()
+        
+        # Documentation Health Score
+        dh = ts_db.query(ProjectHealth).filter(
+            ProjectHealth.project_id == project.id,
+            ProjectHealth.period_start >= period_start,
+            ProjectHealth.period_end <= period_end,
+            ProjectHealth.metric_type == "documentation_health"  # ← добавим это поле
+        ).order_by(ProjectHealth.calculated_at.desc()).first()
+        
+        if ph:
+            result["health_score"] = {
+                "value": ph.health_score,
+                "status": ph.status,
+                "calculated_at": ph.calculated_at.isoformat() if ph.calculated_at else None
             }
-        },
-        "project_key": project_key
-    }
+        if dh:
+            result["documentation_health"] = {
+                "value": dh.health_score,  # пока используем то же поле
+                "status": dh.status,
+                "calculated_at": dh.calculated_at.isoformat() if dh.calculated_at else None
+            }
+    
+    return result
+
 
 @router.post("/health/{project_key}/calculate")
 def calculate_project_health(
@@ -550,66 +549,6 @@ def calculate_project_health(
     }
 
 
-@router.get("/health/{project_key}")
-def get_project_health(
-    project_key: str,
-    period_days: int = Query(30, ge=7, le=90),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Возвращает последний рассчитанный Health Score для проекта.
-    Если нет сохранённых данных — рассчитывает «на лету».
-    """
-    from app.services.metrics.health_score import calculate_health_score
-    from app.db.models.core import Project
-    from app.db.timescale import timescale_engine
-    from app.db.models.metrics import ProjectHealth
-    from sqlalchemy.orm import Session as TimescaleSession
-    
-    project = db.query(Project).filter(Project.key == project_key).first()
-    if not project:
-        raise HTTPException(status_code=404, detail=f"Project '{project_key}' not found")
-    
-    period_end = datetime.utcnow()
-    period_start = period_end - timedelta(days=period_days)
-    
-    # Пробуем получить сохранённые данные
-    with TimescaleSession(timescale_engine) as ts_db:
-        saved = ts_db.query(ProjectHealth).filter(
-            ProjectHealth.project_id == project.id,
-            ProjectHealth.period_start >= period_start,
-            ProjectHealth.period_end <= period_end
-        ).order_by(ProjectHealth.calculated_at.desc()).first()
-        
-        if saved:
-            # Возвращаем полные данные с компонентами
-            components = calculate_health_score(db, project_key, period_days)['components']
-            return {
-                "success": True,
-                "data": {
-                    "health_score": saved.health_score,
-                    "status": saved.status,
-                    "status_text": {
-                        'green': 'Здоров',
-                        'yellow': 'Риск',
-                        'red': 'Критично'
-                    }.get(saved.status, 'Unknown'),
-                    "components": components,
-                    "calculated_at": saved.calculated_at.isoformat() if saved.calculated_at else None
-                },
-                "project_key": project_key,
-                "cached": True
-            }
-    
-    # Если нет сохранённых — считаем на лету (но не сохраняем)
-    health_data = calculate_health_score(db, project_key, period_days)
-    return {
-        "success": True,
-        "data": health_data,
-        "project_key": project_key,
-        "cached": False
-    }
 
 # В app/endpoints/metrics_endpoints.py
 
@@ -639,6 +578,134 @@ def calculate_project_health_async(
         return {
             "success": True,
             "message": f"Health Score calculation for {project_key} queued",
+            "data": {
+                "job_id": job.id,
+                "status": "queued",
+                "project_key": project_key,
+                "period_days": period_days
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to queue calculation: {str(e)}"
+        )
+    
+@router.post("/health/{project_key}/documentation/calculate")
+def calculate_doc_health(
+    project_key: str,
+    period_days: int = Query(30, ge=7, le=90),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Рассчитывает и сохраняет Documentation Health Score.
+    """
+    dhs_data = calculate_doc_health_score(db, project_key, period_days)
+    saved = save_doc_health_score(db, project_key, dhs_data, period_days)
+    
+    if not saved:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Project '{project_key}' not found in core.projects"
+        )
+    
+    return {
+        "success": True,
+        "data": dhs_data,
+        "project_key": project_key,
+        "metric_type": "documentation_health"
+    }
+
+
+@router.get("/health/{project_key}/documentation")
+def get_doc_health(
+    project_key: str,
+    period_days: int = Query(30, ge=7, le=90),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает последний рассчитанный Documentation Health Score.
+    Если нет сохранённых данных — рассчитывает «на лету».
+    """
+    from app.db.models.core import Project
+    from app.db.timescale import timescale_engine
+    from app.db.models.metrics import ProjectHealth
+    from sqlalchemy.orm import Session as TimescaleSession
+    from datetime import datetime, timedelta
+
+    project = db.query(Project).filter(Project.key == project_key).first()
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project '{project_key}' not found")
+    
+    period_end = datetime.utcnow()
+    period_start = period_end - timedelta(days=period_days)
+    
+    # Пробуем получить сохранённые данные
+    with TimescaleSession(timescale_engine) as ts_db:
+        saved = ts_db.query(ProjectHealth).filter(
+            ProjectHealth.project_id == project.id,
+            ProjectHealth.period_start >= period_start,
+            ProjectHealth.period_end <= period_end
+        ).order_by(ProjectHealth.calculated_at.desc()).first()
+        
+        if saved:
+            # Возвращаем полные данные с компонентами
+            components = calculate_doc_health_score(db, project_key, period_days)['components']
+            return {
+                "success": True,
+                "data": {
+                    "dhs_score": saved.health_score,
+                    "status": saved.status,
+                    "status_text": {
+                        'green': 'Стандарт',
+                        'yellow': 'Риск',
+                        'red': 'Критично'
+                    }.get(saved.status, 'Unknown'),
+                    "components": components,
+                    "calculated_at": saved.calculated_at.isoformat() if saved.calculated_at else None
+                },
+                "project_key": project_key,
+                "cached": True,
+                "metric_type": "documentation_health"
+            }
+    
+    # Если нет сохранённых — считаем на лету
+    dhs_data = calculate_doc_health_score(db, project_key, period_days)
+    return {
+        "success": True,
+        "data": dhs_data,
+        "project_key": project_key,
+        "cached": False,
+        "metric_type": "documentation_health"
+    }
+
+@router.post("/health/{project_key}/documentation/calculate-async")
+def calculate_doc_health_async(
+    project_key: str,
+    period_days: int = Query(30, ge=7, le=90),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Запускает асинхронный расчёт Documentation Health Score.
+    """
+    from app.workers.queues import calculate_metrics_queue
+    from app.workers.tasks import calculate_doc_health_task
+    
+    try:
+        job = calculate_metrics_queue.enqueue(
+            calculate_doc_health_task,
+            args=(current_user.id, project_key, period_days),
+            job_timeout="120s",
+            result_ttl=3600,
+            failure_ttl=3600
+        )
+        
+        return {
+            "success": True,
+            "message": f"DHS calculation for {project_key} queued",
             "data": {
                 "job_id": job.id,
                 "status": "queued",

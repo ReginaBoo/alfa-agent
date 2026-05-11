@@ -363,3 +363,39 @@ def calculate_project_health_task(user_id: int, project_key: str, period_days: i
     except Exception as e:
         logger.error(f"Health Score calculation failed for {project_key}: {e}")
         raise
+
+def calculate_doc_health_task(user_id: int, project_key: str, period_days: int = 30) -> dict:
+    """
+    Фоновая задача: расчёт Documentation Health Score.
+    """
+    logger.info(f"Starting DHS calculation for {project_key}")
+    
+    try:
+        db = SessionLocal()
+        
+        from app.services.metrics.doc_health_score import calculate_doc_health_score, save_doc_health_score
+        
+        dhs_data = calculate_doc_health_score(db, project_key, period_days)
+        saved = save_doc_health_score(db, project_key, dhs_data, period_days)
+        
+        db.close()
+        
+        if not saved:
+            return {
+                "status": "failed",
+                "project_key": project_key,
+                "error": f"Project '{project_key}' not found"
+            }
+        
+        return {
+            "status": "completed",
+            "project_key": project_key,
+            "dhs_score": dhs_data['dhs_score'],
+            "status_label": dhs_data['status_text'],
+            "components": dhs_data['components'],
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"DHS calculation failed for {project_key}: {e}")
+        raise

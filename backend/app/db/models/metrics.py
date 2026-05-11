@@ -58,7 +58,6 @@ class ProjectMetric(TimescaleBase):
 
 
 class ProjectHealth(TimescaleBase):
-    """Здоровье проекта"""
     __tablename__ = "project_health"
     __table_args__ = {"schema": "public"}
     
@@ -67,5 +66,6 @@ class ProjectHealth(TimescaleBase):
     period_start = Column(DateTime, nullable=False)
     period_end = Column(DateTime, nullable=False)
     health_score = Column(Float, nullable=False)
-    status = Column(String(20), nullable=False)  # green, yellow, red
+    status = Column(String(20), nullable=False)
+    metric_type = Column(String(50), nullable=False, default="project_health")  # ← добавить
     calculated_at = Column(DateTime, server_default=func.now())
