@@ -61,7 +61,16 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None) ->
             "total": 0,
             "projects_synced": []
         }
-
+        from app.services.project_sync_service import sync_projects_from_jira
+        try:
+            sync_result = sync_projects_from_jira(
+                db=db,
+                user_id=user_id,
+                instance_name=instance_name
+            )
+            logger.info(f"Projects synced: {sync_result}")
+        except Exception as e:
+            logger.error(f"Failed to sync projects: {e}")
         for p_key in project_keys:
             try:
                 logger.info(f"Syncing project {p_key}...")
@@ -317,4 +326,40 @@ def sync_confluence_task(user_id: int, instance_name: str, space_id: str, space_
 
     except Exception as e:
         logger.error(f"Confluence sync failed for space {space_id}: {e}")
+        raise
+
+def calculate_project_health_task(user_id: int, project_key: str, period_days: int = 30) -> dict:
+    """
+    Фоновая задача: расчёт и сохранение Project Health Score.
+    """
+    logger.info(f"Starting Health Score calculation for {project_key}")
+    
+    try:
+        db = SessionLocal()
+        
+        from app.services.metrics.health_score import calculate_health_score, save_health_score
+        
+        health_data = calculate_health_score(db, project_key, period_days)
+        saved = save_health_score(db, project_key, health_data, period_days)
+        
+        db.close()
+        
+        if not saved:
+            return {
+                "status": "failed",
+                "project_key": project_key,
+                "error": f"Project '{project_key}' not found"
+            }
+        
+        return {
+            "status": "completed",
+            "project_key": project_key,
+            "health_score": health_data['health_score'],
+            "status_label": health_data['status_text'],
+            "components": health_data['components'],
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Health Score calculation failed for {project_key}: {e}")
         raise

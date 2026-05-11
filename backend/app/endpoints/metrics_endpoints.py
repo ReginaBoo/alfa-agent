@@ -521,3 +521,133 @@ def get_project_health(
         },
         "project_key": project_key
     }
+
+@router.post("/health/{project_key}/calculate")
+def calculate_project_health(
+    project_key: str,
+    period_days: int = Query(30, ge=7, le=90),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Рассчитывает и сохраняет Project Health Score.
+    """
+    from app.services.metrics.health_score import calculate_health_score, save_health_score
+    
+    health_data = calculate_health_score(db, project_key, period_days)
+    saved = save_health_score(db, project_key, health_data, period_days)
+    
+    if not saved:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Project '{project_key}' not found in core.projects"
+        )
+    
+    return {
+        "success": True,
+        "data": health_data,
+        "project_key": project_key
+    }
+
+
+@router.get("/health/{project_key}")
+def get_project_health(
+    project_key: str,
+    period_days: int = Query(30, ge=7, le=90),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает последний рассчитанный Health Score для проекта.
+    Если нет сохранённых данных — рассчитывает «на лету».
+    """
+    from app.services.metrics.health_score import calculate_health_score
+    from app.db.models.core import Project
+    from app.db.timescale import timescale_engine
+    from app.db.models.metrics import ProjectHealth
+    from sqlalchemy.orm import Session as TimescaleSession
+    
+    project = db.query(Project).filter(Project.key == project_key).first()
+    if not project:
+        raise HTTPException(status_code=404, detail=f"Project '{project_key}' not found")
+    
+    period_end = datetime.utcnow()
+    period_start = period_end - timedelta(days=period_days)
+    
+    # Пробуем получить сохранённые данные
+    with TimescaleSession(timescale_engine) as ts_db:
+        saved = ts_db.query(ProjectHealth).filter(
+            ProjectHealth.project_id == project.id,
+            ProjectHealth.period_start >= period_start,
+            ProjectHealth.period_end <= period_end
+        ).order_by(ProjectHealth.calculated_at.desc()).first()
+        
+        if saved:
+            # Возвращаем полные данные с компонентами
+            components = calculate_health_score(db, project_key, period_days)['components']
+            return {
+                "success": True,
+                "data": {
+                    "health_score": saved.health_score,
+                    "status": saved.status,
+                    "status_text": {
+                        'green': 'Здоров',
+                        'yellow': 'Риск',
+                        'red': 'Критично'
+                    }.get(saved.status, 'Unknown'),
+                    "components": components,
+                    "calculated_at": saved.calculated_at.isoformat() if saved.calculated_at else None
+                },
+                "project_key": project_key,
+                "cached": True
+            }
+    
+    # Если нет сохранённых — считаем на лету (но не сохраняем)
+    health_data = calculate_health_score(db, project_key, period_days)
+    return {
+        "success": True,
+        "data": health_data,
+        "project_key": project_key,
+        "cached": False
+    }
+
+# В app/endpoints/metrics_endpoints.py
+
+@router.post("/health/{project_key}/calculate-async")
+def calculate_project_health_async(
+    project_key: str,
+    period_days: int = Query(30, ge=7, le=90),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Запускает асинхронный расчёт Health Score через очередь.
+    Возвращает job_id для отслеживания.
+    """
+    from app.workers.queues import calculate_metrics_queue
+    from app.workers.tasks import calculate_project_health_task
+    
+    try:
+        job = calculate_metrics_queue.enqueue(
+            calculate_project_health_task,
+            args=(current_user.id, project_key, period_days),
+            job_timeout="120s",
+            result_ttl=3600,
+            failure_ttl=3600
+        )
+        
+        return {
+            "success": True,
+            "message": f"Health Score calculation for {project_key} queued",
+            "data": {
+                "job_id": job.id,
+                "status": "queued",
+                "project_key": project_key,
+                "period_days": period_days
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to queue calculation: {str(e)}"
+        )
