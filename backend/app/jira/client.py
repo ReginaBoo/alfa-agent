@@ -6,7 +6,7 @@ import httpx
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-
+import inspect
 from app.jira.models import (
     JiraIssue,
     JiraProject,
@@ -20,12 +20,12 @@ from app.core.config import settings
 
 class JiraClient:
     """Клиент для Jira API с автоматическим обновлением токенов"""
-    
+
     def __init__(self, token_service: TokenService):
         self.token_service = token_service
         self.base_url = "https://api.atlassian.com/ex/jira"
         self.timeout = httpx.Timeout(30.0)
-    
+
     async def _request(
         self,
         cloud_id: str,
@@ -37,7 +37,7 @@ class JiraClient:
     ) -> Dict[str, Any]:
         """
         Выполняет запрос к Jira API с автоматическим обновлением токена.
-        
+
         Args:
             cloud_id: ID сайта Atlassian
             endpoint: Эндпоинт API (начинается с /)
@@ -45,7 +45,7 @@ class JiraClient:
             params: Query параметры
             json: JSON тело запроса
             user_id: ID пользователя в нашей системе
-            
+
         Returns:
             Dict[str, Any]: JSON ответ от API
         """
@@ -55,17 +55,20 @@ class JiraClient:
             provider="jira",  # или "confluence"
             instance_id=cloud_id
         )
-        
+
+        if inspect.isawaitable(token):
+            token = await token
+
         if not token:
             raise ValueError(f"No valid token for cloud_id {cloud_id}")
-        
+
         url = f"{self.base_url}/{cloud_id}{endpoint}"
         headers = {
             "Authorization": f"Bearer {token.access_token}",
             "Accept": "application/json",
             "Content-Type": "application/json"
         }
-        
+
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             # Первая попытка
             response = await client.request(
@@ -75,25 +78,28 @@ class JiraClient:
                 params=params,
                 json=json
             )
-            
+
             # Если токен протух — обновляем и пробуем ещё раз (максимум 1 раз)
             if response.status_code == 401:
                 # Обновляем токены пользователя
-                self.token_service._refresh_and_update(user_id)
-                
+                self.token_service.refresh_user_tokens(user_id)
+
                 # Получаем новый токен
                 token = self.token_service.get_valid_token(
                     user_id=user_id,
                     provider="jira",  # или "confluence"
                     instance_id=cloud_id
                 )
-                
+                if inspect.isawaitable(token):
+                    token = await token
+
                 if not token:
-                    raise ValueError(f"Failed to refresh token for cloud_id {cloud_id}")
-                
+                    raise ValueError(
+                        f"Failed to refresh token for cloud_id {cloud_id}")
+
                 # Обновляем заголовок
                 headers["Authorization"] = f"Bearer {token.access_token}"
-                
+
                 # Повторяем запрос
                 response = await client.request(
                     method=method,
@@ -102,11 +108,11 @@ class JiraClient:
                     params=params,
                     json=json
                 )
-            
+
             # Проверяем статус
             response.raise_for_status()
             return response.json()
-    
+
     async def get_projects(
         self,
         cloud_id: str,
@@ -114,11 +120,11 @@ class JiraClient:
     ) -> List[JiraProject]:
         """
         Получает список всех проектов в Jira.
-        
+
         Args:
             cloud_id: ID сайта Atlassian
             user_id: ID пользователя в нашей системе
-            
+
         Returns:
             List[JiraProject]: Список проектов
         """
@@ -128,9 +134,9 @@ class JiraClient:
             method="GET",
             user_id=user_id
         )
-        
+
         return [JiraProject(**project) for project in data]
-    
+
     async def get_project(
         self,
         cloud_id: str,
@@ -139,12 +145,12 @@ class JiraClient:
     ) -> JiraProject:
         """
         Получает информацию о конкретном проекте.
-        
+
         Args:
             cloud_id: ID сайта Atlassian
             project_key: Ключ проекта (например, "PROJ")
             user_id: ID пользователя в нашей системе
-            
+
         Returns:
             JiraProject: Проект
         """
@@ -154,9 +160,9 @@ class JiraClient:
             method="GET",
             user_id=user_id
         )
-        
+
         return JiraProject(**data)
-    
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
@@ -173,7 +179,7 @@ class JiraClient:
     ) -> JiraSearchResponse:
         """
         Ищет задачи по JQL запросу.
-        
+
         Args:
             cloud_id: ID сайта Atlassian
             jql: JQL запрос (например, "project = PROJ AND status = 'In Progress'")
@@ -181,7 +187,7 @@ class JiraClient:
             start_at: Смещение для пагинации
             max_results: Максимум результатов за раз
             user_id: ID пользователя в нашей системе
-            
+
         Returns:
             JiraSearchResponse: Результаты поиска
         """
@@ -190,13 +196,13 @@ class JiraClient:
             "startAt": start_at,
             "maxResults": max_results
         }
-        
+
         if fields:
             params["fields"] = ",".join(fields)
         else:
             # По умолчанию запрашиваем все поля (включая Story Points)
             params["fields"] = "*all"
-        
+
         data = await self._request(
             cloud_id=cloud_id,
             endpoint="/rest/api/3/search",
@@ -204,9 +210,9 @@ class JiraClient:
             params=params,
             user_id=user_id
         )
-        
+
         return JiraSearchResponse(**data)
-    
+
     async def get_issue(
         self,
         cloud_id: str,
@@ -215,12 +221,12 @@ class JiraClient:
     ) -> JiraIssue:
         """
         Получает задачу по ключу.
-        
+
         Args:
             cloud_id: ID сайта Atlassian
             issue_key: Ключ задачи (например, "PROJ-123")
             user_id: ID пользователя в нашей системе
-            
+
         Returns:
             JiraIssue: Задача
         """
@@ -230,9 +236,9 @@ class JiraClient:
             method="GET",
             user_id=user_id
         )
-        
+
         return JiraIssue(**data)
-    
+
     async def create_issue(
         self,
         cloud_id: str,
@@ -247,7 +253,7 @@ class JiraClient:
     ) -> JiraIssue:
         """
         Создаёт новую задачу в Jira.
-        
+
         Args:
             cloud_id: ID сайта Atlassian
             project_key: Ключ проекта
@@ -258,7 +264,7 @@ class JiraClient:
             priority: Приоритет
             labels: Метки
             user_id: ID пользователя в нашей системе
-            
+
         Returns:
             JiraIssue: Созданная задача
         """
@@ -269,7 +275,7 @@ class JiraClient:
                 "issuetype": {"name": issue_type}
             }
         }
-        
+
         if description:
             payload["fields"]["description"] = {
                 "type": "doc",
@@ -283,16 +289,16 @@ class JiraClient:
                     }
                 ]
             }
-        
+
         if assignee_account_id:
             payload["fields"]["assignee"] = {"accountId": assignee_account_id}
-        
+
         if priority:
             payload["fields"]["priority"] = {"name": priority}
-        
+
         if labels:
             payload["fields"]["labels"] = labels
-        
+
         data = await self._request(
             cloud_id=cloud_id,
             endpoint="/rest/api/3/issue",
@@ -300,10 +306,10 @@ class JiraClient:
             json=payload,
             user_id=user_id
         )
-        
+
         # Получаем созданную задачу полностью
         return await self.get_issue(cloud_id, data["key"], user_id)
-    
+
     async def update_issue_status(
         self,
         cloud_id: str,
@@ -313,7 +319,7 @@ class JiraClient:
     ) -> None:
         """
         Обновляет статус задачи.
-        
+
         Args:
             cloud_id: ID сайта Atlassian
             issue_key: Ключ задачи
@@ -323,7 +329,7 @@ class JiraClient:
         payload = {
             "transition": {"id": transition_id}
         }
-        
+
         await self._request(
             cloud_id=cloud_id,
             endpoint=f"/rest/api/3/issue/{issue_key}/transitions",
@@ -331,7 +337,7 @@ class JiraClient:
             json=payload,
             user_id=user_id
         )
-    
+
     async def get_issue_changelog(
         self,
         cloud_id: str,
@@ -341,12 +347,12 @@ class JiraClient:
         """
         Получает историю изменений задачи.
         Нужно для метрики Deadline Stability.
-        
+
         Args:
             cloud_id: ID сайта Atlassian
             issue_key: Ключ задачи
             user_id: ID пользователя в нашей системе
-            
+
         Returns:
             JiraChangelogResponse: История изменений
         """
@@ -356,9 +362,9 @@ class JiraClient:
             method="GET",
             user_id=user_id
         )
-        
+
         return JiraChangelogResponse(**data)
-    
+
     async def get_issue_worklog(
         self,
         cloud_id: str,
@@ -367,12 +373,12 @@ class JiraClient:
     ) -> Dict[str, Any]:
         """
         Получает журнал работ по задаче.
-        
+
         Args:
             cloud_id: ID сайта Atlassian
             issue_key: Ключ задачи
             user_id: ID пользователя в нашей системе
-            
+
         Returns:
             Dict: Журнал работ
         """

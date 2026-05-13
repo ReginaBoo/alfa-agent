@@ -10,14 +10,16 @@ from app.services.token_service import TokenService
 from app.confluence.models import ConfluencePage, ConfluenceSpace, ConfluencePageVersion
 
 logger = logging.getLogger(__name__)
+
+
 class ConfluenceClient:
     """Клиент для Confluence API с авто-обновлением токенов"""
-    
+
     def __init__(self, token_service: TokenService):
         self.token_service = token_service
         self.base_url = "https://api.atlassian.com/ex/confluence"
         self.timeout = httpx.Timeout(30.0)
-    
+
     async def _request(
         self,
         cloud_id: str,
@@ -33,17 +35,18 @@ class ConfluenceClient:
             provider="jira",  # или "confluence"
             instance_id=cloud_id
         )
-        
+
         if not token:
-            raise ValueError(f"No valid token for Confluence cloud_id {cloud_id}")
-        
+            raise ValueError(
+                f"No valid token for Confluence cloud_id {cloud_id}")
+
         url = f"{self.base_url}/{cloud_id}{endpoint}"
         headers = {
             "Authorization": f"Bearer {token.access_token}",
             "Accept": "application/json",
             "Content-Type": "application/json"
         }
-        
+
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.request(
                 method=method,
@@ -52,10 +55,10 @@ class ConfluenceClient:
                 params=params,
                 json=json
             )
-            
+
             # Авто-обновление токена при 401
             if response.status_code == 401:
-                self.token_service._refresh_and_update(user_id)
+                self.token_service.refresh_user_tokens(user_id)
                 token = self.token_service.get_valid_token(
                     user_id=user_id,
                     provider="jira",  # или "confluence"
@@ -69,10 +72,10 @@ class ConfluenceClient:
                     params=params,
                     json=json
                 )
-            
+
             response.raise_for_status()
             return response.json()
-    
+
     async def get_spaces(
         self,
         cloud_id: str,
@@ -86,8 +89,6 @@ class ConfluenceClient:
             user_id=user_id
         )
         return [ConfluenceSpace(**space) for space in data.get("results", [])]
-    
-
 
     async def get_pages(
         self,
@@ -103,7 +104,7 @@ class ConfluenceClient:
             "start": start,
             "expand": expand
         }
-        
+
         data = await self._request(
             cloud_id=cloud_id,
             endpoint="/wiki/api/v2/pages",
@@ -111,9 +112,9 @@ class ConfluenceClient:
             params=params,
             user_id=user_id
         )
-    
+
         return [ConfluencePage(**page) for page in data.get("results", [])]
-    
+
     async def get_pages_by_space(
         self,
         cloud_id: str,
@@ -129,7 +130,7 @@ class ConfluenceClient:
             "start": start,
             "expand": expand
         }
-        
+
         data = await self._request(
             cloud_id=cloud_id,
             endpoint=f"/wiki/api/v2/spaces/{space_id}/pages",
@@ -137,9 +138,9 @@ class ConfluenceClient:
             params=params,
             user_id=user_id
         )
-        
+
         return [ConfluencePage(**page) for page in data.get("results", [])]
-    
+
     async def get_page_content(
         self,
         cloud_id: str,
@@ -152,7 +153,7 @@ class ConfluenceClient:
             "body-format": format,
             "include-version": "true"
         }
-        
+
         data = await self._request(
             cloud_id=cloud_id,
             endpoint=f"/wiki/api/v2/pages/{page_id}",
@@ -160,11 +161,11 @@ class ConfluenceClient:
             params=params,
             user_id=user_id
         )
-        
+
         # Извлекаем тело страницы
         body = data.get("body", {})
         return body.get(format, {})
-    
+
     async def search_pages_cql(
         self,
         cloud_id: str,
@@ -180,7 +181,7 @@ class ConfluenceClient:
             "start": start,
             "expand": "version,space"
         }
-        
+
         data = await self._request(
             cloud_id=cloud_id,
             endpoint="/wiki/api/v2/search",
@@ -188,9 +189,9 @@ class ConfluenceClient:
             params=params,
             user_id=user_id
         )
-        
+
         return [ConfluencePage(**page) for page in data.get("results", [])]
-    
+
     async def get_page_history(
         self,
         cloud_id: str,
@@ -204,9 +205,9 @@ class ConfluenceClient:
             method="GET",
             user_id=user_id
         )
-        
+
         return [ConfluencePageVersion(**v) for v in data.get("results", [])]
-    
+
     async def get_page_comments(
         self,
         cloud_id: str,
@@ -223,9 +224,9 @@ class ConfluenceClient:
             method="GET",
             user_id=user_id
         )
-        
+
         return data.get("results", [])
-    
+
     async def get_page_versions(
         self,
         cloud_id: str,
@@ -263,7 +264,7 @@ class ConfluenceClient:
             start += limit
 
         return versions
-    
+
     async def get_page_comments(
         self,
         cloud_id: str,
