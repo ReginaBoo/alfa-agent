@@ -1,16 +1,17 @@
+# app/services/metrics/health_score.py
 """
 Расчёт Project Health Score
 """
+
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional
+from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
-from app.db.models import JiraIssue, IntegrationToken
-from app.db.models.core import Project  # ← импорт модели проекта
+
+from app.db.models import JiraIssue
 from app.db.timescale import timescale_engine
 from app.db.models.metrics import ProjectHealth
 from app.core.statuses import CLOSED_STATUS
-from sqlalchemy.orm import Session as TimescaleSession
 
 logger = logging.getLogger(__name__)
 
@@ -21,25 +22,39 @@ def calculate_stability_score(
     period_days: int = 30
 ) -> float:
     """
-    Stability Score = (1 - баги / всего задач) × 100
+    Рассчитывает Stability Score — стабильность продукта.
+    Формула: (1 - баги / всего задач) * 100
+    
+    Args:
+        db: Сессия PostgreSQL
+        project_key: Ключ проекта
+        period_days: Период в днях
+    
+    Returns:
+        float: Stability Score (0-100)
     """
+    
     cutoff_date = datetime.utcnow() - timedelta(days=period_days)
     
-    total = db.query(JiraIssue).filter(
+    # Всего задач за период
+    total_issues = db.query(JiraIssue).filter(
         JiraIssue.project_key == project_key,
         JiraIssue.created_at >= cutoff_date
     ).count()
     
-    if total == 0:
+    if total_issues == 0:
         return 100.0
     
+    # Баги за период
     bugs = db.query(JiraIssue).filter(
         JiraIssue.project_key == project_key,
-        JiraIssue.issue_type.in_(['Bug', 'Баг', 'Ошибка', 'Defect']),
+        JiraIssue.issue_type.in_(['Bug', 'Баг', 'Ошибка']),
         JiraIssue.created_at >= cutoff_date
     ).count()
     
-    return round((1 - bugs / total) * 100, 2)
+    # Чем меньше багов, тем выше стабильность
+    stability_score = (1 - bugs / total_issues) * 100
+    return round(stability_score, 2)
 
 
 def calculate_workload_balance(
@@ -48,13 +63,22 @@ def calculate_workload_balance(
     period_days: int = 30
 ) -> float:
     """
-    Workload Balance — равномерность загрузки команды.
-    Чем меньше разброс задач между исполнителями, тем выше балл.
+    Рассчитывает Workload Balance — равномерность загрузки команды.
+    На основе количества задач на исполнителя.
+    
+    Args:
+        db: Сессия PostgreSQL
+        project_key: Ключ проекта
+        period_days: Период в днях
+    
+    Returns:
+        float: Workload Balance (0-100)
     """
-    from sqlalchemy import func
     
     cutoff_date = datetime.utcnow() - timedelta(days=period_days)
     
+    # Количество задач на исполнителя
+    from sqlalchemy import func
     tasks_per_user = db.query(
         JiraIssue.assignee_account_id,
         func.count(JiraIssue.id).label('task_count')
@@ -69,52 +93,14 @@ def calculate_workload_balance(
     
     counts = [t[1] for t in tasks_per_user]
     max_tasks = max(counts)
+    min_tasks = min(counts)
     
-    if max_tasks == 0:
+    if max_tasks == min_tasks:
         return 100.0
     
-    # Коэффициент вариации: чем меньше разброс, тем ближе к 100
-    avg = sum(counts) / len(counts)
-    if avg == 0:
-        return 100.0
-    
-    variance = sum((x - avg) ** 2 for x in counts) / len(counts)
-    cv = (variance ** 0.5) / avg  # коэффициент вариации
-    
-    # Преобразуем в балл: CV=0 → 100, CV=1 → 50, CV>1 → ниже
-    balance = max(0, 100 - cv * 50)
+    # Коэффициент равномерности
+    balance = (1 - (max_tasks - min_tasks) / max_tasks) * 100
     return round(balance, 2)
-
-
-def calculate_deadline_stability(
-    db: Session,
-    project_key: str,
-    period_days: int = 30
-) -> Dict[str, Any]:
-    """
-    Deadline Stability — процент задач с установленным дедлайном.
-    В будущем можно анализировать changelog на предмет сдвигов дедлайнов.
-    """
-    cutoff_date = datetime.utcnow() - timedelta(days=period_days)
-    
-    issues = db.query(JiraIssue).filter(
-        JiraIssue.project_key == project_key,
-        JiraIssue.created_at >= cutoff_date
-    ).all()
-    
-    total = len(issues)
-    if total == 0:
-        return {'stability_score': 100.0, 'total': 0, 'with_due': 0}
-    
-    with_due = sum(1 for i in issues if i.due_date is not None)
-    score = round((with_due / total) * 100, 2)
-    
-    return {
-        'stability_score': score,
-        'total': total,
-        'with_due': with_due,
-        'without_due': total - with_due
-    }
 
 
 def calculate_health_score(
@@ -123,34 +109,41 @@ def calculate_health_score(
     period_days: int = 30
 ) -> Dict[str, Any]:
     """
-    Основная функция расчёта композитного Health Score.
+    Рассчитывает общий Health Score проекта.
+    
+    Формула:
+        Health = (SLA × 0.3) + (Stability × 0.3) + (WorkloadBalance × 0.3) + (DeadlineStability × 0.1)
+    
+    Returns:
+        Dict: {health_score, status, components}
     """
-    from app.services.metrics.sla_score import calculate_sla_score
+    
+    from app.services.metrics.sla_score import calculate_sla_score, calculate_deadline_stability
     
     # Получаем компоненты
-    sla_result = calculate_sla_score(db, project_key=project_key, period_days=period_days)
+    sla = calculate_sla_score(db, project_key=project_key, period_days=period_days)
     stability = calculate_stability_score(db, project_key=project_key, period_days=period_days)
+    deadline_stability = calculate_deadline_stability(db, project_key=project_key, period_days=period_days)
     workload_balance = calculate_workload_balance(db, project_key=project_key, period_days=period_days)
-    deadline_result = calculate_deadline_stability(db, project_key=project_key, period_days=period_days)
     
     # Веса
     weights = {
-        'sla': 0.30,
-        'stability': 0.30,
-        'workload_balance': 0.30,
-        'deadline_stability': 0.10
+        'sla': 0.3,
+        'stability': 0.3,
+        'workload_balance': 0.3,
+        'deadline_stability': 0.1
     }
     
-    # Расчёт итогового балла
+    # Расчёт Health Score
     health_score = (
-        sla_result['sla_score'] * weights['sla'] +
+        sla['sla_score'] * weights['sla'] +
         stability * weights['stability'] +
         workload_balance * weights['workload_balance'] +
-        deadline_result['stability_score'] * weights['deadline_stability']
+        deadline_stability['stability_score'] * weights['deadline_stability']
     )
     health_score = round(health_score, 2)
     
-    # Определение статуса
+    # Определяем статус
     if health_score >= 80:
         status = 'green'
         status_text = 'Здоров'
@@ -166,20 +159,12 @@ def calculate_health_score(
         'status': status,
         'status_text': status_text,
         'components': {
-            'sla_score': sla_result['sla_score'],
+            'sla_score': sla['sla_score'],
             'stability_score': stability,
             'workload_balance': workload_balance,
-            'deadline_stability': deadline_result['stability_score']
-        },
-        'weights': weights,
-        'period_days': period_days
+            'deadline_stability': deadline_stability['stability_score']
+        }
     }
-
-
-def _get_project_id(db: Session, project_key: str) -> Optional[int]:
-    """Вспомогательная функция: получает project_id по ключу"""
-    project = db.query(Project).filter(Project.key == project_key).first()
-    return project.id if project else None
 
 
 def save_health_score(
@@ -187,45 +172,28 @@ def save_health_score(
     project_key: str,
     health_data: Dict[str, Any],
     period_days: int = 30
-) -> bool:
+) -> None:
     """
-    Сохраняет Health Score в таблицу project_health (TimescaleDB).
-    Returns True если успешно, False если не найден project_id.
+    Сохраняет Health Score в project_health (TimescaleDB)
     """
+    from sqlalchemy.orm import Session as TimescaleSession
+    
     period_end = datetime.utcnow()
     period_start = period_end - timedelta(days=period_days)
     
-    project_id = _get_project_id(db, project_key)
-    if project_id is None:
-        logger.warning(f"Project not found for key: {project_key}")
-        return False
+    # TODO: найти project_id по project_key
+    project_id = 0
     
     with TimescaleSession(timescale_engine) as ts_db:
-        # Проверяем, есть ли запись за этот период
-        existing = ts_db.query(ProjectHealth).filter(
-            ProjectHealth.project_id == project_id,
-            ProjectHealth.period_start == period_start,
-            ProjectHealth.period_end == period_end
-        ).first()
-        
-        if existing:
-            existing.health_score = health_data['health_score']
-            existing.status = health_data['status']
-            existing.calculated_at = datetime.utcnow()
-        else:
-            new_record = ProjectHealth(
-                project_id=project_id,
-                period_start=period_start,
-                period_end=period_end,
-                health_score=health_data['health_score'],
-                status=health_data['status'],
-                calculated_at=datetime.utcnow()
-            )
-            ts_db.add(new_record)
-        
-        ts_db.commit()
-        logger.info(
-            f"Saved Health Score {health_data['health_score']} "
-            f"({health_data['status_text']}) for project {project_key} (id={project_id})"
+        new_health = ProjectHealth(
+            project_id=project_id,
+            period_start=period_start,
+            period_end=period_end,
+            health_score=health_data['health_score'],
+            status=health_data['status'],
+            calculated_at=datetime.utcnow()
         )
-        return True
+        ts_db.add(new_health)
+        ts_db.commit()
+        
+        logger.info(f"Saved Health Score {health_data['health_score']} for project {project_key} ({health_data['status_text']})")
