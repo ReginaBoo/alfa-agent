@@ -21,10 +21,10 @@ def save_tokens_for_working_sites(
     Синхронная версия — для использования в эндпоинтах.
     """
     saved_tokens = []
-    
+
     if expires_at is None:
         expires_at = datetime.utcnow() + timedelta(seconds=token_data.expires_in)
-    
+
     for resource in working_sites:
         existing = db.execute(
             select(IntegrationToken).where(
@@ -33,7 +33,7 @@ def save_tokens_for_working_sites(
                 IntegrationToken.instance_id == resource.id
             )
         ).scalar_one_or_none()
-        
+
         if existing:
             existing.access_token = token_data.access_token
             existing.refresh_token = token_data.refresh_token
@@ -57,36 +57,37 @@ def save_tokens_for_working_sites(
             )
             db.add(new_token)
             saved_tokens.append(new_token)
-    
+
     db.commit()
-    
+
     for token in saved_tokens:
         db.refresh(token)
-    
+
     return saved_tokens
 
 
 class TokenService:
     """Сервис для работы с токенами — синхронная версия"""
-    
+
     def __init__(self, db: Session):
         self.db = db
 
+
     def get_valid_token(
-        self, 
-        user_id: int, 
-        provider: str, 
+        self,
+        user_id: int,
+        provider: str,
         instance_id: str
     ) -> Optional[IntegrationToken]:
         """Синхронно получает валидный токен. При необходимости обновляет."""
         token = self._fetch_token(user_id, provider, instance_id)
         if not token:
             return None
-        
+
         if token.expires_at and token.expires_at <= datetime.utcnow():
-            self._refresh_and_update(user_id)
+            self. refresh_user_tokens(user_id)
             token = self._fetch_token(user_id, provider, instance_id)
-            
+
         return token
 
     def _fetch_token(self, user_id: int, provider: str, instance_id: str) -> Optional[IntegrationToken]:
@@ -102,7 +103,7 @@ class TokenService:
             IntegrationToken.instance_id == instance_id
         )
         token = self.db.execute(stmt).scalar_one_or_none()
-        
+
         # 2. Если не нашли и это Atlassian-сервисы — пробуем провайдер "jira" как фолбэк
         if not token and provider in ("confluence", "atlassian"):
             stmt = select(IntegrationToken).where(
@@ -111,10 +112,10 @@ class TokenService:
                 IntegrationToken.instance_id == instance_id
             )
             token = self.db.execute(stmt).scalar_one_or_none()
-            
+
         return token
 
-    def _refresh_and_update(self, user_id: int) -> bool:
+    def refresh_user_tokens(self, user_id: int) -> bool:
         """Обновляет токены в БД и коммитит изменения"""
         from app.services.token_refresh_service import TokenRefreshService
         return TokenRefreshService.update_user_tokens(self.db, user_id)

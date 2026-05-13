@@ -12,6 +12,9 @@ from app.core.dependencies import get_current_user
 from app.workers.queues import sync_jira_queue
 from app.workers.tasks import sync_jira_task
 from app.services.project_sync_service import sync_projects_from_jira
+from app.jira.client import JiraClient
+from app.services.token_service import TokenService
+
 
 router = APIRouter()
 
@@ -477,3 +480,7 @@ async def sync_all_projects_async(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to queue sync: {str(e)}")
+    
+def get_jira_client(db: Session):
+    token_service = TokenService(db)
+    return JiraClient(token_service)

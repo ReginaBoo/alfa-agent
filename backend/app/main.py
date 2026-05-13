@@ -27,7 +27,6 @@ scheduler = BackgroundScheduler()
 # --- Подключение роутеров ---
 app.include_router(auth_endpoints.router, prefix="/auth", tags=["Auth"])
 app.include_router(jira_endpoints.router, prefix="/jira", tags=["Jira"])
-app.include_router(health.router, tags=["Health"])
 app.include_router(worker_test.router, prefix="/worker", tags=["Worker"])
 app.include_router(dashboard_endpoints.router, prefix="/dashboard", tags=["Dashboard"])
 app.include_router(confluence_endpoints.router, prefix="/confluence", tags=["Confluence"])
