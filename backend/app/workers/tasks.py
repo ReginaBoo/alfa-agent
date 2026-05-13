@@ -2,14 +2,19 @@
 
 import asyncio
 import logging
+import asyncio
 from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
+
 from app.db.models import IntegrationToken
 from app.confluence.client import ConfluenceClient
 from app.services.token_service import TokenService
 from app.services.confluence_sync_service import ConfluenceSyncService
+
+from app.services.jira_sync_service import JiraSyncService
+from app.services.github_sync_service import GithubSyncService
 
 logger = logging.getLogger(__name__)
 
@@ -318,3 +323,105 @@ def sync_confluence_task(user_id: int, instance_name: str, space_id: str, space_
     except Exception as e:
         logger.error(f"Confluence sync failed for space {space_id}: {e}")
         raise
+
+def sync_github_task(user_id: int, instance_id: str, repo_full_name: str) -> dict:
+    """Фоновая задача для синхронизации GitHub issues репозитория."""
+    logger.info(f"Starting GitHub sync for repo {repo_full_name}, user {user_id}")
+
+    try:
+        db = SessionLocal()
+        sync_service = GithubSyncService(db)
+        
+        # Безопасный запуск асинхронной функции
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        
+        if loop and loop.is_running():
+            # Если уже есть цикл, создаём новую задачу
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(
+                    asyncio.run,
+                    sync_service.sync_repo_issues_async(
+                        user_id=user_id,
+                        instance_id=instance_id,
+                        repo_full_name=repo_full_name
+                    )
+                )
+                result = future.result()
+        else:
+            result = asyncio.run(
+                sync_service.sync_repo_issues_async(
+                    user_id=user_id,
+                    instance_id=instance_id,
+                    repo_full_name=repo_full_name
+                )
+            )
+        
+        db.close()
+        
+        logger.info(f"GitHub sync completed for {repo_full_name}: {result}")
+        
+        return {
+            "status": "completed",
+            "repo_full_name": repo_full_name,
+            "instance_id": instance_id,
+            "details": result,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"GitHub sync failed for {repo_full_name}: {e}")
+        raise
+
+
+def sync_github_all_repos_task(user_id: int, instance_id: str) -> dict:
+    """Фоновая задача для синхронизации всех репозиториев GitHub."""
+    logger.info(f"Starting GitHub sync for all repos of {instance_id}, user {user_id}")
+    
+    try:
+        db = SessionLocal()
+        sync_service = GithubSyncService(db)
+        
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        
+        if loop and loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(
+                    asyncio.run,
+                    sync_service.sync_user_repos_issues(
+                        user_id=user_id,
+                        instance_id=instance_id
+                    )
+                )
+                result = future.result()
+        else:
+            result = asyncio.run(
+                sync_service.sync_user_repos_issues(
+                    user_id=user_id,
+                    instance_id=instance_id
+                )
+            )
+        
+        db.close()
+        
+        logger.info(f"GitHub sync completed for {instance_id}: {result}")
+        
+        return {
+            "status": "completed",
+            "instance_id": instance_id,
+            "details": result,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"GitHub sync failed for {instance_id}: {e}")
+        raise
+
+

@@ -152,23 +152,32 @@ def calculate_team_workload(
 
 
 def save_workload_metric(
-    db: Session,
+    db: Session,  # ← добавить параметр
     assignee_account_id: str,
     project_key: str,
     wi: float,
     period_weeks: int = 2
 ) -> None:
-    """
-    Сохраняет метрику WI в TimescaleDB.
-    """
     from app.db.models.metrics import MetricRaw
+    from app.services.project_service import get_project_id_by_key
     
     timescale_db = next(get_timescale_db())
     
+    # Получаем реальный project_id
+    project_id = get_project_id_by_key(db, project_key)
+    
+    # Получаем user_id
+    from app.db.models import IntegrationToken
+    token = db.query(IntegrationToken).filter(
+        IntegrationToken.provider_user_id == assignee_account_id,
+        IntegrationToken.provider == 'jira'
+    ).first()
+    user_id = token.user_id if token else 0
+    
     raw_metric = MetricRaw(
         time=datetime.utcnow(),
-        project_id=0,
-        user_id=0,
+        project_id=project_id,  # реальный ID
+        user_id=user_id,        # реальный ID
         metric_name='workload_index',
         value=wi,
         dimensions={

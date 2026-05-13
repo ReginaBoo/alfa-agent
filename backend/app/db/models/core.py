@@ -24,6 +24,9 @@ class Project(Base):
     jira_project_key = Column(String(50), nullable=True, index=True)  # Связь с Jira
     confluence_space_key = Column(String(255), nullable=True)  # Связь с Confluence
     
+    github_repo = Column(String(255), nullable=True, index=True)  # owner/repo
+    github_instance_id = Column(String(255), nullable=True)      # GitHub username/organization
+    
     # Метаданные
     url = Column(String(500), nullable=True)  # URL проекта в Jira
     avatar_url = Column(String(500), nullable=True)

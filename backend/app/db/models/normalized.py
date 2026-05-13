@@ -1,7 +1,8 @@
 # app/db/models/normalized.py
 """Схема normalized — нормализованные данные из внешних систем"""
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, DateTime, Text, Float, Boolean, Index, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float, Boolean, Index, JSON, ForeignKey
+from sqlalchemy.dialects.postgresql import ARRAY
 from app.db.base import Base
 
 from sqlalchemy.orm import relationship
@@ -16,14 +17,11 @@ class JiraIssue(Base):
     id = Column(Integer, primary_key=True)
     project_integration_id = Column(Integer, nullable=True, index=True)
     issue_key = Column(String(255), unique=True, nullable=False, index=True)
-    project_key = Column(String(255), nullable=False,
-                         index=True)  # ← добавил поле
+    project_key = Column(String(255), nullable=False, index=True)
     summary = Column(Text, nullable=False)
-    status = Column(String(100), nullable=False,
-                    index=True)  # ← добавил индекс
+    status = Column(String(100), nullable=False, index=True)
     status_category = Column(String(50), nullable=True)
-    assignee_account_id = Column(
-        String(255), nullable=True, index=True)  # ← добавил индекс
+    assignee_account_id = Column(String(255), nullable=True, index=True)
     assignee_name = Column(String(255), nullable=True)
     assignee_user_id = Column(Integer, nullable=True)
     reporter_account_id = Column(String(255), nullable=True)
@@ -35,8 +33,7 @@ class JiraIssue(Base):
     remaining_estimate = Column(Float, nullable=True)
     due_date = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False)
-    updated_at = Column(DateTime, nullable=False,
-                        index=True)  # ← добавил индекс
+    updated_at = Column(DateTime, nullable=False, index=True)
     last_synced_at = Column(DateTime, default=datetime.utcnow)
     is_deleted = Column(Boolean, default=False)
     snapshot_version = Column(Integer, default=1)
@@ -72,7 +69,7 @@ class ConfluencePage(Base):
         {"schema": "normalized"}
     )
 
-    id = Column(String(50), primary_key=True)  # page_id из Confluence
+    id = Column(String(50), primary_key=True)
     space_id = Column(String(50), nullable=False, index=True)
     space_key = Column(String(255), nullable=True)
     title = Column(Text, nullable=False)
@@ -112,7 +109,6 @@ class ConfluencePageVersion(Base):
     )
 
     id = Column(Integer, primary_key=True)
-    # ДОБАВЛЕНО: ForeignKey для связи с ConfluencePage
     page_id = Column(
         String(50),
         ForeignKey("normalized.confluence_pages.id", ondelete="CASCADE"),
@@ -126,7 +122,6 @@ class ConfluencePageVersion(Base):
     created_at = Column(DateTime, nullable=False)
     minor_edit = Column(Boolean, default=False)
 
-    # Связь со страницей (указываем foreign_keys явно)
     page = relationship(
         "ConfluencePage",
         back_populates="versions",
@@ -145,7 +140,6 @@ class ConfluenceComment(Base):
     )
 
     id = Column(String(50), primary_key=True)
-    # ДОБАВЛЕНО: ForeignKey для связи с ConfluencePage
     page_id = Column(
         String(50),
         ForeignKey("normalized.confluence_pages.id", ondelete="CASCADE"),
@@ -161,9 +155,87 @@ class ConfluenceComment(Base):
     parent_id = Column(String(50), nullable=True)
     position = Column(String(20), nullable=True)
 
-    # Связь со страницей
     page = relationship(
         "ConfluencePage",
         back_populates="comments",
         foreign_keys=[page_id]
     )
+
+
+class GithubIssue(Base):
+    """Нормализованные данные из GitHub Issues"""
+    __tablename__ = "github_issues"
+    __table_args__ = (
+        Index("idx_github_issues_repo", "repo_full_name"),
+        Index("idx_github_issues_state", "state"),
+        Index("idx_github_issues_assignee", "assignee_login"),
+        Index("idx_github_issues_updated", "updated_at"),
+        {"schema": "normalized"}
+    )
+    
+    id = Column(Integer, primary_key=True)
+    project_integration_id = Column(Integer, nullable=True, index=True)
+    
+    issue_id = Column(Integer, nullable=False, index=True)
+    issue_number = Column(Integer, nullable=False)
+    repo_full_name = Column(String(255), nullable=False, index=True)
+    repo_id = Column(Integer, nullable=True)
+    
+    title = Column(Text, nullable=False)
+    body = Column(Text, nullable=True)
+    state = Column(String(50), nullable=False, index=True)
+    locked = Column(Boolean, default=False)
+    
+    author_login = Column(String(255), nullable=True, index=True)
+    author_id = Column(Integer, nullable=True)
+    assignee_login = Column(String(255), nullable=True, index=True)
+    assignee_id = Column(Integer, nullable=True)
+    
+    labels = Column(JSON, nullable=True)
+    milestone_id = Column(Integer, nullable=True)
+    milestone_title = Column(String(255), nullable=True)
+    
+    project_id = Column(Integer, nullable=True)
+    
+    comments_count = Column(Integer, default=0)
+    
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False, index=True)
+    closed_at = Column(DateTime, nullable=True)
+    
+    last_synced_at = Column(DateTime, default=datetime.utcnow)
+    is_deleted = Column(Boolean, default=False)
+    snapshot_version = Column(Integer, default=1)
+    
+    html_url = Column(String(500), nullable=True)
+
+
+class GithubIssueEvent(Base):
+    """История событий GitHub Issue"""
+    __tablename__ = "github_issue_events"
+    __table_args__ = (
+        Index("idx_github_events_issue", "issue_id"),
+        Index("idx_github_events_event_type", "event_type"),
+        Index("idx_github_events_created_at", "created_at"),
+        {"schema": "normalized"}
+    )
+    
+    id = Column(Integer, primary_key=True)
+    issue_id = Column(Integer, nullable=False, index=True)
+    repo_full_name = Column(String(255), nullable=False)
+    
+    event_type = Column(String(100), nullable=False)
+    external_event_id = Column(Integer, nullable=False, index=True)
+    
+    actor_login = Column(String(255), nullable=True)
+    actor_id = Column(Integer, nullable=True)
+    
+    detail_login = Column(String(255), nullable=True)
+    detail_id = Column(Integer, nullable=True)
+    
+    commit_id = Column(String(40), nullable=True)
+    commit_url = Column(String(500), nullable=True)
+    state = Column(String(50), nullable=True)
+    
+    created_at = Column(DateTime, nullable=False, index=True)
+    synced_at = Column(DateTime, default=datetime.utcnow)

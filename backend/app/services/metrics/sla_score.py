@@ -148,12 +148,12 @@ def save_sla_metrics(
     from app.db.timescale import timescale_engine
     from app.db.models.metrics import ProjectMetric
     from sqlalchemy.orm import Session as TimescaleSession
+    from app.services.project_service import get_project_id_by_key
     
     period_end = datetime.utcnow()
     period_start = period_end - timedelta(days=period_days)
     
-    # TODO: найти project_id по project_key
-    project_id = 0
+    project_id = get_project_id_by_key(db, project_key)  # 
     
     with TimescaleSession(timescale_engine) as ts_db:
         existing = ts_db.query(ProjectMetric).filter(
@@ -168,7 +168,7 @@ def save_sla_metrics(
             existing.calculated_at = datetime.utcnow()
         else:
             new_metric = ProjectMetric(
-                project_id=project_id,
+                project_id=project_id,  # реальный ID
                 period_start=period_start,
                 period_end=period_end,
                 sla_score=sla_result['sla_score'],

@@ -2,6 +2,7 @@
 from datetime import datetime
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session as DbSession
+from sqlalchemy import select
 
 from app.db.session import get_db
 from app.db.models import User, IntegrationToken, Session as SessionModel
@@ -9,21 +10,24 @@ from app.services.token_refresh_service import TokenRefreshService
 
 
 def get_current_user(request: Request, db: DbSession = Depends(get_db)) -> User:
-    """
-    Получает текущего пользователя по сессии из cookie.
-    Session token передаётся в куках: session_token=...
-    """
     session_token = request.cookies.get("session_token")
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated: no session token")
     
-    session = db.query(SessionModel).filter(
+    # Явно загружаем session с user через joinedload
+    from sqlalchemy.orm import joinedload
+    session = db.query(SessionModel).options(
+        joinedload(SessionModel.user)
+    ).filter(
         SessionModel.session_token == session_token,
         SessionModel.expires_at > datetime.utcnow()
     ).first()
     
     if not session:
         raise HTTPException(status_code=401, detail="Session expired or invalid")
+
+    if not session.user:
+        raise HTTPException(status_code=401, detail="User not found for session")
 
     return session.user
 
@@ -89,3 +93,6 @@ def get_valid_token_by_instance_id(
         db.refresh(token)
     
     return token
+
+
+

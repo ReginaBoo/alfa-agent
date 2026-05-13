@@ -173,20 +173,18 @@ def save_health_score(
     health_data: Dict[str, Any],
     period_days: int = 30
 ) -> None:
-    """
-    Сохраняет Health Score в project_health (TimescaleDB)
-    """
+    from app.services.project_service import get_project_id_by_key
     from sqlalchemy.orm import Session as TimescaleSession
     
     period_end = datetime.utcnow()
     period_start = period_end - timedelta(days=period_days)
     
-    # TODO: найти project_id по project_key
-    project_id = 0
+    # Получаем реальный project_id
+    project_id = get_project_id_by_key(db, project_key)  
     
     with TimescaleSession(timescale_engine) as ts_db:
         new_health = ProjectHealth(
-            project_id=project_id,
+            project_id=project_id,  # реальный ID
             period_start=period_start,
             period_end=period_end,
             health_score=health_data['health_score'],

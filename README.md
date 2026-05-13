@@ -26,6 +26,13 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 - Управление сессиями (создание, проверка, удаление)
 - Поддержка Jira и Confluence API
 
+### Авторизация через GitHub OAuth 2.0
+- OAuth flow с получением access_token
+- Получение информации о пользователе (email, имя, аватар)
+- Получение списка репозиториев пользователя
+- Поддержка Issues API
+- Автообновление токенов (если доступно)
+
 ### Хранение данных
 - Пользователи (`users`)
 - Сессии пользователей (`sessions`)
@@ -33,6 +40,8 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 - Сырые события из API (`raw_events`)
 - Нормализованные задачи Jira (`jira_issues`)
 - Нормализованные страницы Confluence (`confluence_pages`)
+- Нормализованные Issues GitHub (`github_issues`)
+- История событий GitHub Issues (`github_issue_events`)
 
 ### Jira API клиент
 - Типизированные Pydantic-модели (`JiraIssue`, `JiraProject`, `JiraUser`)
@@ -50,6 +59,16 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 - История версий и комментарии
 - Синхронизация страниц в БД
 
+### GitHub API клиент
+- Типизированные Pydantic-модели (`GitHubIssue`, `GitHubRepo`, `GitHubUser`)
+- Получение списка репозиториев
+- Получение issues из репозитория
+- Создание и обновление issues
+- Добавление комментариев
+- Получение событий (events/timeline) - аналог changelog
+- Автообновление токенов при истечении (401 → refresh)
+- Поддержка приватных репозиториев
+
 ### Синхронизация данных
 - Выгрузка задач из Jira в БД (синхронно и асинхронно)
 - Выгрузка страниц из Confluence в БД (синхронно и асинхронно)
@@ -57,7 +76,7 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 - Нормализация и сохранение в соответствующие таблицы
 
 ### Фоновые задачи (Очереди Redis + Worker)
-- **Три очереди:** `sync_jira`, `sync_confluence`, `calculate_metrics`
+- **Четыре очереди:** `sync_jira`, `sync_confluence`, `sync_github`, `calculate_metrics`
 - **Worker** в отдельном контейнере для асинхронной обработки
 - **Мгновенный ответ API** — задача уходит в очередь, пользователь не ждёт
 - **Отслеживание статуса** по `job_id`
@@ -118,6 +137,26 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 | GET | `/jira/issues/{issue_key}/changelog` | История изменений задачи |
 | POST | `/jira/sync/{project_key}` | Синхронизация задач в БД (синхронно) |
 | POST | `/jira/sync-async/{project_key}` | Синхронизация задач в БД (асинхронно) |
+
+### GitHub
+| Метод | Endpoint | Описание |
+|-------|----------|----------|
+| GET | `/github/connect` | Получить URL для OAuth авторизации |
+| GET | `/github/callback` | Callback после OAuth авторизации |
+| GET | `/github/sites` | Список подключённых GitHub инстансов |
+| GET | `/github/me` | Информация о текущем пользователе GitHub |
+| GET | `/github/repos` | Список репозиториев пользователя |
+| GET | `/github/issues` | Issues репозитория (с пагинацией) |
+| GET | `/github/issues/{issue_number}` | Конкретный issue |
+| POST | `/github/issues` | Создать новый issue |
+| PATCH | `/github/issues/{issue_number}` | Обновить issue |
+| GET | `/github/issues/{issue_number}/comments` | Комментарии к issue |
+| POST | `/github/issues/{issue_number}/comments` | Добавить комментарий |
+| GET | `/github/issues/{issue_number}/events` | События (events) для issue |
+| GET | `/github/issues/{issue_number}/timeline` | Детальная временная шкала issue |
+| POST | `/github/sync/{repo_full_name}` | Синхронизация issues в БД (синхронно) |
+| POST | `/github/sync-async/{repo_full_name}` | Синхронизация issues в БД (асинхронно) |
+| POST | `/github/sync-all-async` | Синхронизация issues из всех репозиториев (асинхронно) |
 
 ### Confluence
 | Метод | Endpoint | Описание |
@@ -280,6 +319,34 @@ Backend-сервис для интеграции с Atlassian (Jira/Confluence) 
 | `updated_at` | Дата обновления |
 | `content` | HTML содержимое |
 
+#### Таблица `github_issues`
+| Поле | Описание |
+|------|----------|
+| `id` | Уникальный ID |
+| `issue_id` | GitHub issue ID |
+| `issue_number` | Номер issue в репозитории |
+| `repo_full_name` | Полное имя репозитория (owner/repo) |
+| `title` | Заголовок |
+| `body` | Описание |
+| `state` | Статус (open, closed) |
+| `author_login` | Логин автора |
+| `assignee_login` | Логин назначенного |
+| `labels` | Метки (через запятую) |
+| `comments_count` | Количество комментариев |
+| `created_at` | Дата создания |
+| `updated_at` | Дата обновления |
+| `closed_at` | Дата закрытия |
+
+#### Таблица `github_issue_events`
+| Поле | Описание |
+|------|----------|
+| `id` | Уникальный ID |
+| `issue_id` | GitHub issue ID |
+| `event_type` | Тип события (assigned, labeled, closed и т.д.) |
+| `actor_login` | Логин пользователя, совершившего действие |
+| `detail_login` | Деталь события (например, label name) |
+| `created_at` | Дата события |
+
 ## Схема `public` (TimescaleDB) — метрики
 
 #### Таблица `user_metrics`
@@ -361,6 +428,8 @@ backend/
 │ │ ├── auth_endpoints.py # /auth/*
 │ │ ├── jira_endpoints.py # /jira/*
 │ │ ├── confluence_endpoints.py # /confluence/*
+│ │ ├── github_endpoints.py # /github/* (НОВОЕ!)
+│ │ ├── github_auth_endpoints.py # /github/callback (НОВОЕ!)
 │ │ ├── dashboard_endpoints.py # /dashboard/*
 │ │ ├── docs_metrics_endpoints.py # /docs-metrics/*
 │ │ ├── health.py # /health
@@ -374,6 +443,11 @@ backend/
 │ │ ├── models.py # Pydantic-модели
 │ │ └── client.py # ConfluenceClient с автопродлением токенов
 │ │
+│ ├── github/ # GitHub интеграция (НОВОЕ!)
+│ │ ├── oauth.py # OAuth flow
+│ │ ├── models.py # Pydantic-модели
+│ │ └── client.py # GitHubClient с автопродлением токенов
+│ │
 │ ├── services/ # Бизнес-логика
 │ │ ├── atlassian_service.py # get_user_info, get_working_sites
 │ │ ├── token_service.py # TokenService, save_tokens
@@ -381,6 +455,7 @@ backend/
 │ │ ├── user_service.py # get_or_create_user
 │ │ ├── jira_sync_service.py # синхронизация задач Jira в БД
 │ │ ├── confluence_sync_service.py # синхронизация страниц Confluence в БД
+│ │ ├── github_sync_service.py # синхронизация Issues GitHub в БД (НОВОЕ!)
 │ │ └── metrics/ # Метрики
 │ │ ├── workload_index.py # расчёт Workload Index
 │ │ ├── sla_score.py # расчёт SLA Score

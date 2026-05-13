@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     # Добавлен write:jira-work для редактирования задач
     SCOPES: str = "read:jira-user read:jira-work write:jira-work read:confluence-user read:confluence-space.summary read:confluence-props read:confluence-content.summary search:confluence read:confluence-content.all read:space:confluence read:page:confluence offline_access read:comment:confluence"
 
+    # GitHub
+    GITHUB_CLIENT_ID: Optional[str] = None
+    GITHUB_CLIENT_SECRET: Optional[str] = None
+    GITHUB_REDIRECT_URI: str = "http://localhost:8000/github/callback"
+    GITHUB_SCOPES: str = "repo user:email read:org"
+
     # Security
     SECRET_KEY: str = "your-secret-key-change-in-production"
     
