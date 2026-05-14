@@ -41,9 +41,9 @@ const insights: Insight[] = [
   },
 ];
 
-export const AIInsights = () => {
+export const AIInsights = ({ variant = 'compact' }) => {
   return (
-    <div className={s.insightsContainer}>
+    <div className={`${s.insightsContainer} ${s[variant]}`}>
       {insights.map((item) => (
         <div key={item.id} className={`${s.insightCard} ${s[item.type]}`}>
           <div className={s.contentRow}>

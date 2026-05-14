@@ -1,8 +1,9 @@
-import { Row, Col } from 'antd';
-import { ActivityChart } from '../Charts/ActivityChart';
-import { LoadChart } from '../Charts/LoadChart';
-import { ProjectStats } from '../Charts/ProjectStats/ProjectStats';
-import { AIInsights } from '../Charts/AIInsights/AIInsights';
+import { Row, Col, Button, Select, Space } from 'antd';
+import { DownloadOutlined, DownOutlined } from '@ant-design/icons';
+import { ActivityChart } from '../../Charts/ActivityChart';
+import { LoadChart } from '../../Charts/LoadChart';
+import { ProjectStats } from '../../Charts/ProjectStats/ProjectStats';
+import { AIInsights } from '../../Charts/AIInsights/AIInsights';
 import s from './Dashboard.module.css';
 
 
@@ -50,19 +51,54 @@ const mockBackendData = [
 export const Dashboard = () => {
   return (
     <div className={s.dashboardWrapper}>
+      <Row justify="end" style={{ marginBottom: 20 }}>
+        <Col>
+          <Space size={16}>
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              size="large"
+              className={s.downloadBtn}
+            >
+              Скачать отчет
+            </Button>
+            <Select
+              className={s.projectSelect}
+              defaultValue="Весь период"
+              suffixIcon={<DownOutlined />}
+              options={[{
+                value: 'Весь период',
+                label: (
+                  <Space>
+                    <span>Весь период</span>
+                  </Space>
+                )
+              },
+              {
+                value: 'Последняя неделя',
+                label: (
+                  <Space>
+                    <span>Последняя неделя</span>
+                  </Space>
+                )
+              },]}
+            />
+          </Space>
+        </Col>
+      </Row>
+
       <Row gutter={[24, 24]} >
 
         <Col xs={24} lg={12}>
           <Row gutter={[16, 16]}>
-            {/* Добавь span={24} здесь */}
+
             <Col span={24}>
               <div className={s.aiSection}>
                 <h1 className={s.blueTitle}>AI-ВЫВОДЫ</h1>
-                <AIInsights />
+                <AIInsights variant="detailed" />
               </div>
             </Col>
 
-            {/* И здесь добавь span={24} */}
             <Col span={24}>
               <div className={s.loadSection} style={{ marginBottom: '24px' }}>
                 <h1 className={s.blueTitle}>ЗАГРУЖЕННОСТЬ ПРОЕКТОВ</h1>
@@ -72,15 +108,12 @@ export const Dashboard = () => {
           </Row>
         </Col>
 
-        {/* Правая колонка */}
         <Col xs={24} lg={12}>
           <Row gutter={[16, 16]}>
-            {/* Сетка проектов */}
             <Col span={24}>
               <ProjectStats />
             </Col>
 
-            {/* График */}
             <Col span={24}>
               <div className={s.chartSection}>
                 <h1 className={s.blueTitle}>АКТИВНОСТЬ ПО ПРОЕКТАМ</h1>

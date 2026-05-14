@@ -2,6 +2,18 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding-right: 20px;
+  overflow-y: auto;
+}
+
+
+.insightsContainer.detailed {
+  max-height: 380px;
+}
+
+.insightsContainer.compact {
+  max-height: 200px;
+  gap: 8px;
 }
 
 .insightCard {
@@ -11,6 +23,17 @@
   background: #fff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   transition: all 0.3s ease;
+}
+
+.insightsContainer::-webkit-scrollbar {
+  width: 4px;
+  background: #E9E9E9;
+  padding-left: 10px;
+}
+
+.insightsContainer::-webkit-scrollbar-thumb {
+  background: #459AFF;
+  border-radius: 10px;
 }
 
 /* Типы карточек */
@@ -26,7 +49,6 @@
 
 .success {
   background: #f0f5ff;
-  /* Легкий синий/белый фон как на макете */
   border-left: 6px solid #adc6ff;
   border: 1px solid #f0f0f0;
 }
