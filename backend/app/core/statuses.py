@@ -4,11 +4,12 @@
 # Статусы, считающиеся "открытыми" (в работе)
 OPEN_STATUSES = [
     'In Progress',
-    'To Do', 
+    'To Do',
     'Open',
     'Selected for Development',
     'В работе',
-    'К выполнению'
+    'К выполнению',
+    'Backlog'
 ]
 
 # Статус "закрыто" (выполнено)
@@ -22,7 +23,9 @@ CLOSED_STATUS = [
 # Статус "в процессе" (для штрафа за многозадачность)
 IN_PROGRESS_STATUSES = [
     'In Progress',
-    'В работе'
+    'В работе',
+    'Testing',
+    'Testing / QA'
 ]
 
 def is_open_status(status: str) -> bool:
