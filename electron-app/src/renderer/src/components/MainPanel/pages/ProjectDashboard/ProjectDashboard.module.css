@@ -8,6 +8,7 @@
   border-radius: 8px;
   background-color: #ffffff;
   height: 280px;
+  width: 100%;
 }
 
 .blueTitle {
@@ -28,6 +29,7 @@
   display: flex;
   gap: 20px;
   flex-direction: column;
+  width: 100%;
 }
 
 .avgTime {
@@ -74,5 +76,17 @@
   justify-content: center;
 
   text-align: center;
+
+}
+
+.workloadStats {
+  width: 100%;
+}
+
+.focusStats {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  width: 100%;
 
 }

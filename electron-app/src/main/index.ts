@@ -5,7 +5,7 @@ import iconPath from '../../resources/icon.png?asset'
 
 let tray: Tray | null = null
 let mainWindow: BrowserWindow | null = null
-let URL = 'http://localhost:5173/'
+let URL = 'http://localhost:5173/dashboard'
 
 declare global {
   namespace Electron {

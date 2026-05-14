@@ -10,7 +10,7 @@ import {
   AppstoreOutlined,
 } from '@ant-design/icons';
 
-let URL = 'http://localhost:5173/'
+let URL = 'http://localhost:5173/dashboard'
 interface HeaderProps {
   onTabChange: (key: string) => void;
 }

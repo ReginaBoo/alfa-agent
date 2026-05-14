@@ -5,18 +5,30 @@ import { isElectron } from './utils'
 import { MainPanel } from './components/MainPanel/MainPanel'
 import { ProjectDashboard } from './components/MainPanel/pages/ProjectDashboard/ProjectDashboard';
 import { Dashboard } from './components/MainPanel/pages/Dashboard/Dashboard';
-
+import { LoginPage } from './components/LoginPage/LoginPage';
 
 function App() {
   return (
     <div>
-      {isElectron ? <MiniPanel /> : <BrowserRouter> <MainPanel>
+      {isElectron ? <MiniPanel /> : <BrowserRouter>
         <Routes>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/project/:projectId" element={<ProjectDashboard />} />
-          <Route path="*" element={<Dashboard />} />
+          {/* 1. Страница логина без MainPanel */}
+          <Route path="/login" element={<LoginPage />} />
+
+          {/* 2. Все остальные страницы оборачиваем в MainPanel */}
+          <Route
+            path="/*"
+            element={
+              <MainPanel>
+                <Routes>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/project/:projectId" element={<ProjectDashboard />} />
+                </Routes>
+              </MainPanel>
+            }
+          />
         </Routes>
-      </MainPanel></BrowserRouter>}
+      </BrowserRouter>}
     </div>
   )
 }

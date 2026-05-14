@@ -4,6 +4,8 @@ import s from './ProjectDashboard.module.css';
 import { AIInsights } from '../../Charts/AIInsights/AIInsights';
 import { CycleTimeChart } from '../../Charts/CycleTimeChart/CycleTimeChart';
 import { TasksGanttChart } from '../../Charts/TasksGanttChart/TasksGanttChart';
+import { TeamWorkloadList } from '../../Charts/TeamWorkloadList/TeamWorkloadList';
+import { TeamFocusChart } from '../../Charts/TeamFocusChart/TeamFocusChart';
 import { DownloadOutlined, DownOutlined } from '@ant-design/icons';
 export const ProjectDashboard = () => {
 
@@ -58,7 +60,7 @@ export const ProjectDashboard = () => {
         </Col>
       </Row>
 
-      <Row gutter={[20, 20]} style={{ marginBottom: 20 }}>
+      <Row gutter={[20, 20]} style={{ marginBottom: 10 }}>
         <Col span={8}>
           <div className={s.aiSection}>
             <h1 className={s.blueTitle}>AI-ВЫВОДЫ</h1>
@@ -76,17 +78,20 @@ export const ProjectDashboard = () => {
         </Col>
       </Row>
 
-      {/* Нижний ряд: Гант и правая колонка со статистикой */}
       <Row gutter={[20, 20]}>
         <Col span={18}>
           <TasksGanttChart start='2026-03-01' end='2026-07-31' />
         </Col>
-        {/* <Col span={6}>
-          <div className={s.sideStats}>
-            <TeamWorkloadList />
-            <TeamFocusChart />
-          </div>
-        </Col> */}
+        <Col span={6}>
+          <Row gutter={[16, 16]}>
+            <div className={s.workloadStats}>
+              <TeamWorkloadList />
+            </div >
+            <div className={s.focusStats}>
+              <TeamFocusChart />
+            </div>
+          </Row >
+        </Col>
       </Row>
     </div>
   );
