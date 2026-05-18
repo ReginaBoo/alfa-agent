@@ -4,3 +4,10 @@ __pycache__/
 .venv
 alembic/versions/*.pyc
 backend/test.db
+
+# Test data files
+backend/scripts/.test_*.json
+backend/scripts/.realistic_test_data.json
+backend/scripts/.cookies.json
+backend/scripts/.validation_report.json
+backend/scripts/generated_workflow_config.py

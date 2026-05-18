@@ -1,7 +1,7 @@
 # app/endpoints/jira_endpoints.py
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel
@@ -11,7 +11,8 @@ from app.db.models import IntegrationToken
 from app.core.dependencies import get_current_user
 from app.workers.queues import sync_jira_queue
 from app.workers.tasks import sync_jira_task
-from app.services.project_sync_service import sync_projects_from_jira
+from app.services.project_sync_service import sync_projects_from_jira, refresh_all_project_statuses
+from app.services.jira_sync_service import JiraSyncService
 from app.jira.client import JiraClient
 from app.services.token_service import TokenService
 
@@ -33,6 +34,10 @@ class CreateIssueRequest(BaseModel):
 
 class TransitionRequest(BaseModel):
     transition_id: str
+
+
+class SyncProjectsRequest(BaseModel):
+    sync_statuses: bool = True
 
 
 # ================= HELPERS =================
@@ -104,6 +109,17 @@ async def _make_jira_request(
         raise HTTPException(401, "Token refresh failed")
 
 
+def get_jira_client(db: Session, user_id: int, instance_name: str) -> JiraClient:
+    """Возвращает JiraClient для работы с API"""
+    token = get_token(instance_name, db, user_id)
+    from app.services.token_refresh_service import TokenRefreshService
+    return JiraClient(
+        access_token=token.access_token,
+        refresh_token=token.refresh_token,
+        token_service=TokenRefreshService(db, user_id)
+    )
+
+
 # ================= SITES =================
 
 @router.get("/sites")
@@ -137,6 +153,7 @@ async def get_projects(
     instance_name: str = Query(...),
     search: Optional[str] = Query(None, description="Поиск по имени проекта"),
     sync_to_db: bool = Query(True, description="Синхронизировать проекты с БД"),
+    sync_statuses: bool = Query(True, description="Синхронизировать статусы проектов"),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -150,7 +167,8 @@ async def get_projects(
                 user_id=current_user.id,
                 instance_name=instance_name,
                 token_instance_id=token.instance_id,
-                token_access_token=token.access_token
+                token_access_token=token.access_token,
+                sync_statuses=sync_statuses  # ← НОВЫЙ ПАРАМЕТР
             )
         else:
             sync_result = None
@@ -185,6 +203,73 @@ async def get_projects(
         return result
     except httpx.HTTPStatusError as e:
         raise HTTPException(502, f"Jira API error: {str(e)}")
+
+
+@router.post("/projects/sync")
+async def sync_projects_endpoint(
+    instance_name: str = Query(...),
+    sync_statuses: bool = Query(True, description="Синхронизировать статусы проектов"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Принудительная синхронизация проектов из Jira в БД.
+    """
+    try:
+        result = sync_projects_from_jira(
+            db=db,
+            user_id=current_user.id,
+            instance_name=instance_name,
+            sync_statuses=sync_statuses
+        )
+        return {
+            "success": True,
+            "message": f"Synced {result['total']} projects",
+            "details": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+
+@router.post("/projects/refresh-statuses")
+async def refresh_projects_statuses(
+    instance_name: str = Query(...),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Принудительно обновляет статусы для всех проектов пользователя.
+    """
+    try:
+        result = refresh_all_project_statuses(
+            db=db,
+            user_id=current_user.id,
+            instance_name=instance_name
+        )
+        return {
+            "success": True,
+            "message": f"Refreshed {result['statuses_updated']} statuses for {result['projects_processed']} projects",
+            "details": result
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Refresh failed: {str(e)}")
+
+
+@router.get("/projects/with-statuses")
+async def get_projects_with_statuses(
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает проекты пользователя с их статусами из БД.
+    """
+    from app.services.project_sync_service import get_user_projects_with_metrics
+    
+    projects = get_user_projects_with_metrics(db, current_user.id)
+    return {
+        "success": True,
+        "projects": projects
+    }
 
 
 # ================= ISSUES SEARCH =================
@@ -383,19 +468,98 @@ async def get_issue_changelog(
         raise HTTPException(502, f"Jira API error: {str(e)}")
 
 
+# ================= SYNC PROJECT STATUSES =================
+
+@router.post("/sync-statuses/{project_key}")
+async def sync_project_statuses_endpoint(
+    project_key: str,
+    instance_name: str = Query(...),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Синхронизирует статусы конкретного проекта.
+    """
+    from app.services.status_mapping_service import StatusMappingService
+    import asyncio
+    
+    try:
+        token = get_token(instance_name, db, current_user.id)
+        from app.jira.client import JiraClient
+        
+        jira_client = JiraClient(token.access_token, token.refresh_token)
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            mappings = loop.run_until_complete(
+                StatusMappingService.sync_project_statuses(
+                    db=db,
+                    project_key=project_key,
+                    jira_client=jira_client,
+                    synced_by_account_id=token.provider_user_id
+                )
+            )
+        finally:
+            loop.close()
+        
+        return {
+            "success": True,
+            "message": f"Synced {len(mappings)} statuses for project {project_key}",
+            "statuses": [
+                {
+                    "name": m.status_name,
+                    "is_open": m.is_open,
+                    "is_in_progress": m.is_in_progress,
+                    "is_closed": m.is_closed
+                }
+                for m in mappings
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
+
+@router.get("/project-statuses/{project_key}")
+async def get_project_statuses_endpoint(
+    project_key: str,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает статусы проекта из БД.
+    """
+    sync_service = JiraSyncService(db)
+    statuses = sync_service.get_project_statuses(project_key)
+    
+    return {
+        "success": True,
+        "project_key": project_key,
+        "statuses": statuses
+    }
+
+
 # ================= SYNC ISSUES TO DB =================
 
 @router.post("/sync/{project_key}")
 def sync_issues(
     project_key: str,
     instance_name: str = Query(...),
+    sync_statuses_first: bool = Query(True, description="Сначала синхронизировать статусы"),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Принудительная синхронизация задач проекта в БД"""
-    from app.services.jira_sync_service import JiraSyncService
+    """
+    Принудительная синхронизация задач проекта в БД.
+    """
     try:
         sync_service = JiraSyncService(db)
+        
+        # Если нужно, сначала синхронизируем статусы
+        if sync_statuses_first:
+            token = get_token(instance_name, db, current_user.id)
+            sync_service._sync_project_statuses_if_needed(project_key, token)
+        
         result = sync_service.sync_project_issues(
             user_id=current_user.id,
             instance_name=instance_name,
@@ -407,14 +571,14 @@ def sync_issues(
             "details": result
         }
     except Exception as e:
-        raise HTTPException(500, f"Sync failed: {str(e)}")
-
+        raise HTTPException(500, detail=f"Sync failed: {str(e)}")
 
 
 @router.post("/sync-async/{project_key}")
 async def sync_issues_async(
-    project_key: str = None,  # ← сделал опциональным
+    project_key: Optional[str] = None,
     instance_name: str = Query(...),
+    sync_statuses_first: bool = Query(True, description="Сначала синхронизировать статусы"),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -428,13 +592,13 @@ async def sync_issues_async(
         # Добавляем задачу в очередь
         job = sync_jira_queue.enqueue(
             sync_jira_task,
-            args=(current_user.id, instance_name, project_key),
-            job_timeout="600s",  # Увеличил до 10 минут (на случай многих проектов)
+            args=(current_user.id, instance_name, project_key, sync_statuses_first),
+            job_timeout="900s",  # 15 минут
             result_ttl=3600,
             failure_ttl=3600
         )
         
-        message = f"Sync for all projects queued" if not project_key else f"Sync for project {project_key} queued"
+        message = "Sync for all projects queued" if not project_key else f"Sync for project {project_key} queued"
         
         return {
             "success": True,
@@ -443,17 +607,18 @@ async def sync_issues_async(
                 "job_id": job.id,
                 "status": "queued",
                 "project_key": project_key,
-                "instance_name": instance_name
+                "instance_name": instance_name,
+                "sync_statuses_first": sync_statuses_first
             }
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to queue sync: {str(e)}")
 
 
-# Добавь НОВЫЙ эндпоинт для синхронизации ВСЕХ проектов
 @router.post("/sync-all-async")
 async def sync_all_projects_async(
     instance_name: str = Query(...),
+    sync_statuses_first: bool = Query(True, description="Сначала синхронизировать статусы"),
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -463,8 +628,8 @@ async def sync_all_projects_async(
     try:
         job = sync_jira_queue.enqueue(
             sync_jira_task,
-            args=(current_user.id, instance_name, None),  # None = все проекты
-            job_timeout="900s",  # 15 минут на все проекты
+            args=(current_user.id, instance_name, None, sync_statuses_first),
+            job_timeout="900s",
             result_ttl=3600,
             failure_ttl=3600
         )
@@ -475,12 +640,9 @@ async def sync_all_projects_async(
             "data": {
                 "job_id": job.id,
                 "status": "queued",
-                "instance_name": instance_name
+                "instance_name": instance_name,
+                "sync_statuses_first": sync_statuses_first
             }
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to queue sync: {str(e)}")
-    
-def get_jira_client(db: Session):
-    token_service = TokenService(db)
-    return JiraClient(token_service)

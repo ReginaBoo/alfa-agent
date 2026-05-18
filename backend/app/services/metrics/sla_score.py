@@ -1,18 +1,47 @@
-# app/services/metrics/sla_score.py
 """
 Расчёт SLA Score и Deadline Stability
 """
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from app.db.models import JiraIssue
-from app.core.statuses import CLOSED_STATUS
+from app.db.models.normalized import IssueChangelog, ProjectStatusMapping
 
 logger = logging.getLogger(__name__)
+
+
+def _get_closed_statuses_for_project(db: Session, project_key: str) -> list:
+    """Получает закрытые статусы для проекта из БД"""
+    mappings = db.query(ProjectStatusMapping).filter(
+        ProjectStatusMapping.project_key == project_key,
+        ProjectStatusMapping.is_closed == True
+    ).all()
+    
+    if mappings:
+        return [m.status_name for m in mappings]
+    
+    logger.warning(f"No closed status mappings for {project_key}, using defaults")
+    return ['Done', 'Closed', 'Resolved', 'Готово', 'Выполнено', 'Закрыто']
+
+
+def _get_closed_at_from_changelog(db: Session, issue_key: str, closed_statuses: list) -> Optional[datetime]:
+    """
+    Определяет дату закрытия задачи по changelog.
+    Ищет первый переход в закрытый статус.
+    """
+    closing_event = db.query(IssueChangelog).filter(
+        IssueChangelog.issue_key == issue_key,
+        IssueChangelog.field_name == 'status',
+        IssueChangelog.to_value.in_(closed_statuses)
+    ).order_by(IssueChangelog.changed_at.asc()).first()
+    
+    if closing_event:
+        return closing_event.changed_at
+    
+    return None
 
 
 def calculate_sla_score(
@@ -31,49 +60,77 @@ def calculate_sla_score(
         period_days: Период в днях (по умолчанию 30)
     
     Returns:
-        Dict: {sla_score, total_closed, on_time, late}
+        Dict: {sla_score, total_closed, on_time, late, avg_late_days}
     """
     
     cutoff_date = datetime.utcnow() - timedelta(days=period_days)
     
-    # Базовый запрос
+    # Получаем закрытые статусы для этого проекта
+    closed_statuses = _get_closed_statuses_for_project(db, project_key)
+    
+    # Базовый запрос — задачи с дедлайном
     query = db.query(JiraIssue).filter(
         JiraIssue.project_key == project_key,
-        JiraIssue.due_date.isnot(None),
-        JiraIssue.status.in_(CLOSED_STATUS),
-        JiraIssue.updated_at >= cutoff_date
+        JiraIssue.due_date.isnot(None)
     )
     
     if assignee_account_id:
         query = query.filter(JiraIssue.assignee_account_id == assignee_account_id)
     
-    closed_issues = query.all()
+    issues_with_due_date = query.all()
     
-    total = len(closed_issues)
+    # Анализируем каждую задачу
+    total = 0
+    on_time = 0
+    late = 0
+    late_days_sum = 0
+    
+    for issue in issues_with_due_date:
+        # Определяем дату закрытия (используем closed_at, если есть)
+        if issue.closed_at:
+            closed_date = issue.closed_at
+        else:
+            # Fallback: ищем в changelog
+            closed_date = _get_closed_at_from_changelog(db, issue.issue_key, closed_statuses)
+        
+        # Если задача ещё не закрыта — пропускаем
+        if not closed_date:
+            continue
+        
+        # Проверяем, попадает ли закрытие в период
+        if closed_date < cutoff_date:
+            continue
+        
+        total += 1
+        
+        # Сравниваем дату закрытия с дедлайном
+        if closed_date <= issue.due_date:
+            on_time += 1
+        else:
+            late += 1
+            late_days_sum += (closed_date - issue.due_date).days
+    
     if total == 0:
         return {
             'sla_score': 100.0,
             'total_closed': 0,
             'on_time': 0,
             'late': 0,
-            'message': 'Нет закрытых задач с дедлайнами'
+            'avg_late_days': 0,
+            'message': 'Нет закрытых задач с дедлайнами за период'
         }
     
-    on_time = 0
-    late = 0
-    for issue in closed_issues:
-        if issue.updated_at <= issue.due_date:
-            on_time += 1
-        else:
-            late += 1
-    
     sla_score = round((on_time / total) * 100, 2)
+    avg_late_days = round(late_days_sum / late, 1) if late > 0 else 0
+    
+    logger.info(f"SLA for {project_key}: {sla_score}% ({on_time}/{total}), avg late={avg_late_days}d")
     
     return {
         'sla_score': sla_score,
         'total_closed': total,
         'on_time': on_time,
-        'late': late
+        'late': late,
+        'avg_late_days': avg_late_days
     }
 
 
@@ -86,8 +143,7 @@ def calculate_deadline_stability(
     """
     Рассчитывает Deadline Stability — процент задач, у которых дедлайн не менялся.
     
-    Примечание: Для полного расчёта нужен changelog задач.
-    Пока реализуем упрощённую версию на основе наличия due_date.
+    Анализирует changelog на изменения поля 'duedate'.
     
     Args:
         db: Сессия PostgreSQL
@@ -96,11 +152,12 @@ def calculate_deadline_stability(
         period_days: Период в днях (по умолчанию 30)
     
     Returns:
-        Dict: {stability_score, total_issues, with_due_date, without_due_date}
+        Dict: {stability_score, total_issues, unchanged, changed, changed_count_summary}
     """
     
     cutoff_date = datetime.utcnow() - timedelta(days=period_days)
     
+    # Базовый запрос задач за период
     query = db.query(JiraIssue).filter(
         JiraIssue.project_key == project_key,
         JiraIssue.created_at >= cutoff_date
@@ -116,22 +173,57 @@ def calculate_deadline_stability(
         return {
             'stability_score': 100.0,
             'total_issues': 0,
+            'unchanged': 0,
+            'changed': 0,
             'with_due_date': 0,
             'without_due_date': 0,
+            'changed_count_summary': {},
             'message': 'Нет задач за период'
         }
     
-    with_due_date = sum(1 for i in issues if i.due_date is not None)
-    without_due_date = total - with_due_date
+    unchanged = 0
+    changed = 0
+    with_due_date = 0
+    without_due_date = 0
+    change_counts = {}
     
-    # Чем больше задач с дедлайном, тем стабильнее (упрощённо)
-    stability_score = round((with_due_date / total) * 100, 2)
+    for issue in issues:
+        has_due_date = issue.due_date is not None
+        
+        if has_due_date:
+            with_due_date += 1
+            
+            # Проверяем, было ли изменение due_date через changelog
+            due_date_changes = db.query(IssueChangelog).filter(
+                IssueChangelog.issue_key == issue.issue_key,
+                IssueChangelog.field_name == 'duedate',
+                IssueChangelog.changed_at >= cutoff_date
+            ).count()
+            
+            if due_date_changes > 0:
+                changed += 1
+                change_counts[due_date_changes] = change_counts.get(due_date_changes, 0) + 1
+            else:
+                unchanged += 1
+        else:
+            without_due_date += 1
+            # Задачи без дедлайна считаем стабильными (не менялся то, чего нет)
+            unchanged += 1
+    
+    stability_score = round((unchanged / total) * 100, 2)
+    
+    logger.info(f"Deadline Stability for {project_key}: {stability_score}% "
+                f"(unchanged={unchanged}, changed={changed}, "
+                f"with_due_date={with_due_date}, without={without_due_date})")
     
     return {
         'stability_score': stability_score,
         'total_issues': total,
+        'unchanged': unchanged,
+        'changed': changed,
         'with_due_date': with_due_date,
-        'without_due_date': without_due_date
+        'without_due_date': without_due_date,
+        'changed_count_summary': change_counts
     }
 
 
@@ -153,7 +245,7 @@ def save_sla_metrics(
     period_end = datetime.utcnow()
     period_start = period_end - timedelta(days=period_days)
     
-    project_id = get_project_id_by_key(db, project_key)  # 
+    project_id = get_project_id_by_key(db, project_key)
     
     with TimescaleSession(timescale_engine) as ts_db:
         existing = ts_db.query(ProjectMetric).filter(
@@ -168,7 +260,7 @@ def save_sla_metrics(
             existing.calculated_at = datetime.utcnow()
         else:
             new_metric = ProjectMetric(
-                project_id=project_id,  # реальный ID
+                project_id=project_id,
                 period_start=period_start,
                 period_end=period_end,
                 sla_score=sla_result['sla_score'],
@@ -178,4 +270,22 @@ def save_sla_metrics(
             ts_db.add(new_metric)
         
         ts_db.commit()
-        logger.info(f"Saved SLA metrics for project {project_key}: SLA={sla_result['sla_score']}%, Stability={stability_result['stability_score']}%")
+        logger.info(f"Saved SLA metrics for project {project_key}: "
+                   f"SLA={sla_result['sla_score']}%, "
+                   f"Stability={stability_result['stability_score']}%")
+
+
+def get_sla_status(sla_score: float) -> dict:
+    """
+    Возвращает статус SLA на основе процента.
+    Шкала в соответствии с требованиями:
+    - Красный: < 50%
+    - Жёлтый: 50% - 79%
+    - Зелёный: >= 80%
+    """
+    if sla_score < 50:
+        return {'status': 'critical', 'status_text': 'Критично', 'color': 'red'}
+    elif sla_score < 80:
+        return {'status': 'warning', 'status_text': 'Есть риск', 'color': 'yellow'}
+    else:
+        return {'status': 'healthy', 'status_text': 'В норме', 'color': 'green'}

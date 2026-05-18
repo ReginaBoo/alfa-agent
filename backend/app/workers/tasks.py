@@ -2,36 +2,46 @@
 
 import asyncio
 import logging
-import asyncio
 from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
-
 from app.db.models import IntegrationToken
 from app.confluence.client import ConfluenceClient
 from app.services.token_service import TokenService
 from app.services.confluence_sync_service import ConfluenceSyncService
-
 from app.services.jira_sync_service import JiraSyncService
 from app.services.github_sync_service import GithubSyncService
+from app.services.project_sync_service import sync_projects_from_jira
 
 logger = logging.getLogger(__name__)
 
 
-def sync_jira_task(user_id: int, instance_name: str, project_key: str = None) -> dict:
+def sync_jira_task(user_id: int, instance_name: str, project_key: str = None, sync_statuses_first: bool = True) -> dict:
     """
     Фоновая задача для синхронизации Jira проектов.
 
-    Если project_key не указан — синхронизирует ВСЕ проекты пользователя.
+    Args:
+        user_id: ID пользователя
+        instance_name: Имя инстанса Jira
+        project_key: Ключ проекта (если None — синхронизирует ВСЕ проекты пользователя)
+        sync_statuses_first: Синхронизировать ли статусы проектов перед задачами
     """
-    logger.info(
-        f"Starting Jira sync for user {user_id}, instance {instance_name}")
+    logger.info(f"Starting Jira sync for user {user_id}, instance {instance_name}")
     if project_key:
         logger.info(f"Project filter: {project_key}")
+    logger.info(f"Sync statuses first: {sync_statuses_first}")
 
+    db = SessionLocal()
     try:
-        db = SessionLocal()
+        # 1. Синхронизируем проекты (и статусы, если нужно)
+        sync_result = sync_projects_from_jira(
+            db=db,
+            user_id=user_id,
+            instance_name=instance_name,
+            sync_statuses=sync_statuses_first
+        )
+        logger.info(f"Projects sync result: {sync_result}")
 
         # Получаем токен
         token = db.query(IntegrationToken).filter(
@@ -43,8 +53,10 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None) ->
         if not token:
             raise ValueError(f"Token not found for site {instance_name}")
 
-        # Получаем список проектов (если project_key не указан)
-        if not project_key:
+        # Определяем список проектов для синхронизации задач
+        if project_key:
+            project_keys = [project_key]
+        else:
             import requests
             projects_url = f"https://api.atlassian.com/ex/jira/{token.instance_id}/rest/api/3/project"
             headers = {"Authorization": f"Bearer {token.access_token}"}
@@ -53,46 +65,46 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None) ->
             projects = response.json()
             project_keys = [p["key"] for p in projects]
             logger.info(f"Found {len(project_keys)} projects: {project_keys}")
-        else:
-            project_keys = [project_key]
 
-        # Синхронизируем каждый проект
-        from app.services.jira_sync_service import JiraSyncService
+        # Синхронизируем задачи каждого проекта
         sync_service = JiraSyncService(db)
 
         total_result = {
-            "created": 0,
-            "updated": 0,
-            "total": 0,
-            "projects_synced": []
+            "projects_synced": sync_result,
+            "issues": {
+                "created": 0,
+                "updated": 0,
+                "total": 0,
+                "projects": []
+            }
         }
 
         for p_key in project_keys:
             try:
-                logger.info(f"Syncing project {p_key}...")
+                logger.info(f"Syncing issues for project {p_key}...")
                 result = sync_service.sync_project_issues(
                     user_id=user_id,
                     instance_name=instance_name,
-                    project_key=p_key
+                    project_key=p_key,
+                    sync_statuses=False  # статусы уже синхронизированы выше
                 )
 
-                total_result["created"] += result["created"]
-                total_result["updated"] += result["updated"]
-                total_result["total"] += result["total"]
-                total_result["projects_synced"].append({
+                total_result["issues"]["created"] += result["created"]
+                total_result["issues"]["updated"] += result["updated"]
+                total_result["issues"]["total"] += result["total"]
+                total_result["issues"]["projects"].append({
                     "project_key": p_key,
                     "details": result
                 })
 
             except Exception as e:
-                logger.error(f"Failed to sync project {p_key}: {e}")
-                total_result["projects_synced"].append({
+                logger.error(f"Failed to sync issues for project {p_key}: {e}")
+                total_result["issues"]["projects"].append({
                     "project_key": p_key,
                     "error": str(e)
                 })
 
         db.commit()
-        db.close()
 
         logger.info(f"Jira sync completed: {total_result}")
         return {
@@ -103,16 +115,16 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None) ->
         }
 
     except Exception as e:
-        logger.error(f"Jira sync failed: {e}")
+        db.rollback()
+        logger.error(f"Jira sync failed: {e}", exc_info=True)
         raise
+    finally:
+        db.close()
 
 
 def sync_confluence_all_task(user_id: int, instance_name: str) -> dict:
-    """
-    Полная фоновая синхронизация всех Confluence project spaces.
-    """
-    logger.info(
-        f"Starting full Confluence sync for user {user_id}, instance {instance_name}")
+    """Полная фоновая синхронизация всех Confluence project spaces."""
+    logger.info(f"Starting full Confluence sync for user {user_id}, instance {instance_name}")
 
     total_result = {
         "status": "completed",
@@ -144,8 +156,7 @@ def sync_confluence_all_task(user_id: int, instance_name: str) -> dict:
         sync_service = ConfluenceSyncService(db)
         cloud_id = token.instance_id
 
-        spaces = asyncio.run(client.get_spaces(
-            cloud_id=cloud_id, user_id=user_id))
+        spaces = asyncio.run(client.get_spaces(cloud_id=cloud_id, user_id=user_id))
         logger.info(f"Found {len(spaces)} total spaces")
 
         # получаем Jira project keys
@@ -180,8 +191,7 @@ def sync_confluence_all_task(user_id: int, instance_name: str) -> dict:
                     )
                 )
 
-                total_result["details"]["total_pages"] += result["pages_created"] + \
-                    result["pages_updated"]
+                total_result["details"]["total_pages"] += result["pages_created"] + result["pages_updated"]
                 total_result["details"]["total_versions"] += result["versions_saved"]
                 total_result["details"]["total_comments"] += result["comments_saved"]
                 total_result["details"]["total_errors"] += result["errors"]
@@ -212,12 +222,8 @@ def sync_confluence_all_task(user_id: int, instance_name: str) -> dict:
 
 
 def calculate_metrics_task(user_id: int, project_key: str) -> dict:
-    """
-    Фоновая задача для пересчёта метрик проекта.
-    Выполняется в воркере.
-    """
-    logger.info(
-        f"Starting metrics calculation for project {project_key}, user {user_id}")
+    """Фоновая задача для пересчёта метрик проекта."""
+    logger.info(f"Starting metrics calculation for project {project_key}, user {user_id}")
 
     try:
         db = SessionLocal()
@@ -281,13 +287,8 @@ def calculate_metrics_task(user_id: int, project_key: str) -> dict:
 
 
 def sync_confluence_task(user_id: int, instance_name: str, space_id: str, space_key: str = None) -> dict:
-    """
-    Фоновая задача для синхронизации Confluence пространства.
-    Выполняется в воркере.
-    """
-    import asyncio
-    logger.info(
-        f"Starting Confluence sync for space {space_id}, user {user_id}")
+    """Фоновая задача для синхронизации Confluence пространства."""
+    logger.info(f"Starting Confluence sync for space {space_id}, user {user_id}")
 
     try:
         db = SessionLocal()
@@ -309,8 +310,7 @@ def sync_confluence_task(user_id: int, instance_name: str, space_id: str, space_
         loop.close()
         db.close()
 
-        logger.info(
-            f"Confluence sync completed for space {space_id}: {result}")
+        logger.info(f"Confluence sync completed for space {space_id}: {result}")
 
         return {
             "status": "completed",
@@ -324,6 +324,7 @@ def sync_confluence_task(user_id: int, instance_name: str, space_id: str, space_
         logger.error(f"Confluence sync failed for space {space_id}: {e}")
         raise
 
+
 def sync_github_task(user_id: int, instance_id: str, repo_full_name: str) -> dict:
     """Фоновая задача для синхронизации GitHub issues репозитория."""
     logger.info(f"Starting GitHub sync for repo {repo_full_name}, user {user_id}")
@@ -332,14 +333,12 @@ def sync_github_task(user_id: int, instance_id: str, repo_full_name: str) -> dic
         db = SessionLocal()
         sync_service = GithubSyncService(db)
         
-        # Безопасный запуск асинхронной функции
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
         
         if loop and loop.is_running():
-            # Если уже есть цикл, создаём новую задачу
             import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor() as executor:
                 future = executor.submit(
@@ -423,5 +422,3 @@ def sync_github_all_repos_task(user_id: int, instance_id: str) -> dict:
     except Exception as e:
         logger.error(f"GitHub sync failed for {instance_id}: {e}")
         raise
-
-

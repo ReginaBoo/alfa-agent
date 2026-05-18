@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, Text, Float, Boolean, Index, JSON, ForeignKey
 from sqlalchemy.dialects.postgresql import ARRAY
 from app.db.base import Base
-
+from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import relationship
 
 
@@ -32,6 +32,7 @@ class JiraIssue(Base):
     time_spent = Column(Float, nullable=True)
     remaining_estimate = Column(Float, nullable=True)
     due_date = Column(DateTime, nullable=True)
+    closed_at = Column(DateTime, nullable=True, index=True)  # ← НОВОЕ ПОЛЕ
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False, index=True)
     last_synced_at = Column(DateTime, default=datetime.utcnow)
@@ -239,3 +240,38 @@ class GithubIssueEvent(Base):
     
     created_at = Column(DateTime, nullable=False, index=True)
     synced_at = Column(DateTime, default=datetime.utcnow)
+
+
+
+class ProjectStatusMapping(Base):
+    """Маппинг статусов Jira проекта с их ролями для метрик"""
+    __tablename__ = "project_status_mappings"
+    __table_args__ = (
+        UniqueConstraint('project_key', 'status_name', name='uq_project_status'),
+        Index("idx_project_status_mappings_project", "project_key"),
+        Index("idx_project_status_mappings_status", "status_name"),
+        {"schema": "normalized"}  # ← ВАЖНО: добавляем в схему normalized
+    )
+
+    id = Column(Integer, primary_key=True)
+    project_key = Column(String(255), nullable=False, index=True)  # Jira project key
+    
+    # Статус из Jira (например, "Code Review", "In Progress", "Готово")
+    status_name = Column(String(100), nullable=False)
+    
+    # Роли статуса для метрик
+    is_open = Column(Boolean, default=True)           # Учитывается в Workload Index?
+    is_in_progress = Column(Boolean, default=False)   # Штраф за многозадачность?
+    is_closed = Column(Boolean, default=False)        # Считается завершённой?
+    
+    # Категория статуса из Jira (todo, in-progress, done)
+    jira_category = Column(String(50), nullable=True)
+    
+    # Кэш: когда последний раз обновляли из Jira
+    last_synced_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Кто обновил (account_id пользователя, который синхронизировал)
+    synced_by_account_id = Column(String(255), nullable=True)
+    
+    def __repr__(self):
+        return f"<ProjectStatusMapping {self.project_key}:{self.status_name} (open={self.is_open}, progress={self.is_in_progress}, closed={self.is_closed})>"

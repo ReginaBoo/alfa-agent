@@ -1,0 +1,135 @@
+[
+  {
+    "email": "nastatrofimova848@gmail.com",
+    "display_name": "Наталья Трофимова",
+    "account_id": "712020:bdf14437-11d6-4d1e-8532-4fc083d8933a",
+    "role": "team_lead",
+    "load_profile": "normal"
+  },
+  {
+    "email": "dmitry.kozlov@test.com",
+    "display_name": "Дмитрий Козлов",
+    "account_id": "712020:7229cdd0-a63b-49dc-a818-359b9fe16275",
+    "role": "manager",
+    "load_profile": "normal"
+  },
+  {
+    "email": "ekaterina.belova@test.com",
+    "display_name": "Екатерина Белова",
+    "account_id": "712020:3a65ad05-5053-486f-ac67-88b8d7652d2a",
+    "role": "analyst",
+    "load_profile": "normal"
+  },
+  {
+    "email": "andrey.sokolov@test.com",
+    "display_name": "Андрей Соколов",
+    "account_id": "712020:f3ba1b08-7826-4a70-bb44-0358f89b4952",
+    "role": "analyst",
+    "load_profile": "normal"
+  },
+  {
+    "email": "maria.vinogradova@test.com",
+    "display_name": "Мария Виноградова",
+    "account_id": "712020:e00a96ff-008a-403f-bbd6-edb96280176e",
+    "role": "analyst",
+    "load_profile": "overloaded"
+  },
+  {
+    "email": "alexey.ivanov@test.com",
+    "display_name": "Алексей Иванов",
+    "account_id": "712020:dc664c11-879e-4276-a1f2-ce3cc508e875",
+    "role": "developer",
+    "load_profile": "normal"
+  },
+  {
+    "email": "elena.petrova@test.com",
+    "display_name": "Елена Петрова",
+    "account_id": "712020:ce4636a9-8a8a-4755-bed2-dd71f7dc501c",
+    "role": "developer",
+    "load_profile": "normal"
+  },
+  {
+    "email": "mikhail.sidorov@test.com",
+    "display_name": "Михаил Сидоров",
+    "account_id": "712020:c9c5639a-029c-4516-b211-5bfadebb550d",
+    "role": "developer",
+    "load_profile": "normal"
+  },
+  {
+    "email": "maxim.vasiliev@test.com",
+    "display_name": "Максим Васильев",
+    "account_id": "712020:4fcc4944-7521-46fb-a4a3-e3c4795eb856",
+    "role": "developer",
+    "load_profile": "overloaded"
+  },
+  {
+    "email": "irina.morozova@test.com",
+    "display_name": "Ирина Морозова",
+    "account_id": "712020:fca64fca-b519-408f-97b2-6beef2c0b4b5",
+    "role": "developer",
+    "load_profile": "overloaded"
+  },
+  {
+    "email": "sergey.novikov@test.com",
+    "display_name": "Сергей Новиков",
+    "account_id": "712020:7aa3e311-dc3c-4852-b7af-ac1856bb83fb",
+    "role": "developer",
+    "load_profile": "underloaded"
+  },
+  {
+    "email": "tatyana.kuzmina@test.com",
+    "display_name": "Татьяна Кузьмина",
+    "account_id": "712020:18325838-7c5f-4ffa-8e21-375f59a6c604",
+    "role": "developer",
+    "load_profile": "underloaded"
+  },
+  {
+    "email": "pavel.sokolov@test.com",
+    "display_name": "Павел Соколов",
+    "account_id": "712020:0428a807-0aef-4b7d-b1cc-3fde971a5e1c",
+    "role": "qa",
+    "load_profile": "normal"
+  },
+  {
+    "email": "natalia.lebedeva@test.com",
+    "display_name": "Наталья Лебедева",
+    "account_id": "712020:2e7a65d1-6289-4b72-b480-f562838868e5",
+    "role": "qa",
+    "load_profile": "normal"
+  },
+  {
+    "email": "anton.medvedev@test.com",
+    "display_name": "Антон Медведев",
+    "account_id": "712020:c2410c26-be6f-4c73-a08d-c532de4473c3",
+    "role": "devops",
+    "load_profile": "normal"
+  },
+  {
+    "email": "kirill.fedorov@test.com",
+    "display_name": "Кирилл Фёдоров",
+    "account_id": "712020:edbcfce9-a486-4c88-b3ef-353a2b665e39",
+    "role": "devops",
+    "load_profile": "overloaded"
+  },
+  {
+    "email": "svetlana.grishina@test.com",
+    "display_name": "Светлана Гришина",
+    "account_id": "712020:5db75e7e-1667-458b-8bb8-ba0fe5b0cddc",
+    "role": "designer",
+    "load_profile": "normal"
+  },
+  {
+    "email": "alina.morozova@test.com",
+    "display_name": "Алина Морозова",
+    "account_id": "712020:7ea2d1d9-5c50-49ee-b69a-effc628261da",
+    "role": "designer",
+    "load_profile": "underloaded"
+  },
+  {
+    "email": "ivan.krasnov@test.com",
+    "display_name": "Иван Краснов",
+    "account_id": "712020:bf762d71-966d-477e-bcda-b4199660389e",
+    "role": "product_owner",
+    "load_profile": "normal"
+  }
+]
