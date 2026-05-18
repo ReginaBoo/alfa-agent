@@ -7,8 +7,10 @@ import { TasksGanttChart } from '../../Charts/TasksGanttChart/TasksGanttChart';
 import { TeamWorkloadList } from '../../Charts/TeamWorkloadList/TeamWorkloadList';
 import { TeamFocusChart } from '../../Charts/TeamFocusChart/TeamFocusChart';
 import { DownloadOutlined, DownOutlined } from '@ant-design/icons';
+import { useAIInsights } from '../../../../hooks/useDashboardData';
 export const ProjectDashboard = () => {
 
+  const aiInsights = useAIInsights();
   return (
     <div className={s.wrapper}>
       <Row justify="end" style={{ marginBottom: 20 }}>
@@ -64,7 +66,7 @@ export const ProjectDashboard = () => {
         <Col span={8}>
           <div className={s.aiSection}>
             <h1 className={s.blueTitle}>AI-ВЫВОДЫ</h1>
-            <AIInsights variant="compact" />
+            <AIInsights variant="compact" data={aiInsights.data} />
           </div>
         </Col>
         <Col span={16}>

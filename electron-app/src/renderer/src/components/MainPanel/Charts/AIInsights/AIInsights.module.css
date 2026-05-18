@@ -98,12 +98,3 @@
 .warningIcon {
   color: #ffc53d;
 }
-
-.cornerArrow {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
-  font-size: 12px;
-  color: #8c8c8c;
-  transform: rotate(-45deg);
-}

@@ -27,6 +27,7 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "antd": "^6.3.7",
+    "axios": "^1.16.1",
     "dayjs": "^1.11.20",
     "react-router-dom": "^7.15.0"
   },
