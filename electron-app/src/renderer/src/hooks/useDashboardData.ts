@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { dashboardApi } from '../api/dashboardApi';
-import { ProjectActivityItem, InsightItem, ProjectStatsItem, DashboardPeriod } from '../types/dashboard';
+import { ProjectActivityItem, InsightItem, ProjectStatsItem, DashboardPeriod, LoadChartItem } from '../types/dashboard';
 
 // 1. Хук для активности проектов
 export const useProjectActivity = (period: DashboardPeriod) => {
@@ -67,6 +67,31 @@ export const useProjectStats = (period: DashboardPeriod) => {
         setData(res);
       } catch (err: any) {
         setError(err.message || 'Не удалось загрузить статистику');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchData();
+  }, [period]);
+
+  return { data, isLoading, error };
+};
+
+// 4. Хук для загруженности команд
+export const useTeamsLoad = (period: DashboardPeriod) => {
+  const [data, setData] = useState<LoadChartItem[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const res = await dashboardApi.getTeamsLoad(period);
+        setData(res);
+      } catch (err: any) {
+        setError(err.message || 'Не удалось загрузить данные загруженности');
       } finally {
         setIsLoading(false);
       }

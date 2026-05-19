@@ -30,3 +30,11 @@ export interface ProjectStatsItem {
     sla: number;
   };
 }
+
+//Загруженность команд
+export interface LoadChartItem {
+  project: string;
+  load: number;          // Значение от 0 до 1 (например, 0.62)
+  statusType: 'underload' | 'optimal' | 'high' | 'overload';
+  description?: string;
+}

@@ -1,4 +1,4 @@
-import { ProjectActivityItem, InsightItem, ProjectStatsItem } from '../../types/dashboard';
+import { ProjectActivityItem, InsightItem, ProjectStatsItem, LoadChartItem } from '../../types/dashboard';
 export const mockBackendData: ProjectActivityItem[] = [
   // МАРТ
   { date: '2026-03-01', value: 15, project: 'Проект 1' },
@@ -81,4 +81,11 @@ export const mockProjectStats: ProjectStatsItem[] = [
     status: 'normal',
     stats: { workload: 60, reviewTime: '2ч', bugs: 0, prCount: 1, commits: '15↑', sla: 99 }
   },
+];
+
+export const mockLoadData: LoadChartItem[] = [
+  { project: 'Проект 1', load: 1.75, statusType: 'overload', description: 'Критический перегруз ключевых разработчиков' },
+  { project: 'Проект 2', load: 0.62, statusType: 'optimal', description: 'Команда идет строго по графику спринта' },
+  { project: 'Проект 3', load: 0.45, statusType: 'high', description: 'Неравномерное распределение обязанностей' },
+  { project: 'Проект 4', load: 0.1, statusType: 'underload', description: 'Ресурсы освободились, можно подключать новые задачи' },
 ];

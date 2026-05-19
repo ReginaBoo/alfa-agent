@@ -1,6 +1,6 @@
 import axios from 'axios';
-import { ProjectActivityItem, DashboardPeriod, InsightItem, ProjectStatsItem } from '../types/dashboard';
-import { mockBackendData, mockInsightsData, mockProjectStats } from './mocks/mocks';
+import { ProjectActivityItem, DashboardPeriod, InsightItem, ProjectStatsItem, LoadChartItem } from '../types/dashboard';
+import { mockBackendData, mockInsightsData, mockProjectStats, mockLoadData } from './mocks/mocks';
 
 let URL = 'localhost:8080'
 
@@ -30,9 +30,17 @@ export const dashboardApi = {
 
   getProjectStats: async (period: DashboardPeriod): Promise<ProjectStatsItem[]> => {
     if (USE_MOCKS) {
-      return new Promise((resolve) => setTimeout(() => resolve(mockProjectStats), 700));
+      return new Promise((resolve) => setTimeout(() => resolve(mockProjectStats), 500));
     }
     const response = await axios.get<ProjectStatsItem[]>('/api/projects-stats', { params: { period } });
+    return response.data;
+  },
+
+  getTeamsLoad: async (period: DashboardPeriod): Promise<LoadChartItem[]> => {
+    if (USE_MOCKS) {
+      return new Promise((resolve) => setTimeout(() => resolve(mockLoadData), 500));
+    }
+    const response = await axios.get<LoadChartItem[]>('/api/teams-load', { params: { period } });
     return response.data;
   }
 };

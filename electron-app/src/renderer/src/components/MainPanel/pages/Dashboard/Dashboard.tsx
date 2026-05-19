@@ -1,11 +1,11 @@
 import { Row, Col, Space } from 'antd';
 import { ActivityChart } from '../../Charts/ActivityChart';
-import { LoadChart } from '../../Charts/LoadChart';
+import { LoadChart } from '../../Charts/LoadChart/LoadChart';
 import { ProjectStats } from '../../Charts/ProjectStats/ProjectStats';
 import { AIInsights } from '../../Charts/AIInsights/AIInsights';
 import { useState } from 'react';
 import s from './Dashboard.module.css';
-import { useProjectActivity, useAIInsights, useProjectStats } from '../../../../hooks/useDashboardData';
+import { useProjectActivity, useAIInsights, useProjectStats, useTeamsLoad } from '../../../../hooks/useDashboardData';
 import { DownloadReportBtn, DashboardLoader, DashboardEmpty, PeriodSelect } from '../../../shared/DashboardControls';
 import { DashboardPeriod } from '../../../../types/dashboard';
 
@@ -16,7 +16,7 @@ export const Dashboard = () => {
   const aiInsights = useAIInsights();
   const projectStats = useProjectStats(timePeriod);
 
-
+  const teamsLoad = useTeamsLoad(timePeriod);
   const handleDownloadReport = () => {
     console.log('Скачивание отчета за период:', timePeriod);
   };
@@ -47,8 +47,13 @@ export const Dashboard = () => {
 
             <Col span={24}>
               <div className={s.loadSection} style={{ marginBottom: '24px' }}>
-                <h1 className={s.blueTitle}>ЗАГРУЖЕННОСТЬ ПРОЕКТОВ</h1>
-                <LoadChart />
+                <h1 className={s.blueTitle}>ЗАГРУЖЕННОСТЬ КОМАНД</h1>
+
+                {teamsLoad.isLoading ? (
+                  <DashboardLoader minHeight="240px" tip="Анализируем загруженность команд..." />
+                ) : (
+                  <LoadChart backendData={teamsLoad.data} />
+                )}
               </div>
             </Col>
 
