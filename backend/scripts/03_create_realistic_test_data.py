@@ -1,7 +1,7 @@
  #!/мандыusr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-08_create_realistic_test_data.py
+03_create_realistic_test_data.py
 
 Создаёт РЕАЛИСТИЧНЫЕ тестовые данные для проверки метрик системы.
 
@@ -34,7 +34,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from config import (
     JIRA_URL, ADMIN_EMAIL, API_TOKEN,
     PROJECT_ASSIGNEES, ISSUES_PER_PROJECT,
-    PROJECT_WORKFLOWS, DEFAULT_WORKFLOW
+    PROJECT_WORKFLOWS, DEFAULT_WORKFLOW, MY_EMAIL 
 )
 
 
@@ -230,11 +230,20 @@ def create_issue_with_scenario(
     workflow: Dict,
     scenario: str,
     issue_num: int,
+    users_by_email: Dict,
     your_account_id: str
 ) -> Optional[Dict]:
     """
-    Создаёт задачу с реалистичным сценарием и назначением тебе
+    Создаёт задачу с реалистичным сценарием
     """
+    
+    # Выбираем исполнителя
+    assignee_id = get_random_assignee_for_project(project_key, users_by_email)
+    
+    # Если не нашли исполнителя - назначаем на вас
+    if not assignee_id:
+        print_warn(f"   Нет исполнителей в {project_key}, назначаю на вас")
+        assignee_id = your_account_id
     
     statuses = workflow.get('statuses', DEFAULT_WORKFLOW['statuses'])
     closed_status = workflow.get('closed_status', DEFAULT_WORKFLOW['closed_status'])
@@ -285,7 +294,7 @@ def create_issue_with_scenario(
         issue_type=issue_type,
         summary=summary,
         description=description,
-        assignee_id=your_account_id,
+        assignee_id=assignee_id,
         story_points=story_points,
         priority=priority,
         labels=labels
@@ -507,9 +516,25 @@ def main():
     # Получаем ваш accountId
     your_account_id = users_by_email.get(MY_EMAIL)
     if not your_account_id:
-        print_error(f"Ваш аккаунт ({MY_EMAIL}) не найден в созданных пользователях!")
-        print("Убедитесь, что вы добавили свой email в TEST_USERS в config.py")
-        return
+        print_warn(f"Ваш аккаунт не найден в файле, ищем через API...")
+        auth = (ADMIN_EMAIL, API_TOKEN)
+        url = f"{JIRA_URL}/rest/api/3/user/search?query={MY_EMAIL}"
+        try:
+            resp = requests.get(url, auth=auth, timeout=30)
+            if resp.status_code == 200:
+                users_data = resp.json()
+                if users_data:
+                    your_account_id = users_data[0].get('accountId')
+                    print_success(f"Найден ваш accountId: {your_account_id}")
+                else:
+                    print_error(f"Пользователь {MY_EMAIL} не найден в Jira!")
+                    return
+            else:
+                print_error(f"Ошибка поиска: {resp.status_code}")
+                return
+        except Exception as e:
+            print_error(f"Ошибка: {e}")
+            return
     print_info(f"Ваш accountId: {your_account_id}")
     
     # Проверка подключения
@@ -563,6 +588,7 @@ def main():
                 workflow=workflow,
                 scenario=scenario,
                 issue_num=i,
+                users_by_email=users_by_email,
                 your_account_id=your_account_id
             )
             
@@ -584,7 +610,7 @@ def main():
         closed_in_project = sum(1 for r in project_results if r.get('closed'))
         print(f"\nOK Проект {project_key}: {len(project_results)} задач, закрыто {closed_in_project}")
     
-    # Итоговый отчёт
+        # Итоговый отчёт
     print(f"\n{'='*70}")
     print("ИТОГОВЫЙ ОТЧЁТ")
     print(f"{'='*70}")
@@ -594,7 +620,8 @@ def main():
     print(f"   Открытые: {total_open}")
     
     # Сохранение
-    result_file = 'scripts/.realistic_test_data.json'
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    result_file = os.path.join(script_dir, '.realistic_test_data.json')
     with open(result_file, 'w', encoding='utf-8') as f:
         json.dump({
             "results": all_results,
@@ -607,12 +634,53 @@ def main():
             "created_at": datetime.now().isoformat()
         }, f, indent=2, ensure_ascii=False)
     
-    print(f"\nРезультаты сохранены в {result_file}")
+    print(f"\n💾 Результаты сохранены в {result_file}")
     
     print(f"\n{'='*70}")
     print("СЛЕДУЮЩИЙ ШАГ:")
     print("   python scripts/04_sync_and_check.py")
     print(f"{'='*70}")
+
+# Добавьте эту функцию для получения случайного разработчика из проекта
+def get_random_assignee_for_project(project_key: str, users_by_email: Dict) -> Optional[str]:
+    """Получает случайного исполнителя из команды проекта"""
+    
+    project_team = PROJECT_ASSIGNEES.get(project_key, {})
+    
+    # Собираем всех возможных исполнителей из проекта
+    potential_assignees = []
+    
+    # Добавляем тимлида
+    if project_team.get('team_lead'):
+        potential_assignees.append(project_team['team_lead'])
+    
+    # Добавляем разработчиков
+    potential_assignees.extend(project_team.get('developers', []))
+    
+    # Добавляем QA
+    potential_assignees.extend(project_team.get('qa', []))
+    
+    # Добавляем аналитиков
+    potential_assignees.extend(project_team.get('analysts', []))
+    
+    # Добавляем девопсов
+    potential_assignees.extend(project_team.get('devops', []))
+    
+    # Добавляем дизайнеров
+    potential_assignees.extend(project_team.get('designers', []))
+    
+    # Удаляем дубликаты и None
+    potential_assignees = [a for a in set(potential_assignees) if a]
+    
+    if not potential_assignees:
+        return None
+    
+    # Выбираем случайного
+    selected_email = random.choice(potential_assignees)
+    
+    # Конвертируем email в accountId
+    return users_by_email.get(selected_email)
+
 
 
 if __name__ == "__main__":

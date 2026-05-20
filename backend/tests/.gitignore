@@ -1,0 +1,19 @@
+# Тестовые данные
+*.log
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Тестовые файлы
+test-results.xml
+coverage.xml
+
+# Кукисы и токены
+*.txt
+cookies.txt
+
+# Env файлы
+.env.test
+.env.local

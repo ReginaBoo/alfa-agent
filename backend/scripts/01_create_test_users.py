@@ -22,7 +22,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from config import (
     JIRA_URL, ADMIN_EMAIL, API_TOKEN, 
-    TEST_USERS, BACKEND_URL
+    TEST_USERS
 )
 
 
@@ -147,11 +147,12 @@ def add_user_to_group(account_id: str, group_name: str = "jira-software-users") 
 def save_users_to_file(users: List[Dict], filename: str = 'scripts/.test_users.json'):
     """Сохраняет пользователей в файл для других скриптов"""
     # Убедимся, что директория существует
-    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    filepath = os.path.join(script_dir, filename)
     
-    with open(filename, 'w', encoding='utf-8') as f:
+    with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(users, f, indent=2, ensure_ascii=False)
-    print(f"\n💾 Данные сохранены в {filename}")
+    print(f"\n💾 Данные сохранены в {filepath}")
 
 
 def print_summary(users: List[Dict]):

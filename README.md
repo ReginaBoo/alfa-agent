@@ -2,6 +2,31 @@
 
 Backend-сервис для интеграции с Atlassian (Jira/Confluence) через OAuth 2.0. Обеспечивает хранение токенов пользователей, доступ к данным проектов, расчёт метрик и асинхронную обработку через очереди.
 
+## 🧪 E2E Тестирование
+
+Полный цикл тестирования системы см. в [backend/tests/E2E_README.md](backend/tests/E2E_README.md)
+
+### Быстрый запуск E2E тестов:
+
+```bash
+# Через скрипт
+backend/scripts/run_e2e_tests.sh
+
+# Или через Docker Compose
+docker-compose exec backend pytest tests/test_e2e_full_cycle.py -v -s
+```
+
+E2E тесты проверяют:
+1. Health check (Backend, PostgreSQL, TimescaleDB, Redis)
+2. Jira подключение
+3. Синхронизация проектов
+4. Raw events
+5. Асинхронные задачи (RQ)
+6. Workload Index
+7. Health Score
+8. API эндпоинты
+9. Очистка данных
+
 ## Технологии
 
 - **Python 3.11** + **FastAPI** — веб-фреймворк

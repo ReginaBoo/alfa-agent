@@ -32,21 +32,21 @@
 """
 
 # Jira Cloud настройки
-JIRA_INSTANCE = "YOUR_INSTANCE"  # Замените на ваш instance (например: newsitealf)
+JIRA_INSTANCE = "instance"  # Замените на ваш instance (например: newsitealf)
 JIRA_URL = f"https://{JIRA_INSTANCE}.atlassian.net"
 
 # Администратор Jira (нужен аккаунт с правами на создание пользователей и проектов)
 # Замените на email администратора Jira
-ADMIN_EMAIL = "YOUR_ADMIN_EMAIL@company.com"
+ADMIN_EMAIL = "ADMIN_EMAIL"
 
 # API Token администратора Jira
 # Получить можно здесь: https://id.atlassian.com/manage-profile/security/api-tokens
 # Замените на ваш API token
-API_TOKEN = "YOUR_API_TOKEN_HERE"
+API_TOKEN = "API_Token"
 
 # Ваш email (будет руководителем всех проектов и исполнителем задач)
 # Замените на ваш email в Jira
-MY_EMAIL = "YOUR_EMAIL@company.com"
+MY_EMAIL = "Замените_на_ваш_email_в_Jira"
 
 # ============================================================
 # КОНФИГУРАЦИЯ ПРОЕКТОВ (замените на реальные проекты вашей компании)
@@ -160,130 +160,210 @@ TEST_PROJECTS = [
 ]
 
 # ============================================================
-# СОЗДАНИЕ ПОЛЬЗОВАТЕЛЕЙ (замените на реальных сотрудников вашей компании)
+# СОЗДАНИЕ ПОЛЬЗОВАТЕЛЕЙ (20 тестовых пользователей)
 # ============================================================
 
 TEST_USERS = [
-    # ========== ВЫ - ГЛАВНЫЙ РУКОВОДИТЕЛЬ ==========
+    # ========== РУКОВОДИТЕЛИ (3 человека) ==========
     {
-        "email": MY_EMAIL,
-        "display_name": "Ваше Имя",
+        "email": "anna.smirnova@test.com",
+        "display_name": "Анна Смирнова",
         "role": "team_lead",
         "load_profile": "normal"
     },
-    
-    # ========== ОСТАЛЬНЫЕ РУКОВОДИТЕЛИ ==========
     {
-        "email": "user1@company.com",
-        "display_name": "Имя Фамилия",
+        "email": "dmitry.kozlov@test.com",
+        "display_name": "Дмитрий Козлов",
         "role": "manager",
         "load_profile": "normal"
     },
-    
-    # ========== РАЗРАБОТЧИКИ ==========
     {
-        "email": "user2@company.com",
-        "display_name": "Имя Фамилия",
+        "email": "ivan.krasnov@test.com",
+        "display_name": "Иван Краснов",
+        "role": "product_owner",
+        "load_profile": "normal"
+    },
+    
+    # ========== РАЗРАБОТЧИКИ (10 человек) ==========
+    {
+        "email": "alexey.ivanov@test.com",
+        "display_name": "Алексей Иванов",
         "role": "developer",
         "load_profile": "normal"
     },
     {
-        "email": "user3@company.com",
-        "display_name": "Имя Фамилия",
+        "email": "elena.petrova@test.com",
+        "display_name": "Елена Петрова",
         "role": "developer",
-        "load_profile": "heavy"
+        "load_profile": "normal"
     },
     {
-        "email": "user4@company.com",
-        "display_name": "Имя Фамилия",
+        "email": "mikhail.sidorov@test.com",
+        "display_name": "Михаил Сидоров",
         "role": "developer",
-        "load_profile": "light"
+        "load_profile": "normal"
+    },
+    {
+        "email": "olga.volkova@test.com",
+        "display_name": "Ольга Волкова",
+        "role": "developer",
+        "load_profile": "normal"
+    },
+    {
+        "email": "maxim.vasiliev@test.com",
+        "display_name": "Максим Васильев",
+        "role": "developer",
+        "load_profile": "overloaded"
+    },
+    {
+        "email": "irina.morozova@test.com",
+        "display_name": "Ирина Морозова",
+        "role": "developer",
+        "load_profile": "overloaded"
+    },
+    {
+        "email": "sergey.novikov@test.com",
+        "display_name": "Сергей Новиков",
+        "role": "developer",
+        "load_profile": "underloaded"
+    },
+    {
+        "email": "tatyana.kuzmina@test.com",
+        "display_name": "Татьяна Кузьмина",
+        "role": "developer",
+        "load_profile": "underloaded"
+    },
+    {
+        "email": "andrey.sokolov@test.com",
+        "display_name": "Андрей Соколов",
+        "role": "developer",
+        "load_profile": "normal"
+    },
+    {
+        "email": "ekaterina.belova@test.com",
+        "display_name": "Екатерина Белова",
+        "role": "developer",
+        "load_profile": "normal"
     },
     
-    # ========== QA ==========
+    # ========== QA (3 человека) ==========
     {
-        "email": "user5@company.com",
-        "display_name": "Имя Фамилия",
+        "email": "pavel.sokolov@test.com",
+        "display_name": "Павел Соколов",
         "role": "qa",
         "load_profile": "normal"
     },
-    
-    # ========== ANALYSTS ==========
     {
-        "email": "user6@company.com",
-        "display_name": "Имя Фамилия",
+        "email": "natalia.lebedeva@test.com",
+        "display_name": "Наталья Лебедева",
+        "role": "qa",
+        "load_profile": "normal"
+    },
+    {
+        "email": "maria.vinogradova@test.com",
+        "display_name": "Мария Виноградова",
+        "role": "qa",
+        "load_profile": "overloaded"
+    },
+    
+    # ========== АНАЛИТИКИ (2 человека) ==========
+    {
+        "email": "olga.sokolova@test.com",
+        "display_name": "Ольга Соколова",
         "role": "analyst",
+        "load_profile": "normal"
+    },
+    {
+        "email": "pavel.volkov@test.com",
+        "display_name": "Павел Волков",
+        "role": "analyst",
+        "load_profile": "normal"
+    },
+    
+    # ========== DEVOPS (1 человек) ==========
+    {
+        "email": "anton.medvedev@test.com",
+        "display_name": "Антон Медведев",
+        "role": "devops",
+        "load_profile": "normal"
+    },
+    
+    # ========== ДИЗАЙНЕРЫ (1 человек) ==========
+    {
+        "email": "svetlana.grishina@test.com",
+        "display_name": "Светлана Гришина",
+        "role": "designer",
         "load_profile": "normal"
     },
 ]
 
 # ============================================================
-# НАЗНАЧЕНИЕ СОТРУДНИКОВ НА ПРОЕКТЫ (замените на реальных сотрудников)
+# НАЗНАЧЕНИЕ СОТРУДНИКОВ НА ПРОЕКТЫ
 # ============================================================
 
 PROJECT_ASSIGNEES = {
     "HEALTH": {
-        "team_lead": MY_EMAIL,
-        "product_owner": "user1@company.com",
-        "analysts": ["user6@company.com"],
-        "developers": ["user2@company.com", "user3@company.com"],
-        "qa": ["user5@company.com"],
-        "devops": ["user2@company.com"],
-        "designers": ["user4@company.com"]
+        "team_lead": "anna.smirnova@test.com",
+        "product_owner": "ivan.krasnov@test.com",
+        "analysts": ["olga.sokolova@test.com", "pavel.volkov@test.com"],
+        "developers": ["alexey.ivanov@test.com", "elena.petrova@test.com", "mikhail.sidorov@test.com"],
+        "qa": ["pavel.sokolov@test.com", "natalia.lebedeva@test.com"],
+        "devops": ["anton.medvedev@test.com"],
+        "designers": ["svetlana.grishina@test.com"]
     },
     "CRUNCH": {
-        "team_lead": MY_EMAIL,
-        "product_owner": "user1@company.com",
+        "team_lead": "anna.smirnova@test.com",
+        "product_owner": "ivan.krasnov@test.com",
         "analysts": [],
-        "developers": ["user3@company.com", "user2@company.com"],
-        "qa": ["user5@company.com"],
-        "devops": ["user3@company.com"],
+        "developers": ["maxim.vasiliev@test.com", "irina.morozova@test.com", "andrey.sokolov@test.com"],
+        "qa": ["maria.vinogradova@test.com"],
+        "devops": ["anton.medvedev@test.com"],
         "designers": []
     },
     "IMBAL": {
-        "team_lead": MY_EMAIL,
-        "product_owner": "user1@company.com",
-        "analysts": ["user6@company.com"],
-        "developers": ["user4@company.com", "user2@company.com"],
-        "qa": ["user5@company.com"],
+        "team_lead": "anna.smirnova@test.com",
+        "product_owner": "ivan.krasnov@test.com",
+        "analysts": ["olga.sokolova@test.com"],
+        "developers": ["sergey.novikov@test.com", "tatyana.kuzmina@test.com"],
+        "qa": ["natalia.lebedeva@test.com"],
         "devops": [],
-        "designers": ["user4@company.com"]
+        "designers": ["svetlana.grishina@test.com"]
     },
     "IDLE": {
-        "team_lead": MY_EMAIL,
+        "team_lead": "anna.smirnova@test.com",
         "product_owner": None,
         "analysts": [],
-        "developers": ["user2@company.com"],
+        "developers": ["sergey.novikov@test.com"],
         "qa": [],
         "devops": [],
         "designers": []
     },
     "BUGS": {
-        "team_lead": MY_EMAIL,
-        "product_owner": "user1@company.com",
-        "analysts": ["user6@company.com"],
-        "developers": ["user3@company.com", "user2@company.com", "user4@company.com"],
-        "qa": ["user5@company.com", "user5@company.com"],
-        "devops": ["user3@company.com"],
+        "team_lead": "anna.smirnova@test.com",
+        "product_owner": "ivan.krasnov@test.com",
+        "analysts": ["pavel.volkov@test.com"],
+        "developers": ["alexey.ivanov@test.com", "elena.petrova@test.com", "mikhail.sidorov@test.com", "ekaterina.belova@test.com"],
+        "qa": ["pavel.sokolov@test.com", "natalia.lebedeva@test.com", "maria.vinogradova@test.com"],
+        "devops": ["anton.medvedev@test.com"],
         "designers": []
     },
     "KANBAN": {
-        "team_lead": MY_EMAIL,
+        "team_lead": "anna.smirnova@test.com",
         "product_owner": None,
-        "analysts": ["user6@company.com"],
-        "developers": ["user2@company.com", "user4@company.com", "user3@company.com"],
-        "qa": ["user5@company.com"],
-        "devops": ["user2@company.com"],
-        "designers": ["user4@company.com"]
+        "analysts": ["olga.sokolova@test.com"],
+        "developers": ["olga.volkova@test.com", "maxim.vasiliev@test.com", "irina.morozova@test.com", "andrey.sokolov@test.com"],
+        "qa": ["pavel.sokolov@test.com"],
+        "devops": ["anton.medvedev@test.com"],
+        "designers": ["svetlana.grishina@test.com"]
     },
     "NEWPROJ": {
-        "team_lead": MY_EMAIL,
-        "product_owner": "user1@company.com",
-        "analysts": ["user6@company.com"],
-        "developers": ["user4@company.com"],
+        "team_lead": "anna.smirnova@test.com",
+        "product_owner": "ivan.krasnov@test.com",
+        "analysts": ["pavel.volkov@test.com"],
+        "developers": ["tatyana.kuzmina@test.com", "sergey.novikov@test.com"],
         "qa": [],
         "devops": [],
-        "designers": ["user4@company.com"]
+        "designers": ["svetlana.grishina@test.com"]
     }
 }
 

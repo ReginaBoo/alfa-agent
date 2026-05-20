@@ -155,9 +155,11 @@ def main():
         "created_at": datetime.now().isoformat()
     }
     
-    os.makedirs('scripts', exist_ok=True)
-    with open('scripts/.test_projects.json', 'w', encoding='utf-8') as f:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    result_file = os.path.join(script_dir, '.test_projects.json')
+    with open(result_file, 'w', encoding='utf-8') as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
+    print(f"\n💾 Результат сохранён в {result_file}")
     
     print("\n" + "=" * 60)
     print("📊 ИТОГИ")

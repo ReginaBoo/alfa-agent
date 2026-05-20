@@ -124,3 +124,28 @@ class TokenRefreshService:
             IntegrationToken.provider == provider,
             IntegrationToken.instance_id == instance_id
         ).first()
+    
+
+    @staticmethod
+    async def update_user_tokens_async(db: Session, user_id: int) -> bool:
+        """Асинхронно обновляет все токены пользователя"""
+        stmt = select(IntegrationToken).where(IntegrationToken.user_id == user_id)
+        tokens = db.execute(stmt).scalars().all()
+        
+        if not tokens:
+            return False
+        
+        # Используем синхронный метод для обновления
+        # В асинхронном контексте это нормально для коротких операций
+        new_data = TokenRefreshService.refresh_token(tokens[0].refresh_token)
+        expires_at = datetime.utcnow() + timedelta(seconds=new_data.expires_in)
+        
+        for token in tokens:
+            token.access_token = new_data.access_token
+            token.expires_at = expires_at
+            if new_data.refresh_token:
+                token.refresh_token = new_data.refresh_token
+        
+        db.commit()
+        logger.info(f"Tokens refreshed async for user {user_id}")
+        return True
