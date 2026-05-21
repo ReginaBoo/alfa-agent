@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime, timedelta
+from sqlalchemy import func
 
 from app.db.session import get_db
 from app.db.models import JiraIssue, IntegrationToken
@@ -443,3 +444,106 @@ def get_dashboard_health(
 # Добавляем логгер
 import logging
 logger = logging.getLogger(__name__)
+
+@router.get("/projects-activity")
+@router.get("/api/projects-activity")
+def get_projects_activity(
+    period: str = Query(
+        ...,
+        description="Период: 'Весь период' или 'Последняя неделя'"
+    ),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает активность проектов по дням.
+
+    Формат:
+    [
+        {
+            "date": "2026-03-01",
+            "value": 15,
+            "project": "Проект 1"
+        }
+    ]
+    """
+
+    # --- Валидация периода ---
+    allowed_periods = ["Весь период", "Последняя неделя"]
+
+    if period not in allowed_periods:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid period. Allowed: {allowed_periods}"
+        )
+
+    # --- Получаем проекты пользователя ---
+    user_projects = (
+        db.query(Project)
+        .join(UserProject, UserProject.project_id == Project.id)
+        .filter(
+            UserProject.user_id == current_user.id,
+            Project.is_active == True
+        )
+        .all()
+    )
+
+    if not user_projects:
+        return []
+
+    project_keys = [p.key for p in user_projects]
+
+    # --- Фильтрация по времени ---
+    query = (
+        db.query(
+            func.date(JiraIssue.updated_at).label("activity_date"),
+            JiraIssue.project_key,
+            func.count(JiraIssue.id).label("activity_count")
+        )
+        .filter(
+            JiraIssue.project_key.in_(project_keys),
+            JiraIssue.is_deleted == False
+        )
+    )
+
+    # Последняя неделя
+    if period == "Последняя неделя":
+        week_ago = datetime.utcnow() - timedelta(days=7)
+
+        query = query.filter(
+            JiraIssue.updated_at >= week_ago
+        )
+
+    # --- Группировка ---
+    query = (
+        query.group_by(
+            func.date(JiraIssue.updated_at),
+            JiraIssue.project_key
+        )
+        .order_by(
+            func.date(JiraIssue.updated_at)
+        )
+    )
+
+    results = query.all()
+
+    # --- Маппинг project_key -> project_name ---
+    project_name_map = {
+        project.key: project.name
+        for project in user_projects
+    }
+
+    # --- Формируем ответ ---
+    response = []
+
+    for row in results:
+        response.append({
+            "date": row.activity_date.isoformat(),
+            "value": row.activity_count,
+            "project": project_name_map.get(
+                row.project_key,
+                row.project_key
+            )
+        })
+
+    return response

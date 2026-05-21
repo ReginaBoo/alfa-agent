@@ -2,6 +2,7 @@ import logging
 from fastapi import FastAPI
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.endpoints import auth_endpoints, jira_endpoints, github_endpoints, github_auth_endpoints
 from app.db.base import Base
@@ -39,7 +40,13 @@ app.include_router(metrics_endpoints.router, prefix="/metrics", tags=["Metrics"]
 # GitHub роутеры
 app.include_router(github_endpoints.router, tags=["GitHub"])
 app.include_router(github_auth_endpoints.router, prefix="/github", tags=["GitHub"])
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # --- Startup / Shutdown ---
 @app.on_event("startup")
 def on_startup():

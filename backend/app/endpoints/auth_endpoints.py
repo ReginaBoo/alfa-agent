@@ -124,7 +124,11 @@ async def callback(request: Request, db: DbSession = Depends(get_db)):
         }
 
         # 8. Создаём Response с HTTP-only cookie
-        response = JSONResponse(content=response_data)
+        response = RedirectResponse(
+            url="http://localhost:5173/dashboard",
+            status_code=302
+        )
+
         response.set_cookie(
             key="session_token",
             value=session_token,
