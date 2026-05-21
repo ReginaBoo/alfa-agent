@@ -12,7 +12,7 @@ import {
   mockInsightsData,
   mockProjectStats,
   mockLoadData,
-  mockProjectsData, mockGanttData// Импортируем мок проектов
+  mockProjectsData, mockGanttData, mockProjectInsightsData// Импортируем мок проектов
 } from './mocks/mocks';
 
 
@@ -22,7 +22,7 @@ const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 export const dashboardApi = {
   getProjects: async (): Promise<ProjectItem[]> => {
-    if (!USE_MOCKS) {
+    if (USE_MOCKS) {
       return new Promise((resolve) => {
         setTimeout(() => { resolve(mockProjectsData); }, 500);
       });
@@ -85,5 +85,14 @@ export const dashboardApi = {
       params: { period },
     });
     return response.data;
-  }
+  },
+  getProjectAIInsights: async (projectId: string): Promise<InsightItem[]> => {
+    if (USE_MOCKS) {
+      return new Promise((resolve) => setTimeout(() => resolve(mockProjectInsightsData), 500));
+    }
+    const response = await axios.get<InsightItem[]>(`${URL}/api/projects/${projectId}/ai-insights`);
+    return response.data;
+  },
+
+
 };

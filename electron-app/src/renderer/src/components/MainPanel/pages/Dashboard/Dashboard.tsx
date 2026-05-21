@@ -24,7 +24,7 @@ export const Dashboard = () => {
   if (isProjectsLoading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
-        <DashboardLoader minHeight="100px" />
+        <DashboardLoader minHeight="100px" tip="Загрузка..." />
       </div>
     );
   }
@@ -90,7 +90,7 @@ export const Dashboard = () => {
                 <h1 className={s.blueTitle}>АКТИВНОСТЬ ПО ПРОЕКТАМ</h1>
 
                 {activity.isLoading ? (
-                  <DashboardLoader minHeight="200px" />
+                  <DashboardLoader minHeight="200px" tip="Загружаем активность" />
                 ) : activity.data.length === 0 ? (
                   <DashboardEmpty description="Пока нет активности по проектам" minHeight="200px" />
                 ) : (
