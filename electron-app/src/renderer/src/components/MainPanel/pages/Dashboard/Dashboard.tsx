@@ -5,21 +5,34 @@ import { ProjectStats } from '../../Charts/ProjectStats/ProjectStats';
 import { AIInsights } from '../../Charts/AIInsights/AIInsights';
 import { useState } from 'react';
 import s from './Dashboard.module.css';
-import { useProjectActivity, useAIInsights, useProjectStats, useTeamsLoad } from '../../../../hooks/useDashboardData';
-import { DownloadReportBtn, DashboardLoader, DashboardEmpty, PeriodSelect } from '../../../shared/DashboardControls';
+import { useProjectActivity, useAIInsights, useProjectStats, useTeamsLoad, useProjects } from '../../../../hooks/useDashboardData';
+import { DownloadReportBtn, DashboardLoader, DashboardEmpty, PeriodSelect, NoProjectsEmpty } from '../../../shared/DashboardControls';
 import { DashboardPeriod } from '../../../../types/dashboard';
 
 export const Dashboard = () => {
-  const [timePeriod, setTimePeriod] = useState<DashboardPeriod>('Весь период');
+  const [timePeriod, setTimePeriod] = useState<DashboardPeriod>('all');
 
   const activity = useProjectActivity(timePeriod);
   const aiInsights = useAIInsights();
   const projectStats = useProjectStats(timePeriod);
-
+  const { data: projects = [], isLoading: isProjectsLoading } = useProjects();
   const teamsLoad = useTeamsLoad(timePeriod);
   const handleDownloadReport = () => {
     console.log('Скачивание отчета за период:', timePeriod);
   };
+
+  if (isProjectsLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
+        <DashboardLoader minHeight="100px" />
+      </div>
+    );
+  }
+
+  if (projects.length === 0) {
+    return <NoProjectsEmpty />;
+  }
+
   return (
     <div className={s.dashboardWrapper}>
       <Row justify="end" style={{ marginBottom: 20 }}>
@@ -63,11 +76,13 @@ export const Dashboard = () => {
         <Col xs={24} lg={12}>
           <Row gutter={[16, 16]}>
             <Col span={24}>
-              {projectStats.isLoading ? (
-                <DashboardLoader minHeight="120px" tip="Считаем коммиты и пул-реквесты..." />
-              ) : (
-                <ProjectStats data={projectStats.data} />
-              )}
+              <div className={s.statsSection}>
+                {projectStats.isLoading ? (
+                  <DashboardLoader minHeight="120px" tip="Считаем коммиты и пул-реквесты..." />
+                ) : (
+                  <ProjectStats data={projectStats.data} />
+                )}
+              </div>
             </Col>
 
             <Col span={24}>

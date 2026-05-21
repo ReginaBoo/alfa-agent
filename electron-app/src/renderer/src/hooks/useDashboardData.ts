@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { dashboardApi } from '../api/dashboardApi';
-import { ProjectActivityItem, InsightItem, ProjectStatsItem, DashboardPeriod, LoadChartItem } from '../types/dashboard';
+import { ProjectActivityItem, InsightItem, ProjectStatsItem, DashboardPeriod, LoadChartItem, ProjectItem } from '../types/dashboard';
 
 // 1. Хук для активности проектов
 export const useProjectActivity = (period: DashboardPeriod) => {
@@ -98,6 +98,23 @@ export const useTeamsLoad = (period: DashboardPeriod) => {
     };
     fetchData();
   }, [period]);
+
+  return { data, isLoading, error };
+};
+
+
+//Список проектов
+export const useProjects = () => {
+  const [data, setData] = useState<ProjectItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<any>(null);
+
+  useEffect(() => {
+    dashboardApi.getProjects()
+      .then(res => setData(res))
+      .catch(err => setError(err))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   return { data, isLoading, error };
 };

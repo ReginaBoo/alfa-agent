@@ -22,7 +22,7 @@ function App() {
               <MainPanel>
                 <Routes>
                   <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/project/:projectId" element={<ProjectDashboard />} />
+                  <Route path="/project/:id" element={<ProjectDashboard />} />
                 </Routes>
               </MainPanel>
             }

@@ -6,14 +6,11 @@ import {
 } from '@ant-design/icons';
 import s from './Header.module.css';
 import { useNavigate, useLocation } from 'react-router-dom';
-
+import { useProjects } from '../../../hooks/useDashboardData';
 export const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
-
-  const projects = [
-    { id: '1', name: 'Проект 1' },
-  ];
+  const { data: projects = [] } = useProjects();
 
   const getCurrentValue = () => {
     const pathParts = location.pathname.split('/');

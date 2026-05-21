@@ -1,10 +1,14 @@
+import React, { useMemo } from 'react';
 import { Table, Progress, Tooltip } from 'antd';
 import s from './TasksGanttChart.module.css';
 import isBetween from 'dayjs/plugin/isBetween';
 import isoWeek from 'dayjs/plugin/isoWeek';
 import dayjs from 'dayjs';
 
-interface GanttRecord {
+dayjs.extend(isBetween);
+dayjs.extend(isoWeek);
+
+export interface GanttRecord {
   id: string;
   task: string;
   duration: string;
@@ -15,35 +19,43 @@ interface GanttRecord {
   children?: GanttRecord[];
 }
 
-dayjs.extend(isBetween);
-dayjs.extend(isoWeek);
+interface TasksGanttChartProps {
+  data: GanttRecord[];
+  viewRange: {
+    start: string;
+    end: string;
+  };
+}
 
-const RESPONSIBLE_COLORS: Record<string, string> = {
-  'Соня': '#36cfc9',
-  'Иван': '#ff4d4f',
-  'Анна': '#ffc53d',
-  'default': '#1890ff'
+const COLUMN_WIDTH = 85;
+
+// Утилита генерации мягкого пастельного цвета по имени (Хеширование строки)
+const generateColorByName = (name: string): string => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  // Распределяем оттенки по кругу HSL, сохраняя приятную насыщенность и яркость
+  const hue = Math.abs(hash % 360);
+  return `hsl(${hue}, 75%, 60%)`;
 };
 
-
-
-const generateGanttColumns = (startDate: string, endDate: string) => {
-  // Начинаем с начала недели (понедельник), чтобы сетка была ровной
-  let currentWeekStart = dayjs(startDate).startOf('week').add(0, 'day');
+const generateGanttColumns = (
+  startDate: string,
+  endDate: string,
+  colorMap: Record<string, string>
+) => {
+  let currentWeekStart = dayjs(startDate).startOf('isoWeek');
   const endLimit = dayjs(endDate);
-
   const columns: any[] = [];
 
-  // Итерируемся по неделям, пока не выйдем за пределы диапазона
   while (currentWeekStart.isBefore(endLimit)) {
     const sDate = currentWeekStart;
     const eDate = sDate.add(6, 'day');
 
-    // Определяем, к какому месяцу относится эта неделя (по дате начала)
     const monthName = sDate.format('MMMM');
     const monthTitle = monthName.charAt(0).toUpperCase() + monthName.slice(1);
 
-    // Ищем, есть ли уже колонка для этого месяца
     let monthColumn = columns.find(col => col.title === monthTitle);
 
     if (!monthColumn) {
@@ -54,7 +66,7 @@ const generateGanttColumns = (startDate: string, endDate: string) => {
       columns.push(monthColumn);
     }
     const weekOfYear = sDate.isoWeek();
-    // Добавляем неделю внутрь месяца
+
     monthColumn.children.push({
       title: (
         <div className={s.weekHeader}>
@@ -63,19 +75,32 @@ const generateGanttColumns = (startDate: string, endDate: string) => {
         </div>
       ),
       width: COLUMN_WIDTH,
+      onCell: () => ({
+        className: s.timelineCell
+      }),
       render: (_: any, record: GanttRecord) => {
+        if (record.children || !record.start || !record.end) return null;
+
         const taskStart = dayjs(record.start);
+        const taskEnd = dayjs(record.end);
 
-        // Рисуем полоску только если задача начинается именно в ЭТУ неделю
-        const isStartWeek = taskStart.isBetween(sDate, eDate, 'day', '[]');
+        const isTaskInWeek = !(taskEnd.isBefore(sDate, 'day') || taskStart.isAfter(eDate, 'day'));
 
-        if (isStartWeek && !record.children) {
-          const taskEnd = dayjs(record.end);
-          const durationDays = taskEnd.diff(taskStart, 'day') + 1;
-          const startOffsetDays = taskStart.diff(sDate, 'day');
+        if (isTaskInWeek) {
+          const startInWeek = taskStart.isBefore(sDate, 'day') ? sDate : taskStart;
+          const endInWeek = taskEnd.isAfter(eDate, 'day') ? eDate : taskEnd;
 
-          const leftOffset = startOffsetDays * (COLUMN_WIDTH / 7);
-          const totalWidth = durationDays * (COLUMN_WIDTH / 7);
+          const daysActiveInWeek = endInWeek.diff(startInWeek, 'day') + 1;
+          const offsetDays = startInWeek.diff(sDate, 'day');
+
+          const leftPercent = (offsetDays / 7) * 100;
+          const widthPercent = (daysActiveInWeek / 7) * 100;
+
+          const isActualStart = taskStart.isBetween(sDate, eDate, 'day', '[]');
+          const isActualEnd = taskEnd.isBetween(sDate, eDate, 'day', '[]');
+
+          const responsibleName = record.responsible || 'default';
+          const barColor = colorMap[responsibleName];
 
           return (
             <div className={s.anchorCell}>
@@ -83,7 +108,7 @@ const generateGanttColumns = (startDate: string, endDate: string) => {
                 title={
                   <div style={{ padding: '4px' }}>
                     <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{record.task}</div>
-                    <div>Исполнитель: <b>{record.responsible}</b></div>
+                    <div>Исполнитель: <b>{record.responsible || 'Не назначен'}</b></div>
                     <div>Сроки: {taskStart.format('DD.MM')} - {taskEnd.format('DD.MM')}</div>
                     <div>Прогресс: {record.progress}%</div>
                   </div>
@@ -92,12 +117,18 @@ const generateGanttColumns = (startDate: string, endDate: string) => {
                 <div
                   className={s.absoluteTaskBar}
                   style={{
-                    left: leftOffset,
-                    width: totalWidth,
-                    backgroundColor: RESPONSIBLE_COLORS[record.responsible || 'default'],
+                    left: `${leftPercent}%`,
+                    width: `${widthPercent}%`,
+                    backgroundColor: barColor,
+                    borderRadius: `
+                      ${isActualStart ? '8px' : '0px'} 
+                      ${isActualEnd ? '8px' : '0px'} 
+                      ${isActualEnd ? '8px' : '0px'} 
+                      ${isActualStart ? '8px' : '0px'}
+                    `,
                   }}
                 >
-                  {record.responsible}
+                  {isActualStart && record.responsible}
                 </div>
               </Tooltip>
             </div>
@@ -107,7 +138,6 @@ const generateGanttColumns = (startDate: string, endDate: string) => {
       },
     });
 
-    // Переходим к следующему понедельнику
     currentWeekStart = currentWeekStart.add(7, 'day');
   }
 
@@ -115,8 +145,32 @@ const generateGanttColumns = (startDate: string, endDate: string) => {
 };
 
 const fixedColumns = [
-  { title: 'Задача', dataIndex: 'task', key: 'task', width: 120, fixed: 'left' as const },
-  { title: 'Длительность', dataIndex: 'duration', key: 'duration', width: 130, fixed: 'left' as const },
+  {
+    title: 'Задача',
+    dataIndex: 'task',
+    key: 'task',
+    width: 160, // Можно слегка увеличить базовую ширину
+    fixed: 'left' as const,
+    ellipsis: true, // Включает автоматическое троеточие от Ant Design
+    render: (text: string) => (
+      <Tooltip
+        title={text}
+        placement="top"       /* Появляется сверху (можно "topLeft", "right" и т.д.) */
+        mouseEnterDelay={0.3} /* Небольшая задержка в сек, чтобы не раздражать при быстром скролле */
+      >
+        <span style={{ cursor: 'pointer' }}>{text}</span>
+      </Tooltip>
+    )
+  },
+  {
+    title: 'Длительность',
+    dataIndex: 'duration',
+    key: 'duration',
+    width: 110,
+    fixed: 'left' as const,
+    ellipsis: true,
+    render: (text: string) => <span title={text}>{text}</span>
+  },
   {
     title: 'Готовность',
     dataIndex: 'progress',
@@ -126,60 +180,47 @@ const fixedColumns = [
   },
 ];
 
-const ganttData: GanttRecord[] = [
-  {
-    id: '1',
-    task: 'Задача 1',
-    duration: '10 дней',
-    progress: 55,
-    children: [
-      { id: '1-1', task: 'Аналитика', duration: '3 дня', progress: 100, responsible: 'Соня', start: '2026-03-02', end: '2026-03-08' },
-      { id: '1-2', task: 'Разработка', duration: '6 дней', progress: 20, responsible: 'Иван', start: '2026-03-09', end: '2026-03-25' },
-      { id: '1-3', task: 'Тестирование', duration: '5 дней', progress: 3, responsible: 'Анна', start: '2026-03-18', end: '2026-03-24' },
-    ]
-  },
-  {
-    id: '2',
-    task: 'Задача 2',
-    duration: '12 дней',
-    progress: 0,
-    children: [
-      { id: '2-1', task: 'Интеграция', duration: '3 дня', progress: 0, responsible: 'Анна', start: '2026-03-18', end: '2026-03-24' },
-    ]
-  },
-  {
-    id: '3',
-    task: 'Задача 3',
-    duration: '11 дней',
-    progress: 0,
-    children: [
-      { id: '3-1', task: 'Интеграция', duration: '3 дня', progress: 0, responsible: 'Соня', start: '2026-03-18', end: '2026-04-24' },
-    ]
-  }
-];
+export const TasksGanttChart: React.FC<TasksGanttChartProps> = ({ data, viewRange }) => {
+  // Динамически собираем карту цветов для всех уникальных исполнителей из пришедших данных
+  const autoResponsibleColors = useMemo(() => {
+    const colors: Record<string, string> = { default: '#1890ff' };
 
-const COLUMN_WIDTH = 85;
+    const extractResponsibles = (records: GanttRecord[]) => {
+      records.forEach(item => {
+        if (item.responsible && !colors[item.responsible]) {
+          colors[item.responsible] = generateColorByName(item.responsible);
+        }
+        if (item.children) {
+          extractResponsibles(item.children);
+        }
+      });
+    };
 
-export const TasksGanttChart = (viewRange = { start: '2026-03-01', end: '2026-07-31' }) => {
-  const dynamicColumns = generateGanttColumns(viewRange.start, viewRange.end);
+    extractResponsibles(data);
+    return colors;
+  }, [data]);
 
-  const columns = [...fixedColumns, ...dynamicColumns];
+  const dynamicColumns = useMemo(() => {
+    return generateGanttColumns(viewRange.start, viewRange.end, autoResponsibleColors);
+  }, [viewRange.start, viewRange.end, autoResponsibleColors]);
+
+  const columns = useMemo(() => [...fixedColumns, ...dynamicColumns], [dynamicColumns]);
 
   return (
     <div className={s.ganttCard}>
-      <div className={s.header}>
-        <h2 className={s.title}>ПЛАН ПО ЗАДАЧАМ</h2>
-      </div>
       <div className={s.ganttContainer}>
         <Table
           className={s.ganttTable}
           rowKey="id"
-          indentSize={0}
+          indentSize={15}
           columns={columns}
-          dataSource={ganttData}
+          dataSource={data}
           pagination={false}
           bordered
-          scroll={{ x: 'max-content' }}
+          scroll={{
+            x: 'max-content',
+            y: 380
+          }}
         />
       </div>
     </div>

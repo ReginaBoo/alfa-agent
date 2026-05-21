@@ -3,17 +3,35 @@
   padding: 20px;
 }
 
-
+/* --- AI СЕКЦИЯ --- */
 .aiSection {
+  display: flex;
+  flex-direction: column;
   padding: 20px;
   border-radius: 8px;
   background-color: #ffffff;
+  height: 450px;
+}
+
+.aiSection :global(.ant-empty) {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ИСПРАВЛЕНО: заставляем лоадер занять ВСЁ свободное место под заголовком */
+.aiSection :global(.ant-row) {
+  flex-grow: 1;
+  min-height: 0 !important;
+  /* Сбрасываем инлайновые 200px, чтобы флекс работал корректно */
+  height: 100%;
 }
 
 .blueTitle {
   margin: 0;
   margin-bottom: 10px;
-
   padding: 0;
   color: #02489B !important;
   font-size: 16px !important;
@@ -21,6 +39,95 @@
   text-transform: uppercase;
 }
 
+/* --- СЕКЦИЯ ЗАГРУЗКИ КОМАНД --- */
+.loadSection {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  padding: 20px;
+  width: auto;
+  height: 270px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.loadSection :global(.ant-empty) {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ИСПРАВЛЕНО: аналогично убираем жесткие 270px */
+.loadSection> :global(.ant-row) {
+  flex-grow: 1;
+  min-height: 0 !important;
+  height: 100%;
+}
+
+/* --- СЕКЦИЯ СТАТИСТИКИ --- */
+.statsSection {
+  display: flex;
+  flex-direction: column;
+  min-height: 170px;
+}
+
+.statsSection :global(.ant-empty) {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.statsSection> :global(.ant-row) {
+  flex-grow: 1;
+  min-height: 0 !important;
+  height: 100%;
+}
+
+/* --- СЕКЦИЯ ГРАФИКА АКТИВНОСТИ --- */
+.chartSection {
+  display: flex;
+  flex-direction: column;
+  min-height: 550px;
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.chartSection :global(.ant-empty) {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.chartSection>.blueTitle+* {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  /* Центрируем содержимое по вертикали */
+  align-items: center;
+  /* Центрируем содержимое по горизонтали */
+
+  /* Сбрасываем жесткие 200px из пропсов, чтобы элемент занял все 550px секции */
+  min-height: 0 !important;
+  height: 100%;
+}
+
+/* ИСПРАВЛЕНО: добавили стрелочный селектор для точности */
+.chartSection> :global(.ant-row) {
+  flex-grow: 1;
+  min-height: 0 !important;
+  height: 100%;
+}
+
+/* Вспомогательные плейсхолдеры */
 .placeholder,
 .placeholderCard,
 .chartPlaceholder {
@@ -39,21 +146,4 @@
 
 .projectsGrid {
   min-height: 180px;
-}
-
-.loadSection {
-  background: #ffffff;
-  padding: 20px;
-  width: auto;
-  height: full;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-}
-
-.chartSection {
-  min-height: 200px;
-  background: #ffffff;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }

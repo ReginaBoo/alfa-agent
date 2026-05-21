@@ -10,9 +10,8 @@
 }
 
 .projectSelect {
-  min-width: 150px;
+  min-width: 160px;
   border-radius: 8px;
-
   min-height: 40px;
   color: #616161;
   display: flex;
@@ -21,4 +20,36 @@
 
   text-align: center;
 
+}
+
+/* Делаем кнопку фильтра строго квадратной */
+.filterButton {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Стили для самого выпадающего меню */
+.dropdownMenu {
+  padding: 10px 0 !important;
+  min-width: 180px;
+  /* Задаем ширину, чтобы текст "Pull Requests" не сжимался */
+}
+
+/* Стили для каждого пункта */
+.menuItem {
+  padding: 8px 16px !important;
+}
+
+/* Выравниваем иконку и текст внутри чекбокса */
+.itemContent {
+  gap: 8px !important;
+  color: #262626;
+}
+
+/* Делаем иконки чуть блеклыми, чтобы не перебивали текст */
+.itemContent span:first-child {
+  color: #8c8c8c;
 }

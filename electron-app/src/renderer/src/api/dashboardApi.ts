@@ -1,11 +1,37 @@
 import axios from 'axios';
-import { ProjectActivityItem, DashboardPeriod, InsightItem, ProjectStatsItem, LoadChartItem } from '../types/dashboard';
-import { mockBackendData, mockInsightsData, mockProjectStats, mockLoadData } from './mocks/mocks';
+import {
+  ProjectActivityItem,
+  DashboardPeriod,
+  InsightItem,
+  ProjectStatsItem,
+  LoadChartItem,
+  ProjectItem, GanttProjectResponse // Импортируем тип проекта
+} from '../types/dashboard';
+import {
+  mockBackendData,
+  mockInsightsData,
+  mockProjectStats,
+  mockLoadData,
+  mockProjectsData, mockGanttData// Импортируем мок проектов
+} from './mocks/mocks';
 
-let URL = 'localhost:8080'
+
+const URL = 'http://localhost:8080';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
+
 export const dashboardApi = {
+  getProjects: async (): Promise<ProjectItem[]> => {
+    if (!USE_MOCKS) {
+      return new Promise((resolve) => {
+        setTimeout(() => { resolve(mockProjectsData); }, 500);
+      });
+    }
+
+    const response = await axios.get<ProjectItem[]>(`${URL}/api/projects`);
+    return response.data;
+  },
+
   getProjectActivity: async (period: DashboardPeriod): Promise<ProjectActivityItem[]> => {
     if (USE_MOCKS) {
       return new Promise((resolve) => {
@@ -13,7 +39,7 @@ export const dashboardApi = {
       });
     }
 
-    const response = await axios.get<ProjectActivityItem[]>(URL + '/api/projects-activity', {
+    const response = await axios.get<ProjectActivityItem[]>(`${URL}/api/projects-activity`, {
       params: { period }
     });
 
@@ -24,7 +50,7 @@ export const dashboardApi = {
     if (USE_MOCKS) {
       return new Promise((resolve) => setTimeout(() => resolve(mockInsightsData), 500));
     }
-    const response = await axios.get<InsightItem[]>(URL + '/api/ai - insights');
+    const response = await axios.get<InsightItem[]>(`${URL}/api/ai-insights`);
     return response.data;
   },
 
@@ -32,7 +58,9 @@ export const dashboardApi = {
     if (USE_MOCKS) {
       return new Promise((resolve) => setTimeout(() => resolve(mockProjectStats), 500));
     }
-    const response = await axios.get<ProjectStatsItem[]>('/api/projects-stats', { params: { period } });
+    const response = await axios.get<ProjectStatsItem[]>(`${URL}/api/projects-stats`, {
+      params: { period }
+    });
     return response.data;
   },
 
@@ -40,8 +68,22 @@ export const dashboardApi = {
     if (USE_MOCKS) {
       return new Promise((resolve) => setTimeout(() => resolve(mockLoadData), 500));
     }
-    const response = await axios.get<LoadChartItem[]>('/api/teams-load', { params: { period } });
+    const response = await axios.get<LoadChartItem[]>(`${URL}/api/teams-load`, {
+      params: { period }
+    });
+    return response.data;
+  },
+
+  getProjectTasks: async (projectId: string, period: DashboardPeriod): Promise<GanttProjectResponse> => {
+    if (USE_MOCKS) {
+      return new Promise((resolve) => {
+        setTimeout(() => { resolve(mockGanttData); }, 500);
+      });
+    }
+
+    const response = await axios.get<GanttProjectResponse>(`${URL}/api/projects/${projectId}/tasks`, {
+      params: { period },
+    });
     return response.data;
   }
 };
-
