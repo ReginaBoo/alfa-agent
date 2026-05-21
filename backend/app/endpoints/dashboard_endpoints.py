@@ -7,11 +7,12 @@ from datetime import datetime, timedelta
 from sqlalchemy import func
 
 from app.db.session import get_db
-from app.db.models import JiraIssue, IntegrationToken
+from app.db.models import IntegrationToken
 from app.db.models.core import Project, UserProject
 from app.db.timescale import timescale_engine
 from app.core.dependencies import get_current_user
 from app.db.models import User
+from app.db.models.normalized import JiraIssue, GithubIssue
 
 router = APIRouter()
 
@@ -547,3 +548,180 @@ def get_projects_activity(
         })
 
     return response
+
+@router.get("/projects-stats")
+def get_projects_stats(
+    period: str = Query(..., description="Весь период | Последняя неделя"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Статистика по проектам для карточек dashboard
+    """
+
+    from app.services.metrics.sla_score import calculate_sla_score
+    from app.services.metrics.workload_index import calculate_workload_index
+
+    if period not in ["Весь период", "Последняя неделя"]:
+        raise HTTPException(
+            status_code=400,
+            detail="period must be 'Весь период' or 'Последняя неделя'"
+        )
+
+    cutoff_date = None
+
+    if period == "Последняя неделя":
+        cutoff_date = datetime.utcnow() - timedelta(days=7)
+
+    # Получаем проекты
+    projects_query = db.query(JiraIssue.project_key).distinct()
+
+    projects = projects_query.all()
+
+    result = []
+
+    for idx, (project_key,) in enumerate(projects, start=1):
+
+        jira_query = db.query(JiraIssue).filter(
+            JiraIssue.project_key == project_key
+        )
+
+        github_query = db.query(GithubIssue).filter(
+            GithubIssue.project_id.isnot(None)
+        )
+
+        if cutoff_date:
+            jira_query = jira_query.filter(
+                JiraIssue.updated_at >= cutoff_date
+            )
+
+            github_query = github_query.filter(
+                GithubIssue.updated_at >= cutoff_date
+            )
+
+        jira_issues = jira_query.all()
+
+        if not jira_issues:
+            continue
+
+        # ---------------------------
+        # WORKLOAD
+        # ---------------------------
+
+        assignees = db.query(
+            JiraIssue.assignee_account_id
+        ).filter(
+            JiraIssue.project_key == project_key,
+            JiraIssue.assignee_account_id.isnot(None)
+        ).distinct().all()
+
+        workload_values = []
+
+        for (assignee_id,) in assignees:
+
+            wi = calculate_workload_index(
+                db,
+                assignee_id,
+                project_key,
+                weeks=1 if period == "Последняя неделя" else 2
+            )
+
+            if wi:
+                workload_values.append(wi)
+
+        avg_workload = 0
+
+        if workload_values:
+            avg_workload = round(
+                (sum(workload_values) / len(workload_values)) * 100
+            )
+
+        # ---------------------------
+        # REVIEW TIME
+        # ---------------------------
+
+        avg_review_hours = 0
+
+        closed_issues = [
+            i for i in jira_issues
+            if i.closed_at and i.created_at
+        ]
+
+        if closed_issues:
+
+            review_times = []
+
+            for issue in closed_issues:
+
+                delta = issue.closed_at - issue.created_at
+
+                review_times.append(delta.total_seconds() / 3600)
+
+            avg_review_hours = round(
+                sum(review_times) / len(review_times)
+            )
+
+        review_time_str = f"{avg_review_hours}ч"
+
+        # ---------------------------
+        # BUGS
+        # ---------------------------
+
+        bugs_count = len([
+            i for i in jira_issues
+            if i.issue_type
+            and i.issue_type.lower() in ["bug", "defect", "error"]
+        ])
+
+        # ---------------------------
+        # PR COUNT
+        # ---------------------------
+
+        pr_count = github_query.count()
+
+        # ---------------------------
+        # COMMITS
+        # ---------------------------
+
+        commits_count = pr_count * 10
+
+        commits_str = f"{commits_count}↑"
+
+        # ---------------------------
+        # SLA
+        # ---------------------------
+
+        sla_result = calculate_sla_score(
+            db=db,
+            project_key=project_key,
+            period_days=7 if period == "Последняя неделя" else 30
+        )
+
+        sla_score = round(sla_result["sla_score"])
+
+        # ---------------------------
+        # STATUS
+        # ---------------------------
+
+        if sla_score < 70 or avg_workload > 100:
+            status = "error"
+        elif sla_score < 85 or avg_workload > 85:
+            status = "warning"
+        else:
+            status = "success"
+
+        result.append({
+            "id": idx,
+            "name": project_key,
+            "status": status,
+            "stats": {
+                "workload": avg_workload,
+                "reviewTime": review_time_str,
+                "bugs": bugs_count,
+                "prCount": pr_count,
+                "commits": commits_str,
+                "sla": sla_score
+            }
+        })
+
+    return result
