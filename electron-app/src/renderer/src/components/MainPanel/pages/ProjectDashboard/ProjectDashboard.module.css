@@ -1,0 +1,92 @@
+.wrapper {
+  width: 100%;
+  padding: 20px;
+}
+
+.aiSection {
+  padding: 20px;
+  border-radius: 8px;
+  background-color: #ffffff;
+  height: 280px;
+  width: 100%;
+}
+
+.blueTitle {
+  margin: 0;
+  margin-bottom: 10px;
+  padding: 0;
+  color: #02489B !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase;
+}
+
+.CycleSection {
+  height: 280px;
+  padding: 20px;
+  border-radius: 8px;
+  background-color: #ffffff;
+  display: flex;
+  gap: 20px;
+  flex-direction: column;
+  width: 100%;
+}
+
+.avgTime {
+  color: #02489B !important;
+  font-size: 16px;
+  font-weight: 500 !important;
+  margin-bottom: 10px;
+  color: #262626;
+}
+
+.downloadBtn {
+  background-color: #459AFF;
+  border-radius: 8px;
+  height: 40px !important;
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 8px;
+  box-shadow: none !important;
+}
+
+.projectSelect {
+  min-width: 150px;
+  border-radius: 8px;
+
+  min-height: 40px;
+  color: #616161;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  text-align: center;
+
+}
+
+.metricsSelect {
+  min-width: 100px;
+  border-radius: 8px;
+
+  min-height: 40px;
+  color: #616161;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  text-align: center;
+
+}
+
+.workloadStats {
+  width: 100%;
+}
+
+.focusStats {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  width: 100%;
+
+}

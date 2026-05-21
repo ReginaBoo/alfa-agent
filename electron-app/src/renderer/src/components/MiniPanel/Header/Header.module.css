@@ -1,0 +1,38 @@
+.customHeader {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  background: #ffffff;
+  border-bottom: 1px solid #CBD5E1;
+  padding: 0 4px 0 8px;
+  -webkit-app-region: drag;
+}
+
+.headerDragArea {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+
+.headerControlBtn {
+  width: 32px !important;
+  height: 32px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px !important;
+}
+
+.closeBtn:hover {
+  background-color: #ff4d4f !important;
+  color: white !important;
+}

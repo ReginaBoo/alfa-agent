@@ -1,0 +1,57 @@
+.projectCard :global(.ant-card-body) {
+  padding: 16px !important;
+  /* Уменьшаем стандартные 24px до 16px */
+}
+
+.projectCard {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.projectTitle {
+  margin: 0 !important;
+  color: #003a8c !important;
+  /* Темно-синий из макета */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.arrow {
+  font-size: 12px;
+  color: #bfbfbf;
+  transform: rotate(-45deg);
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px 4px;
+  text-align: center;
+  width: 100%;
+}
+
+.statItem {
+  display: flex;
+  flex-direction: column;
+}
+
+.statValue {
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.statLabel {
+  font-size: 10px;
+  color: #bfbfbf;
+  margin-top: 4px;
+}

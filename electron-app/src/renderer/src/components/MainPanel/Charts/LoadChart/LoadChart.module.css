@@ -1,0 +1,52 @@
+.chartContainer {
+  width: 100%;
+  position: relative;
+}
+
+/* Обертка самого Canvas графика */
+.chartCanvasWrapper {
+  height: 175px;
+
+}
+
+
+/* Легенда */
+.legendContainer {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin-top: 5px;
+  flex-wrap: wrap;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: #8C8C8C;
+}
+
+.legendMarker {
+  width: 12px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 2px;
+}
+
+:global(.g2-tooltip) {
+  max-width: 320px !important;
+  white-space: normal !important;
+}
+
+:global(.g2-tooltip-list-item) {
+  white-space: normal !important;
+}
+
+:global(.g2-tooltip-list-item-value) {
+  white-space: normal !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+
+  display: inline-block !important;
+  max-width: 220px !important;
+}

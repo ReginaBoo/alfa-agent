@@ -1,0 +1,61 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: 64px;
+  background: #ffffff;
+}
+
+.rocketIcon {
+  color: #3460DC;
+  font-size: 20px;
+  transition: transform 0.3s ease;
+}
+
+.leftSection {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.logo {
+  font-size: 20px;
+  color: #334155;
+}
+
+.logoTitle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #334155;
+}
+
+.rightSection {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.projectSelect {
+  min-width: 150px;
+  color: #616161;
+
+}
+
+.iconBtn {
+  font-size: 18px;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.iconBtn:hover {
+  color: #3460DC;
+}

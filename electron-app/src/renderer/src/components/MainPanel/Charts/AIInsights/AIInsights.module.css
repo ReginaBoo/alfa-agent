@@ -1,0 +1,100 @@
+.insightsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-right: 20px;
+  overflow-y: auto;
+}
+
+
+.insightsContainer.detailed {
+  max-height: 380px;
+}
+
+.insightsContainer.compact {
+  max-height: 200px;
+  gap: 8px;
+}
+
+.insightCard {
+  position: relative;
+  padding: 16px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.insightsContainer::-webkit-scrollbar {
+  width: 4px;
+  background: #E9E9E9;
+  padding-left: 10px;
+}
+
+.insightsContainer::-webkit-scrollbar-thumb {
+  background: #459AFF;
+  border-radius: 10px;
+}
+
+/* Типы карточек */
+.error {
+  background: #fff1f0;
+  border-left: 6px solid #ff4d4f;
+}
+
+.warning {
+  background: #fffbe6;
+  border-left: 6px solid #ffc53d;
+}
+
+.success {
+  background: #f0f5ff;
+  border-left: 6px solid #adc6ff;
+  border: 1px solid #f0f0f0;
+}
+
+.contentRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.mainText {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #262626;
+  max-width: 90%;
+}
+
+.recommendationBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.verticalLine {
+  width: 2px;
+  height: 24px;
+  background: currentColor;
+  opacity: 0.3;
+}
+
+.recommendationText {
+  font-size: 12px;
+  font-weight: 500;
+  color: #595959;
+}
+
+/* Иконки */
+.statusIcon {
+  font-size: 18px;
+}
+
+.errorIcon {
+  color: #ff4d4f;
+}
+
+.warningIcon {
+  color: #ffc53d;
+}
