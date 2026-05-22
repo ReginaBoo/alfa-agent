@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "your-secret-key-change-in-production"
     
     REDIS_URL: str = "redis://redis:6379/0"
+    OPENROUTER_API_KEY: str
+    OPENROUTER_MODEL: str = "openai/gpt-4o-mini"
 
     @property
     def DATABASE_URL(self) -> str:

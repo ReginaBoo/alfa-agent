@@ -3,7 +3,7 @@
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from app.db.models import IntegrationToken, RawEvent, JiraIssue
@@ -198,10 +198,12 @@ class JiraSyncService:
         created_count = 0
         updated_count = 0
         changelog_added = 0
-        
+        all_actual_issue_keys = set()
         # Получаем закрытые статусы для проекта
         closed_statuses = self._get_closed_statuses_for_project(project_key)
-        
+        from datetime import datetime, timezone
+
+        sync_started_at = datetime.now(timezone.utc)
         while True:
             logger.info(f"Fetching issues for {project_key}, start_at={start_at}")
             
@@ -243,8 +245,11 @@ class JiraSyncService:
             # Обрабатываем каждую задачу
             for issue in issues:
                 issue_key = issue.get("key")
+
                 if not issue_key:
                     continue
+
+                all_actual_issue_keys.add(issue_key)
                 
                 total_issues += 1
                 fields = issue.get("fields", {})
@@ -357,6 +362,7 @@ class JiraSyncService:
                     existing.remaining_estimate = timetracking['remaining_estimate']
                     existing.closed_at = closed_at  # <-- ДОБАВЛЕНО
                     updated_count += 1
+                    existing.is_deleted = False
                 else:
                     # Создаём новую задачу
                     new_issue = JiraIssue(
@@ -378,19 +384,31 @@ class JiraSyncService:
                         original_estimate=timetracking['original_estimate'],
                         time_spent=timetracking['time_spent'],
                         remaining_estimate=timetracking['remaining_estimate'],
-                        closed_at=closed_at  # <-- ДОБАВЛЕНО
+                        closed_at=closed_at,  # <-- ДОБАВЛЕНО
+                        is_deleted=False
                     )
                     self.db.add(new_issue)
                     created_count += 1
-            
-            # Коммитим после каждой пачки
-            self.db.commit()
             
             # Проверяем, нужно ли продолжать
             start_at += max_results
             if start_at >= total:
                 break
-        
+        # Все issue_key, которые сейчас существуют в Jira
+        actual_issue_keys = all_actual_issue_keys
+
+        # Все задачи проекта в БД
+        db_issues = self.db.query(JiraIssue).filter(
+            JiraIssue.project_key == project_key
+        ).all()
+
+        # Если задача есть в БД, но её нет в Jira — помечаем удалённой
+        for db_issue in db_issues:
+            if db_issue.issue_key not in actual_issue_keys:
+                db_issue.is_deleted = True
+                # Коммитим после каждой пачки
+        self.db.commit()
+
         logger.info(f"Sync completed for {project_key}: "
                     f"created={created_count}, updated={updated_count}, "
                     f"changelog_entries={changelog_added}")
@@ -403,6 +421,7 @@ class JiraSyncService:
             "project_key": project_key,
             "instance_name": instance_name
         }
+    
     def get_project_statuses(self, project_key: str) -> list:
         """
         Возвращает синхронизированные статусы проекта

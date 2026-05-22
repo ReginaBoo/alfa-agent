@@ -6,6 +6,9 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 from sqlalchemy import func
 
+from app.core.config import settings
+from app.services.ai.insight_service import AIInsightService
+from app.services.ai.providers.openrouter_provider import OpenRouterProvider
 from app.db.session import get_db
 from app.db.models import IntegrationToken
 from app.db.models.core import Project, UserProject
@@ -823,3 +826,15 @@ def get_teams_load(
         })
 
     return result
+
+@router.get("/ai-insights")
+async def get_ai_insights(db=Depends(get_db)):
+
+    provider = OpenRouterProvider(
+        api_key=settings.OPENROUTER_API_KEY,
+        model=settings.OPENROUTER_MODEL
+    )
+
+    service = AIInsightService(db, provider)
+
+    return await service.build_insights()
