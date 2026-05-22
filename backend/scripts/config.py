@@ -32,21 +32,21 @@
 """
 
 # Jira Cloud настройки
-JIRA_INSTANCE = "instance"  # Замените на ваш instance (например: newsitealf)
+JIRA_INSTANCE = "newsitealf"  # Замените на ваш instance (например: newsitealf)
 JIRA_URL = f"https://{JIRA_INSTANCE}.atlassian.net"
 
 # Администратор Jira (нужен аккаунт с правами на создание пользователей и проектов)
 # Замените на email администратора Jira
-ADMIN_EMAIL = "ADMIN_EMAIL"
+ADMIN_EMAIL = "MY_EMAIL"
 
 # API Token администратора Jira
 # Получить можно здесь: https://id.atlassian.com/manage-profile/security/api-tokens
 # Замените на ваш API token
-API_TOKEN = "API_Token"
+API_TOKEN = "API_token"
 
 # Ваш email (будет руководителем всех проектов и исполнителем задач)
 # Замените на ваш email в Jira
-MY_EMAIL = "Замените_на_ваш_email_в_Jira"
+MY_EMAIL = "MY_EMAIL"
 
 # ============================================================
 # КОНФИГУРАЦИЯ ПРОЕКТОВ (замените на реальные проекты вашей компании)

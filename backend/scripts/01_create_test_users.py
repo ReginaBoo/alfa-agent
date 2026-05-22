@@ -144,11 +144,13 @@ def add_user_to_group(account_id: str, group_name: str = "jira-software-users") 
         return False
 
 
-def save_users_to_file(users: List[Dict], filename: str = 'scripts/.test_users.json'):
+def save_users_to_file(users: List[Dict], filename: str = '.test_users.json'):
     """Сохраняет пользователей в файл для других скриптов"""
-    # Убедимся, что директория существует
     script_dir = os.path.dirname(os.path.abspath(__file__))
     filepath = os.path.join(script_dir, filename)
+    
+    # Создаём директорию если нужно
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
     
     with open(filepath, 'w', encoding='utf-8') as f:
         json.dump(users, f, indent=2, ensure_ascii=False)

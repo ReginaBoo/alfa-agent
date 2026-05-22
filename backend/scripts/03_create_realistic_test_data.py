@@ -1,18 +1,9 @@
- #!/мандыusr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 03_create_realistic_test_data.py
 
 Создаёт РЕАЛИСТИЧНЫЕ тестовые данные для проверки метрик системы.
-
-Что делает:
-- Создаёт задачи с РАЗНЫМИ датами (распределёнными по неделям/месяцам)
-- Задачи в РАЗНЫХ статусах (не только Created/Done)
-- Разные временные интервалы между переходами (от 1 до 30 дней)
-- Разные сценарии для каждого профиля проекта
-- Реалистичные описания задач для обучения модели
-
-Запуск: python scripts/08_create_realistic_test_data.py
 """
 
 import requests
@@ -34,7 +25,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from config import (
     JIRA_URL, ADMIN_EMAIL, API_TOKEN,
     PROJECT_ASSIGNEES, ISSUES_PER_PROJECT,
-    PROJECT_WORKFLOWS, DEFAULT_WORKFLOW, MY_EMAIL 
+    PROJECT_WORKFLOWS, DEFAULT_WORKFLOW, MY_EMAIL,
+    TEST_PROJECTS
 )
 
 
@@ -44,7 +36,76 @@ def print_error(msg: str): print(f"ERR: {msg}")
 def print_warn(msg: str): print(f"WARN: {msg}")
 
 
-# Реалистичные описания задач для разных типов
+# ========== ФУНКЦИИ ДЛЯ УЧЁТА ХАРАКТЕРИСТИК ПРОЕКТОВ ==========
+
+def get_project_config_by_key(project_key: str) -> dict:
+    """Возвращает конфигурацию проекта из TEST_PROJECTS"""
+    for project in TEST_PROJECTS:
+        if project.get('key') == project_key:
+            return project
+    return {}
+
+
+def get_target_workload(project_key: str) -> float:
+    """Возвращает целевую загрузку для проекта"""
+    config = get_project_config_by_key(project_key)
+    return config.get('workload_target', 0.85)
+
+
+def get_bug_ratio_for_project(project_key: str) -> float:
+    """Возвращает процент багов в проекте"""
+    config = get_project_config_by_key(project_key)
+    profile = config.get('profile', '')
+    
+    if profile == 'buggy':
+        return config.get('bug_ratio', 0.6)
+    elif profile == 'overloaded':
+        return 0.3
+    elif profile == 'healthy':
+        return 0.15
+    elif profile == 'imbalanced':
+        return 0.2
+    else:
+        return 0.1
+
+
+def adjust_story_points_for_target_wi(project_key: str, base_sp: float) -> float:
+    """Корректирует Story Points для достижения целевой загрузки"""
+    target_wi = get_target_workload(project_key)
+    
+    if target_wi < 0.7:
+        adjustment = target_wi / 0.85
+    elif target_wi > 1.0:
+        adjustment = target_wi / 0.85
+    else:
+        adjustment = 1.0
+    
+    adjusted_sp = round(base_sp * adjustment, 1)
+    return max(adjusted_sp, 0.5)
+
+
+def get_weeks_back_for_scenario(scenario: str) -> int:
+    """Определяет, насколько старые задачи создавать в зависимости от сценария"""
+    if scenario in ["closed_slow", "stuck_progress", "stuck_review"]:
+        return random.randint(60, 120)  # 2-4 месяца
+    elif scenario in ["closed_normal"]:
+        return random.randint(21, 60)   # 3-8 недель
+    elif scenario in ["closed_fast", "open_progress"]:
+        return random.randint(7, 21)    # 1-3 недели
+    else:
+        return random.randint(0, 14)    # 0-2 недели
+
+
+def should_create_bug(project_key: str, scenario: str) -> bool:
+    """Определяет, нужно ли создать баг"""
+    if 'bug' in scenario:
+        return True
+    bug_ratio = get_bug_ratio_for_project(project_key)
+    return random.random() < bug_ratio
+
+
+# ========== ОСТАЛЬНЫЕ ФУНКЦИИ ==========
+
 TASK_DESCRIPTIONS = {
     "Task": [
         "Необходимо реализовать функционал экспорта данных в формате CSV с возможностью фильтрации по датам и категориям. Требуется протестировать на больших объемах данных (более 100k записей).",
@@ -192,30 +253,7 @@ def transition_issue(issue_key: str, transition_id: str, comment: str) -> bool:
         resp = requests.post(url, json=payload, auth=auth, timeout=60)
         return resp.status_code == 204
     except Exception as e:
-        print_warn(f"   Переход не удал: {e}")
-        return False
-
-
-def set_issue_created_date(issue_key: str, created_date: datetime) -> bool:
-    """Устанавливает дату создания задачи"""
-    auth = (ADMIN_EMAIL, API_TOKEN)
-    url = f"{JIRA_URL}/rest/api/3/issue/{issue_key}"
-    
-    payload = {
-        "update": {
-            "historyMetadata": {
-                "authorName": "Test Data Generator"
-            }
-        },
-        "fields": {
-            "created": created_date.strftime("%Y-%m-%dT%H:%M:%S")
-        }
-    }
-    
-    try:
-        resp = requests.put(url, json=payload, auth=auth, timeout=60)
-        return resp.status_code == 204
-    except Exception:
+        print_warn(f"   Переход не удался: {e}")
         return False
 
 
@@ -223,6 +261,22 @@ def get_realistic_description(issue_type: str) -> str:
     """Получает реалистичное описание для типа задачи"""
     descriptions = TASK_DESCRIPTIONS.get(issue_type, TASK_DESCRIPTIONS["Task"])
     return random.choice(descriptions)
+
+
+def get_days_gap_for_scenario(scenario: str, target_status: str = None) -> int:
+    """Возвращает интервал между переходами в днях"""
+    if scenario == "closed_fast":
+        return random.randint(1, 2)
+    elif scenario == "closed_normal":
+        return random.randint(2, 4)
+    elif scenario == "closed_slow":
+        return random.randint(5, 10)
+    elif scenario in ["stuck_progress", "stuck_review"]:
+        return random.randint(10, 20)
+    elif scenario == "open_progress":
+        return random.randint(2, 5)
+    else:
+        return random.randint(1, 5)
 
 
 def create_issue_with_scenario(
@@ -237,10 +291,8 @@ def create_issue_with_scenario(
     Создаёт задачу с реалистичным сценарием
     """
     
-    # Выбираем исполнителя
     assignee_id = get_random_assignee_for_project(project_key, users_by_email)
     
-    # Если не нашли исполнителя - назначаем на вас
     if not assignee_id:
         print_warn(f"   Нет исполнителей в {project_key}, назначаю на вас")
         assignee_id = your_account_id
@@ -248,8 +300,10 @@ def create_issue_with_scenario(
     statuses = workflow.get('statuses', DEFAULT_WORKFLOW['statuses'])
     closed_status = workflow.get('closed_status', DEFAULT_WORKFLOW['closed_status'])
     
-    # Выбираем тип задачи по сценарию
-    if 'bug' in scenario:
+    # Определяем тип задачи
+    buggy = should_create_bug(project_key, scenario)
+    
+    if buggy or 'bug' in scenario:
         issue_type = "Bug"
         story_points = random.choice([1, 2, 3])
         priority = random.choice(["High", "Highest", "Medium"])
@@ -259,36 +313,25 @@ def create_issue_with_scenario(
         priority = random.choice(["High", "Medium"])
     else:
         issue_type = random.choice(["Task", "Task", "Story"])
-        story_points = random.choice([2, 3, 5, 8])
+        base_sp = random.choice([2, 3, 5, 8])
+        story_points = adjust_story_points_for_target_wi(project_key, base_sp)
         priority = random.choice(["Low", "Medium", "High"])
     
-    # Даты
+    # Дата создания (для отображения, но не для API)
     today = datetime.now()
-    if scenario in ["open_new"]:
-        created_date = today - timedelta(days=random.randint(1, 5))
-    elif scenario in ["open_progress"]:
-        created_date = today - timedelta(days=random.randint(7, 20))
-    elif scenario in ["stuck_progress", "stuck_review"]:
-        created_date = today - timedelta(days=random.randint(15, 40))
-    elif scenario in ["closed_fast"]:
-        created_date = today - timedelta(days=random.randint(14, 30))
-    else:  # closed_normal, closed_slow
-        created_date = today - timedelta(days=random.randint(30, 120))
+    days_ago = get_weeks_back_for_scenario(scenario)
+    created_date = today - timedelta(days=days_ago)
     
-    # Описание
     description = get_realistic_description(issue_type)
     
-    # Summary
     type_prefix = {"Task": "[TASK]", "Bug": "[BUG]", "Story": "[STORY]"}
     prefix = type_prefix.get(issue_type, "[TASK]")
     summary = f"{prefix} {project_key}-{issue_num}: {scenario.replace('_', ' ').title()}"
     
-    # Метки
     labels = ["test-data", scenario.replace("_", "-")]
     
     print_info(f"Создание {summary}...")
     
-    # Создаём задачу с назначением тебе
     issue_key = create_issue_with_assignee(
         project_key=project_key,
         issue_type=issue_type,
@@ -306,16 +349,14 @@ def create_issue_with_scenario(
     print(f"   Создана {issue_key}")
     
     if scenario in ["open_new"]:
-        # Новая задача - не трогаем
         return {
             "key": issue_key,
             "type": issue_type,
             "closed": False,
             "scenario": scenario,
-            "created_date": created_date.strftime('%Y-%m-%d')
+            "story_points": story_points
         }
-        
-    # Получаем переходы
+    
     time.sleep(0.5)
     transitions = get_transitions(issue_key)
     
@@ -326,37 +367,16 @@ def create_issue_with_scenario(
             "type": issue_type,
             "closed": False,
             "scenario": scenario,
-            "created_date": created_date.strftime('%Y-%m-%d'),
             "error": "no_transitions"
         }
     
     transition_map = {t.get('to', {}).get('name'): t for t in transitions}
     
-    # Выполняем переходы в зависимости от сценария
-    transitions_log = []
-    
-    if scenario == "closed_fast":
-        # Полный цикл быстро
+    if scenario in ["closed_fast", "closed_normal", "closed_slow"]:
         target_statuses = statuses[1:]
-        days_per_status = random.randint(1, 3)
-        
-    elif scenario == "closed_normal":
-        # Полный цикл нормально
-        target_statuses = statuses[1:]
-        days_per_status = random.randint(3, 7)
-        
-    elif scenario == "closed_slow":
-        # Полный цикл медленно
-        target_statuses = statuses[1:]
-        days_per_status = random.randint(7, 15)
-        
     elif scenario == "stuck_progress":
-        # Застряла в работе
         target_statuses = [statuses[1]] if len(statuses) > 1 else []
-        days_per_status = random.randint(10, 20)
-        
     elif scenario == "stuck_review":
-        # Застряла на проверке
         review_statuses = ["На проверке", "Review", "Тестирование"]
         review_idx = None
         for i, s in enumerate(statuses):
@@ -364,18 +384,12 @@ def create_issue_with_scenario(
                 review_idx = i
                 break
         target_statuses = statuses[1:review_idx+1] if review_idx else statuses[1:2]
-        days_per_status = random.randint(5, 10)
-        
     elif scenario == "open_progress":
-        # В работе
         target_statuses = [statuses[1]] if len(statuses) > 1 else []
-        days_per_status = random.randint(5, 15)
-        
     else:
         target_statuses = statuses[1:]
-        days_per_status = 5
     
-    current_date = created_date
+    transitions_log = []
     transitions_made = 0
     
     for i, target in enumerate(target_statuses):
@@ -383,9 +397,8 @@ def create_issue_with_scenario(
             print_warn(f"   Нет перехода в {target}")
             continue
         
-        current_date += timedelta(days=days_per_status)
+        days_gap = get_days_gap_for_scenario(scenario, target)
         
-        # Комментарий
         if i == 0:
             comment = "Задача взята в работу"
         elif target in ["На проверке", "Review", "Тестирование"]:
@@ -399,10 +412,9 @@ def create_issue_with_scenario(
         
         if success:
             transitions_made += 1
-            print(f"   -> {target} ({days_per_status} дн.)")
+            print(f"   -> {target} (+{days_gap} дн.)")
             transitions_log.append({
                 "to": target,
-                "date": current_date.strftime('%Y-%m-%d'),
                 "comment": comment
             })
             
@@ -423,14 +435,12 @@ def create_issue_with_scenario(
         "transitions": transitions_made,
         "final_status": final_status,
         "scenario": scenario,
-        "created_date": created_date.strftime('%Y-%m-%d'),
         "transitions_log": transitions_log
     }
 
 
 def get_scenarios_for_project(profile: str, total: int) -> List[str]:
     """Определяет сценарии для проекта на основе профиля"""
-    
     scenarios = []
     
     if profile == "healthy":
@@ -496,12 +506,36 @@ def get_scenarios_for_project(profile: str, total: int) -> List[str]:
     return scenarios
 
 
+def get_random_assignee_for_project(project_key: str, users_by_email: Dict) -> Optional[str]:
+    """Получает случайного исполнителя из команды проекта"""
+    
+    project_team = PROJECT_ASSIGNEES.get(project_key, {})
+    
+    potential_assignees = []
+    
+    if project_team.get('team_lead'):
+        potential_assignees.append(project_team['team_lead'])
+    
+    potential_assignees.extend(project_team.get('developers', []))
+    potential_assignees.extend(project_team.get('qa', []))
+    potential_assignees.extend(project_team.get('analysts', []))
+    potential_assignees.extend(project_team.get('devops', []))
+    potential_assignees.extend(project_team.get('designers', []))
+    
+    potential_assignees = [a for a in set(potential_assignees) if a]
+    
+    if not potential_assignees:
+        return None
+    
+    selected_email = random.choice(potential_assignees)
+    return users_by_email.get(selected_email)
+
+
 def main():
     print("=" * 70)
     print("СОЗДАНИЕ РЕАЛИСТИЧНЫХ ТЕСТОВЫХ ДАННЫХ")
     print("=" * 70)
     
-    # Загружаем пользователей
     users_file = os.path.join(os.path.dirname(__file__), '.test_users.json')
     if not os.path.exists(users_file):
         print_error("Файл с пользователями не найден!")
@@ -513,7 +547,6 @@ def main():
     users_by_email = {user['email']: user['account_id'] for user in users}
     print_info(f"Пользователей: {len(users_by_email)}")
     
-    # Получаем ваш accountId
     your_account_id = users_by_email.get(MY_EMAIL)
     if not your_account_id:
         print_warn(f"Ваш аккаунт не найден в файле, ищем через API...")
@@ -537,7 +570,6 @@ def main():
             return
     print_info(f"Ваш accountId: {your_account_id}")
     
-    # Проверка подключения
     print_info("Проверка подключения...")
     try:
         resp = requests.get(f"{JIRA_URL}/rest/api/3/serverInfo", 
@@ -550,7 +582,6 @@ def main():
         print_error(f"Ошибка: {e}")
         return
     
-    # Проекты с профилями
     projects_config = {
         "HEALTH": {"profile": "healthy", "workflow": PROJECT_WORKFLOWS.get("HEALTH", DEFAULT_WORKFLOW)},
         "CRUNCH": {"profile": "overloaded", "workflow": PROJECT_WORKFLOWS.get("CRUNCH", DEFAULT_WORKFLOW)},
@@ -572,11 +603,16 @@ def main():
         total_issues = ISSUES_PER_PROJECT.get(project_key, 20)
         statuses = workflow.get('statuses', DEFAULT_WORKFLOW['statuses'])
         
+        target_wi = get_target_workload(project_key)
+        bug_ratio = get_bug_ratio_for_project(project_key)
+        
         print(f"\n{'='*70}")
         print(f"Проект: {project_key} (профиль: {profile})")
         print(f"{'='*70}")
         print(f"   Workflow: {' -> '.join(statuses)}")
         print(f"   Задач: {total_issues}")
+        print(f"   Целевая загрузка: {target_wi*100:.0f}%")
+        print(f"   Доля багов: {bug_ratio*100:.0f}%")
         
         scenarios = get_scenarios_for_project(profile, total_issues)
         
@@ -610,16 +646,17 @@ def main():
         closed_in_project = sum(1 for r in project_results if r.get('closed'))
         print(f"\nOK Проект {project_key}: {len(project_results)} задач, закрыто {closed_in_project}")
     
-        # Итоговый отчёт
     print(f"\n{'='*70}")
     print("ИТОГОВЫЙ ОТЧЁТ")
     print(f"{'='*70}")
-    print(f"   Всего создано задач: {total_created}")
-    print(f"   Закрыто: {total_closed} ({total_closed/total_created*100:.1f}%)")
-    print(f"   Застрявшие: {total_stuck}")
-    print(f"   Открытые: {total_open}")
+    if total_created > 0:
+        print(f"   Всего создано задач: {total_created}")
+        print(f"   Закрыто: {total_closed} ({total_closed/total_created*100:.1f}%)")
+        print(f"   Застрявшие: {total_stuck}")
+        print(f"   Открытые: {total_open}")
+    else:
+        print("   ❌ Нет созданных задач!")
     
-    # Сохранение
     script_dir = os.path.dirname(os.path.abspath(__file__))
     result_file = os.path.join(script_dir, '.realistic_test_data.json')
     with open(result_file, 'w', encoding='utf-8') as f:
@@ -640,47 +677,6 @@ def main():
     print("СЛЕДУЮЩИЙ ШАГ:")
     print("   python scripts/04_sync_and_check.py")
     print(f"{'='*70}")
-
-# Добавьте эту функцию для получения случайного разработчика из проекта
-def get_random_assignee_for_project(project_key: str, users_by_email: Dict) -> Optional[str]:
-    """Получает случайного исполнителя из команды проекта"""
-    
-    project_team = PROJECT_ASSIGNEES.get(project_key, {})
-    
-    # Собираем всех возможных исполнителей из проекта
-    potential_assignees = []
-    
-    # Добавляем тимлида
-    if project_team.get('team_lead'):
-        potential_assignees.append(project_team['team_lead'])
-    
-    # Добавляем разработчиков
-    potential_assignees.extend(project_team.get('developers', []))
-    
-    # Добавляем QA
-    potential_assignees.extend(project_team.get('qa', []))
-    
-    # Добавляем аналитиков
-    potential_assignees.extend(project_team.get('analysts', []))
-    
-    # Добавляем девопсов
-    potential_assignees.extend(project_team.get('devops', []))
-    
-    # Добавляем дизайнеров
-    potential_assignees.extend(project_team.get('designers', []))
-    
-    # Удаляем дубликаты и None
-    potential_assignees = [a for a in set(potential_assignees) if a]
-    
-    if not potential_assignees:
-        return None
-    
-    # Выбираем случайного
-    selected_email = random.choice(potential_assignees)
-    
-    # Конвертируем email в accountId
-    return users_by_email.get(selected_email)
-
 
 
 if __name__ == "__main__":

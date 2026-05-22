@@ -9,8 +9,46 @@ from app.db.models.core import Project, UserProject
 from app.db.models import IntegrationToken
 from app.db.models.normalized import ProjectStatusMapping
 import requests
+import asyncio
 
 logger = logging.getLogger(__name__)
+
+
+def _make_jira_request_with_refresh(
+    url: str,
+    token: IntegrationToken,
+    db: Session,
+    user_id: int,
+    method: str = "GET",
+    timeout: int = 30
+) -> requests.Response:
+    """
+    Выполняет запрос к Jira API с автоматическим обновлением токена при 401
+    """
+    from app.services.token_refresh_service import TokenRefreshService
+    
+    headers = {"Authorization": f"Bearer {token.access_token}"}
+    
+    for attempt in range(2):
+        response = requests.request(
+            method=method,
+            url=url,
+            headers=headers,
+            timeout=timeout
+        )
+        
+        if response.status_code == 401 and attempt == 0:
+            logger.info(f"Token expired, refreshing for user {user_id}")
+            TokenRefreshService.update_user_tokens(db, user_id)
+            
+            # Обновляем токен в БД
+            db.refresh(token)
+            headers["Authorization"] = f"Bearer {token.access_token}"
+            continue
+        
+        return response
+    
+    return response
 
 
 def sync_projects_from_jira(
@@ -37,18 +75,21 @@ def sync_projects_from_jira(
             raise ValueError(f"Token not found for site {instance_name}")
         
         cloud_id = token.instance_id
-        access_token = token.access_token
         provider_user_id = token.provider_user_id
     else:
+        # Создаём временный объект токена для передачи
+        token = IntegrationToken(
+            instance_id=token_instance_id,
+            access_token=token_access_token,
+            user_id=user_id
+        )
         cloud_id = token_instance_id
-        access_token = token_access_token
         provider_user_id = None
     
-    # Запрашиваем проекты из Jira API
+    # Запрашиваем проекты из Jira API с автообновлением
     url = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3/project"
-    headers = {"Authorization": f"Bearer {access_token}"}
     
-    response = requests.get(url, headers=headers, timeout=30)
+    response = _make_jira_request_with_refresh(url, token, db, user_id)
     response.raise_for_status()
     
     jira_projects = response.json()
@@ -63,12 +104,13 @@ def sync_projects_from_jira(
         
         # Проверяем, существует ли проект в нашей БД
         existing = db.query(Project).filter(Project.key == project_key).first()
+        jira_ui_url = f"https://{instance_name}.atlassian.net/jira/software/projects/{project_key}"
         
         project_data = {
             'key': project_key,
             'name': jp['name'],
             'jira_project_key': project_key,
-            'url': jp.get('self'),
+            'url': jira_ui_url,
             'avatar_url': jp.get('avatarUrls', {}).get('48x48'),
             'category': jp.get('projectTypeKey'),
             'description': jp.get('description', ''),
@@ -100,64 +142,99 @@ def sync_projects_from_jira(
     db.commit()
     logger.info(f"Projects saved: {created_count} created, {updated_count} updated")
     
-    # ========== 2. СИНХРОНИЗИРУЕМ СТАТУСЫ ==========
+    # ========== 2. СИНХРОНИЗИРУЕМ СТАТУСЫ (БЕЗ JiraClient) ==========
     if sync_statuses:
-        for jp in jira_projects:
-            project_key = jp['key']
+        # Получаем список ключей проектов
+        project_keys_to_sync = [p['key'] for p in jira_projects]
+        
+        # Удаляем старые статусы для этих проектов
+        deleted_count = db.query(ProjectStatusMapping).filter(
+            ProjectStatusMapping.project_key.in_(project_keys_to_sync)
+        ).delete(synchronize_session=False)
+        logger.info(f"Deleted {deleted_count} old status mappings")
+        
+        # Синхронизируем статусы для каждого проекта напрямую
+        for project_key in project_keys_to_sync:
             try:
-                # Прямой запрос к API для получения статусов
                 statuses_url = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3/project/{project_key}/statuses"
-                statuses_headers = {"Authorization": f"Bearer {access_token}"}
-                statuses_response = requests.get(statuses_url, headers=statuses_headers, timeout=30)
+                statuses_response = _make_jira_request_with_refresh(statuses_url, token, db, user_id)
                 
                 if statuses_response.status_code == 200:
                     statuses_data = statuses_response.json()
                     
-                    # Сохраняем статусы в БД
+                    # ДЕДУПЛИКАЦИЯ: собираем уникальные статусы
+                    unique_statuses = {}
                     for issue_type_data in statuses_data:
                         for status in issue_type_data.get("statuses", []):
                             status_name = status.get("name")
-                            status_category = status.get("statusCategory", {})
-                            category_key = status_category.get("key")
-                            
-                            is_open = category_key in ["todo", "in-progress"]
-                            is_in_progress = category_key == "in-progress"
-                            is_closed = category_key == "done"
-                            
-                            existing_status = db.query(ProjectStatusMapping).filter(
-                                ProjectStatusMapping.project_key == project_key,
-                                ProjectStatusMapping.status_name == status_name
-                            ).first()
-                            
-                            if existing_status:
-                                existing_status.is_open = is_open
-                                existing_status.is_in_progress = is_in_progress
-                                existing_status.is_closed = is_closed
-                                existing_status.jira_category = category_key
-                                existing_status.last_synced_at = datetime.utcnow()
-                                existing_status.synced_by_account_id = provider_user_id
+                            if status_name not in unique_statuses:
+                                unique_statuses[status_name] = status
+                    
+                    # Сохраняем только уникальные статусы
+                    for status_name, status in unique_statuses.items():
+                        status_category = status.get("statusCategory", {})
+                        category_key = status_category.get("key", "").lower()
+                        
+                        # Универсальная обработка категорий
+                        if category_key == "new":
+                            is_open = True
+                            is_in_progress = False
+                            is_closed = False
+                        elif category_key == "indeterminate":
+                            is_open = True
+                            is_in_progress = True
+                            is_closed = False
+                        elif category_key == "done":
+                            is_open = False
+                            is_in_progress = False
+                            is_closed = True
+                        elif category_key in ["undefined", "", None]:
+                            # Если категория не определена, используем эвристику по имени
+                            status_lower = status_name.lower()
+                            closed_keywords = ['done', 'closed', 'resolved', 'completed', 'finished', 'готово', 'выполнено']
+                            if any(kw in status_lower for kw in closed_keywords):
+                                is_open = False
+                                is_in_progress = False
+                                is_closed = True
+                            elif any(kw in status_lower for kw in ['progress', 'review', 'работе', 'тестирование']):
+                                is_open = True
+                                is_in_progress = True
+                                is_closed = False
                             else:
-                                new_mapping = ProjectStatusMapping(
-                                    project_key=project_key,
-                                    status_name=status_name,
-                                    is_open=is_open,
-                                    is_in_progress=is_in_progress,
-                                    is_closed=is_closed,
-                                    jira_category=category_key,
-                                    last_synced_at=datetime.utcnow(),
-                                    synced_by_account_id=provider_user_id
-                                )
-                                db.add(new_mapping)
-                            statuses_synced += 1
+                                is_open = True
+                                is_in_progress = False
+                                is_closed = False
+                            logger.info(f"Status '{status_name}' (category='{category_key}') classified by name heuristic")
+                        else:
+                            # Неизвестная категория
+                            logger.warning(f"Unknown category '{category_key}' for status '{status_name}', using open status as fallback")
+                            is_open = True
+                            is_in_progress = False
+                            is_closed = False
+                        
+                        new_mapping = ProjectStatusMapping(
+                            project_key=project_key,
+                            status_name=status_name,
+                            is_open=is_open,
+                            is_in_progress=is_in_progress,
+                            is_closed=is_closed,
+                            jira_category=category_key,
+                            last_synced_at=datetime.utcnow(),
+                            synced_by_account_id=provider_user_id
+                        )
+                        db.add(new_mapping)
+                        statuses_synced += 1
                     
                     db.commit()
-                    logger.info(f"Synced statuses for {project_key}")
+                    logger.info(f"Synced {len(unique_statuses)} statuses for {project_key}")
                 else:
                     logger.error(f"Failed to get statuses for {project_key}: {statuses_response.status_code}")
             except Exception as e:
                 logger.error(f"Failed to sync statuses for {project_key}: {e}")
                 db.rollback()
                 # Продолжаем со следующим проектом
+        
+        db.commit()
     
     logger.info(f"Sync completed: projects created={created_count}, updated={updated_count}, "
                 f"statuses synced={statuses_synced}")
@@ -225,7 +302,6 @@ def refresh_all_project_statuses(
         raise ValueError(f"Token not found for site {instance_name}")
     
     cloud_id = token.instance_id
-    access_token = token.access_token
     provider_user_id = token.provider_user_id
     
     projects = db.query(Project).join(
@@ -239,47 +315,53 @@ def refresh_all_project_statuses(
     for project in projects:
         try:
             statuses_url = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3/project/{project.key}/statuses"
-            headers = {"Authorization": f"Bearer {access_token}"}
-            response = requests.get(statuses_url, headers=headers, timeout=30)
+            
+            response = _make_jira_request_with_refresh(statuses_url, token, db, user_id)
             
             if response.status_code == 200:
                 statuses_data = response.json()
                 
+                # Дедупликация статусов
+                unique_statuses = {}
                 for issue_type_data in statuses_data:
                     for status in issue_type_data.get("statuses", []):
                         status_name = status.get("name")
-                        status_category = status.get("statusCategory", {})
-                        category_key = status_category.get("key")
-                        
-                        is_open = category_key in ["todo", "in-progress"]
-                        is_in_progress = category_key == "in-progress"
-                        is_closed = category_key == "done"
-                        
-                        existing = db.query(ProjectStatusMapping).filter(
-                            ProjectStatusMapping.project_key == project.key,
-                            ProjectStatusMapping.status_name == status_name
-                        ).first()
-                        
-                        if existing:
-                            existing.is_open = is_open
-                            existing.is_in_progress = is_in_progress
-                            existing.is_closed = is_closed
-                            existing.jira_category = category_key
-                            existing.last_synced_at = datetime.utcnow()
-                            existing.synced_by_account_id = provider_user_id
-                        else:
-                            new_mapping = ProjectStatusMapping(
-                                project_key=project.key,
-                                status_name=status_name,
-                                is_open=is_open,
-                                is_in_progress=is_in_progress,
-                                is_closed=is_closed,
-                                jira_category=category_key,
-                                last_synced_at=datetime.utcnow(),
-                                synced_by_account_id=provider_user_id
-                            )
-                            db.add(new_mapping)
-                        statuses_updated += 1
+                        if status_name not in unique_statuses:
+                            unique_statuses[status_name] = status
+                
+                for status_name, status in unique_statuses.items():
+                    status_category = status.get("statusCategory", {})
+                    category_key = status_category.get("key")
+                    
+                    is_open = category_key in ["todo", "in-progress"]
+                    is_in_progress = category_key == "in-progress"
+                    is_closed = category_key == "done"
+                    
+                    existing = db.query(ProjectStatusMapping).filter(
+                        ProjectStatusMapping.project_key == project.key,
+                        ProjectStatusMapping.status_name == status_name
+                    ).first()
+                    
+                    if existing:
+                        existing.is_open = is_open
+                        existing.is_in_progress = is_in_progress
+                        existing.is_closed = is_closed
+                        existing.jira_category = category_key
+                        existing.last_synced_at = datetime.utcnow()
+                        existing.synced_by_account_id = provider_user_id
+                    else:
+                        new_mapping = ProjectStatusMapping(
+                            project_key=project.key,
+                            status_name=status_name,
+                            is_open=is_open,
+                            is_in_progress=is_in_progress,
+                            is_closed=is_closed,
+                            jira_category=category_key,
+                            last_synced_at=datetime.utcnow(),
+                            synced_by_account_id=provider_user_id
+                        )
+                        db.add(new_mapping)
+                    statuses_updated += 1
                 
                 db.commit()
                 logger.info(f"Refreshed statuses for {project.key}")

@@ -9,13 +9,20 @@ from app.db.models import User, IntegrationToken, Session as SessionModel
 from app.services.token_refresh_service import TokenRefreshService
 
 
+from datetime import datetime, timedelta
+from fastapi import Depends, HTTPException, Request
+from sqlalchemy.orm import Session as DbSession, joinedload
+
+from app.db.session import get_db
+from app.db.models import User, Session as SessionModel
+
+
 def get_current_user(request: Request, db: DbSession = Depends(get_db)) -> User:
     session_token = request.cookies.get("session_token")
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated: no session token")
     
     # Явно загружаем session с user через joinedload
-    from sqlalchemy.orm import joinedload
     session = db.query(SessionModel).options(
         joinedload(SessionModel.user)
     ).filter(
@@ -28,6 +35,12 @@ def get_current_user(request: Request, db: DbSession = Depends(get_db)) -> User:
 
     if not session.user:
         raise HTTPException(status_code=401, detail="User not found for session")
+    
+
+    # Продлеваем сессию на 7 дней при каждом успешном запросе
+    session.expires_at = datetime.utcnow() + timedelta(days=7)
+    db.commit()
+    
 
     return session.user
 
