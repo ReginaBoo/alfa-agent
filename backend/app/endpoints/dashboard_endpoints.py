@@ -620,9 +620,9 @@ def get_projects_stats(
         for (assignee_id,) in assignees:
 
             wi = calculate_workload_index(
-                db,
-                assignee_id,
-                project_key,
+                db=db,
+                assignee_account_id=assignee_id,
+                project_key=project_key,
                 weeks=1 if period == "Последняя неделя" else 2
             )
 
@@ -722,6 +722,104 @@ def get_projects_stats(
                 "commits": commits_str,
                 "sla": sla_score
             }
+        })
+
+    return result
+
+@router.get("/teams-load")
+def get_teams_load(
+    period: str = Query(..., description="Весь период | Последняя неделя"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает загруженность команд для LoadChart
+    """
+
+    from app.services.metrics.workload_index import calculate_workload_index
+
+    allowed_periods = ["Весь период", "Последняя неделя"]
+
+    if period not in allowed_periods:
+        raise HTTPException(
+            status_code=400,
+            detail=f"period must be one of {allowed_periods}"
+        )
+
+    weeks = 1 if period == "Последняя неделя" else 2
+
+    # Получаем проекты пользователя
+    projects = (
+        db.query(Project)
+        .join(UserProject, UserProject.project_id == Project.id)
+        .filter(
+            UserProject.user_id == current_user.id,
+            Project.is_active == True
+        )
+        .all()
+    )
+
+    result = []
+
+    for project in projects:
+
+        assignees = (
+            db.query(JiraIssue.assignee_account_id)
+            .filter(
+                JiraIssue.project_key == project.key,
+                JiraIssue.assignee_account_id.isnot(None)
+            )
+            .distinct()
+            .all()
+        )
+
+        workload_values = []
+
+        for (assignee_id,) in assignees:
+
+            wi = calculate_workload_index(
+                db=db,
+                assignee_account_id=assignee_id,
+                project_key=project.key,
+                weeks=weeks
+            )
+
+            if wi is not None:
+                workload_values.append(wi)
+
+        avg_load = 0.0
+
+        if workload_values:
+            avg_load = round(
+                sum(workload_values) / len(workload_values),
+                2
+            )
+
+        # -----------------------------
+        # STATUS TYPE
+        # -----------------------------
+
+        if avg_load < 0.3:
+            status_type = "underload"
+            description = "Ресурсы освободились, можно подключать новые задачи"
+
+        elif avg_load < 0.8:
+            status_type = "optimal"
+            description = "Команда идет строго по графику спринта"
+
+        elif avg_load < 1.2:
+            status_type = "high"
+            description = "Неравномерное распределение обязанностей"
+
+        else:
+            status_type = "overload"
+            description = "Критический перегруз ключевых разработчиков"
+
+        result.append({
+            "project": project.name,
+            "load": avg_load,
+            "statusType": status_type,
+            "description": description
         })
 
     return result
