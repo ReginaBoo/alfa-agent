@@ -838,3 +838,34 @@ async def get_ai_insights(db=Depends(get_db)):
     service = AIInsightService(db, provider)
 
     return await service.build_insights()
+
+@router.get("/projects")
+def get_user_projects(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Возвращает все проекты пользователя
+    для dropdown на frontend.
+    """
+
+    projects = (
+        db.query(Project)
+        .join(UserProject, UserProject.project_id == Project.id)
+        .filter(
+            UserProject.user_id == current_user.id,
+            Project.is_active == True
+        )
+        .order_by(Project.name)
+        .all()
+    )
+
+    return [
+        {
+            "id": project.id,
+            "key": project.key,
+            "name": project.name,
+            "avatar_url": project.avatar_url
+        }
+        for project in projects
+    ]

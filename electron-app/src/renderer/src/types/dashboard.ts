@@ -20,7 +20,7 @@ export interface InsightItem {
 export interface ProjectStatsItem {
   id: number;
   name: string;
-  status: 'error' | 'warning' | 'normal';
+  status:'error' | 'warning' | 'success';
   stats: {
     workload: number;
     reviewTime: string;
@@ -37,4 +37,11 @@ export interface LoadChartItem {
   load: number;          // Значение от 0 до 1 (например, 0.62)
   statusType: 'underload' | 'optimal' | 'high' | 'overload';
   description?: string;
+}
+
+export interface DashboardProject {
+  id: number;
+  key: string;
+  name: string;
+  avatar_url?: string;
 }

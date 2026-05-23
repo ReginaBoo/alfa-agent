@@ -6,14 +6,24 @@ import {
 } from '@ant-design/icons';
 import s from './Header.module.css';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { dashboardApi } from '../../../api/dashboardApi';
+import { DashboardProject } from '../../../types/dashboard';
 
 export const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const projects = [
-    { id: '1', name: 'Проект 1' },
-  ];
+  const [projects, setProjects] = useState<DashboardProject[]>([]);
+
+  useEffect(() => {
+    dashboardApi
+      .getProjects()
+      .then(setProjects)
+      .catch((err) => {
+        console.error('Failed to load projects', err);
+      });
+  }, []);
 
   const getCurrentValue = () => {
     const pathParts = location.pathname.split('/');
@@ -58,7 +68,7 @@ export const Header = () => {
               ),
             },
             ...projects.map(p => ({
-              value: p.id,
+              value: p.key,
               label: (
                 <Space>
                   <ProjectOutlined />
