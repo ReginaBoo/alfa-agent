@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime, timedelta
-from app.db.models import JiraIssue
+from typing import List, Optional
+from app.db.models import JiraIssue, Project, UserProject
 
 
 class AIInsightService:
@@ -10,13 +11,52 @@ class AIInsightService:
         self.db = db
         self.ai_provider = ai_provider
 
-    async def build_insights(self):
+    async def build_insights(self, user_id: Optional[int] = None, project_keys: Optional[List[str]] = None):
         """
         Строит AI-инсайты с привязкой к проектам.
-        Анализирует каждый проект отдельно и возвращает инсайты с указанием проекта.
+        
+        Args:
+            user_id: ID пользователя (фильтрует проекты по UserProject)
+            project_keys: Список project_key для фильтрации
+        
+        Returns:
+            List[dict]: Список инсайтов
         """
-        # Получаем все активные проекты
-        projects = self.db.query(JiraIssue.project_key).distinct().all()
+        
+        # ============================================================
+        # ФИЛЬТРАЦИЯ ПРОЕКТОВ (приоритет: project_keys > user_id)
+        # ============================================================
+        
+        final_project_keys = []
+        
+        if project_keys:
+            # Если переданы project_keys — используем их
+            final_project_keys = project_keys
+        elif user_id:
+            # Если нет project_keys, но есть user_id — получаем проекты пользователя
+            user_projects = self.db.query(Project).join(
+                UserProject, UserProject.project_id == Project.id
+            ).filter(
+                UserProject.user_id == user_id,
+                Project.is_active == True
+            ).all()
+            
+            final_project_keys = [p.jira_project_key for p in user_projects if p.jira_project_key]
+        
+        # Если нет проектов — возвращаем пустой список
+        if not final_project_keys:
+            return []
+        
+        # Получаем проекты из JiraIssue (только те, что в final_project_keys)
+        projects_query = self.db.query(JiraIssue.project_key).filter(
+            JiraIssue.project_key.in_(final_project_keys),
+            JiraIssue.is_deleted == False
+        ).distinct()
+        
+        projects = projects_query.all()
+
+        if not projects:
+            return []
 
         projects_data = []
 
@@ -40,11 +80,12 @@ class AIInsightService:
             total_sp = sum(i.story_points or 0 for i in open_issues)
             completed_sp = sum(i.story_points or 0 for i in closed_issues)
             
-            # Completion rate: если нет открытых задач, считаем 100% если есть закрытые, иначе 0%
+            # Completion rate
             if total_sp == 0:
                 completion_rate = 100.0 if completed_sp > 0 else 0.0
             else:
                 completion_rate = round(completed_sp / (total_sp + completed_sp) * 100, 1)
+            
             assignees = {}
             for issue in open_issues:
                 assignee = issue.assignee_name or issue.assignee_account_id or 'Не назначен'
@@ -89,18 +130,20 @@ class AIInsightService:
         all_insights.sort(key=lambda x: priority.get(x.get('type', 'success'), 3))
         
         # Опционально: можно запросить у LLM дополнительные инсайты
-        llm_insights = await self.ai_provider.generate_insights(projects_data)
-        for insight in llm_insights:
-            insight['id'] = insight_id
-            insight_id += 1
-            all_insights.append(insight)
+        if projects_data and self.ai_provider:
+            try:
+                llm_insights = await self.ai_provider.generate_insights(projects_data)
+                for insight in llm_insights:
+                    insight['id'] = insight_id
+                    insight_id += 1
+                    all_insights.append(insight)
+            except Exception as e:
+                print(f"[WARNING] LLM insights failed: {e}")
         
         return all_insights
     
     async def _analyze_project(self, project_data: dict) -> list:
-        """
-        Анализирует один проект и возвращает инсайты.
-        """
+        """Анализирует один проект и возвращает инсайты."""
         insights = []
         project_key = project_data['project']
         

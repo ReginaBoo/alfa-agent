@@ -502,14 +502,37 @@ def get_projects_stats(
     if period == "Последняя неделя":
         cutoff_date = datetime.utcnow() - timedelta(days=7)
 
-    # Получаем уникальные project_key из JiraIssue
-    projects_query = db.query(JiraIssue.project_key).distinct()
+   
+    
+    # Получаем проекты пользователя из core.projects через UserProject
+    user_projects = db.query(Project).join(
+        UserProject, UserProject.project_id == Project.id
+    ).filter(
+        UserProject.user_id == current_user.id,
+        Project.is_active == True
+    ).all()
+    
+    # Извлекаем Jira project keys (jira_project_key)
+    user_project_keys = [p.jira_project_key for p in user_projects if p.jira_project_key]
+    
+    if not user_project_keys:
+        # Нет проектов у пользователя — возвращаем пустой результат
+        return []
+    
+    # Фильтруем JiraIssue только по проектам пользователя
+    projects_query = db.query(JiraIssue.project_key).filter(
+        JiraIssue.project_key.in_(user_project_keys)
+    ).distinct()
+    
     projects = projects_query.all()
-
-  
+    
+    # ============================================================
+    # ПОЛУЧАЕМ base_url ДЛЯ ССЫЛОК
+    # ============================================================
+    
     base_url = None
     
-    # Способ 1: Ищем токен Atlassian текущего пользователя
+    # Ищем токен текущего пользователя
     atlassian_token = db.query(IntegrationToken).filter(
         IntegrationToken.provider == "jira",
         IntegrationToken.user_id == current_user.id
@@ -519,34 +542,16 @@ def get_projects_stats(
         base_url = atlassian_token.instance_url.rstrip('/')
         print(f"[DEBUG] Found base_url from user's token: {base_url}")
     else:
-        print(f"[DEBUG] No token found for user {current_user.id} with provider=atlassian")
-        
-        # Способ 2: Ищем любой токен Atlassian (fallback)
+        # Fallback: ищем любой токен (только для теста)
         any_token = db.query(IntegrationToken).filter(
-            IntegrationToken.provider == "atlassian"
+            IntegrationToken.provider == "jira"
         ).first()
         
         if any_token and any_token.instance_url:
             base_url = any_token.instance_url.rstrip('/')
-            print(f"[DEBUG] Using fallback token (user_id={any_token.user_id}): {base_url}")
+            print(f"[DEBUG] Using fallback token: {base_url}")
         else:
-            print(f"[WARNING] No instance_url found in any Atlassian token")
-            
-            # Способ 3: Получаем из Project.avatar_url (костыль, но работает)
-            sample_project = db.query(Project).filter(
-                Project.avatar_url.isnot(None)
-            ).first()
-            
-            if sample_project and sample_project.avatar_url:
-                # avatar_url содержит cloud_id, но не полный URL
-                # Парсим cloud_id и формируем URL
-                import re
-                match = re.search(r'/ex/jira/([a-f0-9-]+)/', sample_project.avatar_url)
-                if match:
-                    cloud_id = match.group(1)
-                    base_url = f"https://api.atlassian.com/ex/jira/{cloud_id}"
-                    print(f"[DEBUG] Extracted cloud_id from avatar_url: {cloud_id}")
-                    print(f"[WARNING] Using API URL as base_url (may not work for direct links): {base_url}")
+            print(f"[WARNING] No instance_url found")
 
     result = []
 
@@ -556,12 +561,12 @@ def get_projects_stats(
             JiraIssue.project_key == project_key
         )
 
-        # Получаем Project из core.projects по jira_project_key (если есть)
-        project_obj = db.query(Project).filter(
-            Project.jira_project_key == project_key
-        ).first()
+        # Находим Project объект (уже есть в user_projects)
+        project_obj = next(
+            (p for p in user_projects if p.jira_project_key == project_key), 
+            None
+        )
         
-        # Получаем project_id для GitHub данных
         project_id = project_obj.id if project_obj else None
 
         if cutoff_date:
@@ -672,23 +677,10 @@ def get_projects_stats(
         else:
             status = "success"
 
-        # 🔥 ФОРМИРУЕМ ССЫЛКУ НА JIRA
+        # ФОРМИРУЕМ ССЫЛКУ НА JIRA
         jira_url = None
         if base_url and project_key:
-            # Если base_url содержит api.atlassian.com/ex/jira, нужно преобразовать
-            if "api.atlassian.com/ex/jira" in base_url:
-                # Это API URL, не подходит для прямых ссылок
-                # Пытаемся извлечь cloud_id и сформировать правильный URL
-                import re
-                match = re.search(r'/ex/jira/([a-f0-9-]+)', base_url)
-                if match:
-                    cloud_id = match.group(1)
-                    jira_url = f"https://your-domain.atlassian.net/jira/software/projects/{project_key}/summary"
-                    print(f"[WARNING] Cannot construct proper Jira URL without domain. Cloud ID: {cloud_id}")
-                else:
-                    jira_url = f"{base_url}/jira/software/projects/{project_key}/summary"
-            else:
-                jira_url = f"{base_url}/jira/software/projects/{project_key}/summary"
+            jira_url = f"{base_url}/jira/software/projects/{project_key}/summary"
 
         result.append({
             "id": idx,
@@ -816,26 +808,41 @@ async def get_ai_insights(
 ):
     """
     GET /dashboard/ai-insights
-    Возвращает AI-инсайты с кэшированием на 5 минут.
+    Возвращает AI-инсайты только для проектов пользователя.
+    С кэшированием на 5 минут.
     """
-    # Ключ кэша с user_id (чтобы у разных пользователей были разные кэши)
+    
+    
+    # Получаем проекты пользователя
+    user_projects = db.query(Project).join(
+        UserProject, UserProject.project_id == Project.id
+    ).filter(
+        UserProject.user_id == current_user.id,
+        Project.is_active == True
+    ).all()
+    
+    user_project_keys = [p.jira_project_key for p in user_projects if p.jira_project_key]
+    
+    # Ключ кэша с user_id
     cache_key = f"ai_insights:{current_user.id}"
-
+    
     # Пробуем получить из кэша
     cached_insights = cache_service.get(cache_key)
     if cached_insights is not None:
         return cached_insights
     
-    # Генерируем заново
+    # Генерируем заново с фильтрацией по проектам пользователя
     provider = OpenRouterProvider(
         api_key=settings.OPENROUTER_API_KEY,
         model=settings.OPENROUTER_MODEL
     )
 
     service = AIInsightService(db, provider)
-    insights = await service.build_insights()
     
-    # Сохраняем в кэш на 5 минут (300 секунд)
+    # Передаем проекты пользователя в сервис
+    insights = await service.build_insights(project_keys=user_project_keys)
+    
+    # Сохраняем в кэш на 5 минут
     cache_service.set(cache_key, insights, expire=300)
     
     return insights
