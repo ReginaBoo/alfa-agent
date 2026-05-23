@@ -1,4 +1,6 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import func
+from datetime import datetime, timedelta
 from app.db.models import JiraIssue
 
 
@@ -9,18 +11,153 @@ class AIInsightService:
         self.ai_provider = ai_provider
 
     async def build_insights(self):
-
-        issues = self.db.query(JiraIssue).all()
+        """
+        Строит AI-инсайты с привязкой к проектам.
+        Анализирует каждый проект отдельно и возвращает инсайты с указанием проекта.
+        """
+        # Получаем все активные проекты
+        projects = self.db.query(JiraIssue.project_key).distinct().all()
 
         projects_data = []
 
-        for issue in issues:
-            projects_data.append({
-                "project": issue.project_key,
-                "status": issue.status,
-                "assignee": issue.assignee_name,
-                "story_points": issue.story_points,
-                "is_deleted": issue.is_deleted
+        for (project_key,) in projects:
+            # Собираем статистику по проекту
+            issues = self.db.query(JiraIssue).filter(
+                JiraIssue.project_key == project_key,
+                JiraIssue.is_deleted == False
+            ).all()
+            
+            if not issues:
+                continue
+            
+            # Агрегируем данные
+            open_issues = [i for i in issues if i.status not in ['Done', 'Closed', 'Готово']]
+            closed_issues = [i for i in issues if i.status in ['Done', 'Closed', 'Готово']]
+            bugs = [i for i in issues if i.issue_type and i.issue_type.lower() in ['bug', 'defect', 'error']]
+            overdue = [i for i in open_issues if i.due_date and i.due_date < datetime.utcnow()]
+            
+            # Считаем Story Points
+            total_sp = sum(i.story_points or 0 for i in open_issues)
+            completed_sp = sum(i.story_points or 0 for i in closed_issues)
+            
+            # Completion rate: если нет открытых задач, считаем 100% если есть закрытые, иначе 0%
+            if total_sp == 0:
+                completion_rate = 100.0 if completed_sp > 0 else 0.0
+            else:
+                completion_rate = round(completed_sp / (total_sp + completed_sp) * 100, 1)
+            assignees = {}
+            for issue in open_issues:
+                assignee = issue.assignee_name or issue.assignee_account_id or 'Не назначен'
+                if assignee not in assignees:
+                    assignees[assignee] = {'count': 0, 'sp': 0, 'bugs': 0}
+                assignees[assignee]['count'] += 1
+                assignees[assignee]['sp'] += issue.story_points or 0
+                if issue.issue_type and issue.issue_type.lower() in ['bug', 'defect', 'error']:
+                    assignees[assignee]['bugs'] += 1
+            
+            # Формируем данные для проекта
+            project_info = {
+                "project": project_key,
+                "total_issues": len(issues),
+                "open_issues": len(open_issues),
+                "closed_issues": len(closed_issues),
+                "bugs_count": len(bugs),
+                "overdue_count": len(overdue),
+                "total_story_points": total_sp,
+                "completed_story_points": completed_sp,
+                "completion_rate": completion_rate,
+                "assignees": assignees,
+                "statuses": list(set(i.status for i in issues if i.status)),
+                "issue_types": list(set(i.issue_type for i in issues if i.issue_type))
+            }
+            
+            projects_data.append(project_info)
+        
+        # Генерируем инсайты для каждого проекта
+        all_insights = []
+        insight_id = 1
+        
+        for project_data in projects_data:
+            project_insights = await self._analyze_project(project_data)
+            for insight in project_insights:
+                insight['id'] = insight_id
+                insight_id += 1
+                all_insights.append(insight)
+        
+        # Сортируем по приоритету (error > warning > success)
+        priority = {'error': 0, 'warning': 1, 'success': 2}
+        all_insights.sort(key=lambda x: priority.get(x.get('type', 'success'), 3))
+        
+        # Опционально: можно запросить у LLM дополнительные инсайты
+        llm_insights = await self.ai_provider.generate_insights(projects_data)
+        for insight in llm_insights:
+            insight['id'] = insight_id
+            insight_id += 1
+            all_insights.append(insight)
+        
+        return all_insights
+    
+    async def _analyze_project(self, project_data: dict) -> list:
+        """
+        Анализирует один проект и возвращает инсайты.
+        """
+        insights = []
+        project_key = project_data['project']
+        
+        # 1. Просроченные задачи
+        if project_data['overdue_count'] > 0:
+            insights.append({
+                'type': 'error',
+                'text': f"{project_key}: {project_data['overdue_count']} просроченных задач",
+                'recommendation': f"Срочно пересмотреть дедлайны в {project_key}"
             })
-
-        return await self.ai_provider.generate_insights(projects_data)
+        
+        # 2. Много багов
+        if project_data['bugs_count'] > 5:
+            insights.append({
+                'type': 'error',
+                'text': f"{project_key}: высокий уровень багов ({project_data['bugs_count']})",
+                'recommendation': f"Выделить спринт на технический долг в {project_key}"
+            })
+        elif project_data['bugs_count'] > 0:
+            insights.append({
+                'type': 'warning',
+                'text': f"{project_key}: {project_data['bugs_count']} активных багов",
+                'recommendation': f"Включить баги в план работ {project_key}"
+            })
+        
+        # 3. Низкий completion rate
+        if project_data['completion_rate'] < 50 and project_data['total_story_points'] > 0:
+            insights.append({
+                'type': 'warning',
+                'text': f"{project_key}: низкая скорость закрытия ({project_data['completion_rate']}%)",
+                'recommendation': f"Проверить загрузку команды {project_key}"
+            })
+        
+        # 4. Перегрузка конкретных сотрудников
+        for assignee, data in project_data['assignees'].items():
+            if data['count'] > 10:
+                insights.append({
+                    'type': 'warning',
+                    'text': f"{project_key}: {assignee} перегружен ({data['count']} задач)",
+                    'recommendation': f"Перераспределить задачи в {project_key}"
+                })
+            
+            if data['bugs'] > 3:
+                insights.append({
+                    'type': 'warning',
+                    'text': f"{project_key}: {assignee} назначен на {data['bugs']} багов",
+                    'recommendation': f"Рассмотреть код-ревью для {assignee} в {project_key}"
+                })
+        
+        # 5. Положительный инсайт - хороший прогресс
+        if (project_data['completion_rate'] >= 80 and 
+            project_data['total_issues'] > 0 and
+            project_data['bugs_count'] == 0):
+            insights.append({
+                'type': 'success',
+                'text': f"{project_key}: ситуация стабильная ({project_data['completion_rate']}% готово)",
+                'recommendation': f"Можно подключать новые задачи в {project_key}"
+            })
+        
+        return insights

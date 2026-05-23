@@ -13,7 +13,9 @@ from app.core.dependencies import get_current_user
 from app.workers.queues import sync_github_queue
 from app.workers.tasks import sync_github_task, sync_github_all_repos_task
 from app.services.github_sync_service import GithubSyncService
+from app.services.github_pr_sync_service import GithubPRSyncService
 from app.services.github_project_link_service import link_repo_to_project
+from app.services.cache_service import cache_service
 
 router = APIRouter(prefix="/github", tags=["GitHub"])
 
@@ -635,6 +637,274 @@ async def test_token(
         "token_id": token.id if token else None,
         "current_user_type": str(type(current_user))
     }
+
+
+# ================= PULL REQUESTS =================
+
+@router.get("/pulls")
+async def get_pull_requests(
+    repo_full_name: str = Query(..., description="Полное имя репозитория (owner/repo)"),
+    instance_id: str = Query(..., description="GitHub username"),
+    state: str = Query("all", description="open, closed или all"),
+    per_page: int = Query(100, ge=1, le=100),
+    page: int = Query(1, ge=1),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Получить список Pull Requests из репозитория"""
+    token = get_token(instance_id, db, get_user_id(current_user))
+    
+    parts = repo_full_name.split("/")
+    if len(parts) != 2:
+        raise HTTPException(400, "Invalid repo_full_name format. Use owner/repo")
+    owner, repo = parts
+    
+    try:
+        from app.github.client import GitHubClient
+        client = GitHubClient(
+            access_token=token.access_token,
+            instance_id=instance_id
+        )
+        
+        prs = await client.get_pull_requests(
+            owner=owner,
+            repo=repo,
+            state=state,
+            per_page=per_page,
+            page=page
+        )
+        
+        result = [
+            {
+                "id": pr.id,
+                "number": pr.number,
+                "title": pr.title,
+                "state": pr.state,
+                "merged": pr.merged,
+                "merged_at": pr.merged_at,
+                "author": pr.user.login if pr.user else None,
+                "created_at": pr.created_at,
+                "updated_at": pr.updated_at,
+                "closed_at": pr.closed_at,
+                "head_branch": pr.head.get('ref') if pr.head else None,
+                "base_branch": pr.base.get('ref') if pr.base else None,
+                "additions": pr.additions,
+                "deletions": pr.deletions,
+                "comments_count": pr.comments,
+                "review_comments_count": pr.review_comments,
+                "requested_reviewers": [r.login for r in pr.requested_reviewers],
+                "html_url": pr.html_url
+            }
+            for pr in prs
+        ]
+        
+        return {
+            "success": True,
+            "total": len(result),
+            "pull_requests": result
+        }
+    except Exception as e:
+        raise HTTPException(502, f"GitHub API error: {str(e)}")
+
+
+@router.get("/pulls/{pr_number}/reviews")
+async def get_pull_request_reviews(
+    pr_number: int,
+    repo_full_name: str = Query(..., description="Полное имя репозитория"),
+    instance_id: str = Query(..., description="GitHub username"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Получить ревью для Pull Request"""
+    token = get_token(instance_id, db, get_user_id(current_user))
+    
+    parts = repo_full_name.split("/")
+    if len(parts) != 2:
+        raise HTTPException(400, "Invalid repo_full_name format")
+    owner, repo = parts
+    
+    try:
+        from app.github.client import GitHubClient
+        client = GitHubClient(
+            access_token=token.access_token,
+            instance_id=instance_id
+        )
+        
+        reviews = await client.get_pull_request_reviews(owner, repo, pr_number)
+        
+        result = [
+            {
+                "id": review.id,
+                "user": review.user.login if review.user else None,
+                "state": review.state,
+                "body": review.body,
+                "submitted_at": review.submitted_at,
+                "html_url": review.html_url
+            }
+            for review in reviews
+        ]
+        
+        return {
+            "success": True,
+            "total": len(result),
+            "reviews": result
+        }
+    except Exception as e:
+        raise HTTPException(502, f"GitHub API error: {str(e)}")
+
+
+@router.get("/commits")
+async def get_commits(
+    repo_full_name: str = Query(..., description="Полное имя репозитория"),
+    instance_id: str = Query(..., description="GitHub username"),
+    per_page: int = Query(100, ge=1, le=100),
+    page: int = Query(1, ge=1),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Получить список коммитов из репозитория"""
+    token = get_token(instance_id, db, get_user_id(current_user))
+    
+    parts = repo_full_name.split("/")
+    if len(parts) != 2:
+        raise HTTPException(400, "Invalid repo_full_name format")
+    owner, repo = parts
+    
+    try:
+        from app.github.client import GitHubClient
+        client = GitHubClient(
+            access_token=token.access_token,
+            instance_id=instance_id
+        )
+        
+        commits = await client.get_commits(
+            owner=owner,
+            repo=repo,
+            per_page=per_page,
+            page=page
+        )
+        
+        result = []
+        for commit in commits:
+            commit_detail = commit.get('commit', {})
+            author = commit.get('author', {})
+            stats = commit.get('stats', {})
+            
+            result.append({
+                "sha": commit.get('sha'),
+                "author_login": author.get('login'),
+                "author_name": commit_detail.get('author', {}).get('name'),
+                "message": commit_detail.get('message', '')[:200],
+                "committed_at": commit_detail.get('author', {}).get('date'),
+                "additions": stats.get('additions', 0),
+                "deletions": stats.get('deletions', 0),
+                "total_changes": stats.get('total', 0),
+                "html_url": commit.get('html_url')
+            })
+        
+        return {
+            "success": True,
+            "total": len(result),
+            "commits": result
+        }
+    except Exception as e:
+        raise HTTPException(502, f"GitHub API error: {str(e)}")
+
+
+# ================= SYNC =================
+
+@router.post("/sync-prs/{repo_full_name:path}")
+async def sync_pull_requests(
+    repo_full_name: str,
+    instance_id: str = Query(..., description="GitHub username"),
+    sync_reviews: bool = Query(True, description="Синхронизировать ревью"),
+    sync_commits: bool = Query(True, description="Синхронизировать коммиты из PR"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Синхронизация Pull Requests, Reviews и Commits в БД"""
+    try:
+        sync_service = GithubPRSyncService(db)
+        result = await sync_service.sync_repo_pull_requests(
+            user_id=get_user_id(current_user),
+            instance_id=instance_id,
+            repo_full_name=repo_full_name,
+            sync_reviews=sync_reviews,
+            sync_commits=sync_commits
+        )
+        
+        # Инвалидируем кэш после синхронизации
+        cache_service.delete_pattern(f"projects_stats:{current_user.id}:*")
+        cache_service.delete_pattern(f"ai_insights:{current_user.id}")
+        cache_service.delete_pattern(f"activity_trends:*")
+        
+        return {
+            "success": True,
+            "message": f"Sync completed",
+            "details": result
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Sync failed: {str(e)}")
+
+
+@router.post("/sync-commits/{repo_full_name:path}")
+async def sync_commits_full(
+    repo_full_name: str,
+    instance_id: str = Query(..., description="GitHub username"),
+    since_days: int = Query(30, description="Последние N дней"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Синхронизация ВСЕХ коммитов репозитория за период"""
+    try:
+        sync_service = GithubPRSyncService(db)
+        result = await sync_service.sync_repo_commits_full(
+            user_id=get_user_id(current_user),
+            instance_id=instance_id,
+            repo_full_name=repo_full_name,
+            since_days=since_days
+        )
+        return {
+            "success": True,
+            "message": f"Commits sync completed",
+            "details": result
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Sync failed: {str(e)}")
+
+
+# ================= METRICS =================
+
+@router.get("/metrics/pr-stats/{repo_full_name:path}")
+async def get_pr_metrics(
+    repo_full_name: str,
+    instance_id: str = Query(..., description="GitHub username"),
+    project_key: str = Query(..., description="Ключ проекта Jira"),
+    period_days: int = Query(30, description="Период в днях"),
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Получить метрики по Pull Requests для проекта"""
+    from app.services.github_project_link_service import get_project_by_key
+    
+    project = get_project_by_key(db, project_key)
+    if not project:
+        raise HTTPException(404, f"Project {project_key} not found")
+    
+    try:
+        from app.services.metrics.pr_metrics import get_pr_stats_for_project
+        
+        stats = get_pr_stats_for_project(db, project.id, period_days)
+        
+        return {
+            "success": True,
+            "project_key": project_key,
+            "repo_full_name": repo_full_name,
+            "period_days": period_days,
+            "stats": stats
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Failed to calculate metrics: {str(e)}")
 
 
 

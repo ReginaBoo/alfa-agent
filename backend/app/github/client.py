@@ -10,7 +10,8 @@ from app.services.token_refresh_service import TokenRefreshService
 
 from app.github.models import (
     GitHubIssue, GitHubRepo, GitHubUser, 
-    GitHubIssueEvent, GitHubComment
+    GitHubIssueEvent, GitHubComment,
+    GitHubPullRequest, GitHubPullRequestReview, GitHubCheckRun
 )
 from app.db.models import IntegrationToken
 
@@ -245,3 +246,116 @@ class GitHubClient:
         path = f"repos/{owner}/{repo}/issues/{issue_number}/comments"
         data = await self._make_request(path, method="POST", json_data=payload)
         return GitHubComment(**data)
+
+    # ================= PULL REQUESTS =================
+
+    async def get_pull_requests(
+        self,
+        owner: str,
+        repo: str,
+        state: str = "all",
+        per_page: int = 100,
+        page: int = 1
+    ) -> List[GitHubPullRequest]:
+        """Получает список Pull Requests"""
+        params = {
+            "state": state,
+            "per_page": per_page,
+            "page": page
+        }
+        path = f"repos/{owner}/{repo}/pulls"
+        data = await self._make_request(path, params=params)
+        return [GitHubPullRequest(**pr) for pr in data]
+
+    async def get_pull_request(
+        self,
+        owner: str,
+        repo: str,
+        pr_number: int
+    ) -> GitHubPullRequest:
+        """Получает конкретный Pull Request"""
+        path = f"repos/{owner}/{repo}/pulls/{pr_number}"
+        data = await self._make_request(path)
+        return GitHubPullRequest(**data)
+
+    async def get_pull_request_reviews(
+        self,
+        owner: str,
+        repo: str,
+        pr_number: int
+    ) -> List[GitHubPullRequestReview]:
+        """Получает ревью для Pull Request"""
+        path = f"repos/{owner}/{repo}/pulls/{pr_number}/reviews"
+        data = await self._make_request(path)
+        return [GitHubPullRequestReview(**review) for review in data]
+
+    async def get_pull_request_commits(
+        self,
+        owner: str,
+        repo: str,
+        pr_number: int
+    ) -> List[dict]:
+        """Получает коммиты внутри Pull Request"""
+        path = f"repos/{owner}/{repo}/pulls/{pr_number}/commits"
+        return await self._make_request(path)
+
+    # ================= COMMITS =================
+
+    async def get_commits(
+        self,
+        owner: str,
+        repo: str,
+        per_page: int = 100,
+        page: int = 1,
+        since: str = None,
+        until: str = None
+    ) -> List[dict]:
+        """
+        Получает список коммитов с полной информацией.
+        Возвращает raw dict для детальной обработки.
+        """
+        params = {
+            "per_page": per_page,
+            "page": page
+        }
+        if since:
+            params["since"] = since
+        if until:
+            params["until"] = until
+        
+        path = f"repos/{owner}/{repo}/commits"
+        return await self._make_request(path, params=params)
+
+    async def get_commit(
+        self,
+        owner: str,
+        repo: str,
+        sha: str
+    ) -> dict:
+        """Получает детальные данные коммита (включая additions/deletions)"""
+        path = f"repos/{owner}/{repo}/commits/{sha}"
+        return await self._make_request(path)
+
+    # ================= CHECK RUNS (CI/CD) =================
+
+    async def get_check_runs(
+        self,
+        owner: str,
+        repo: str,
+        sha: str
+    ) -> List[GitHubCheckRun]:
+        """Получает Check Runs для конкретного коммита"""
+        path = f"repos/{owner}/{repo}/commits/{sha}/check-runs"
+        data = await self._make_request(path)
+        checks = data.get("check_runs", [])
+        return [GitHubCheckRun(**check) for check in checks]
+
+    async def get_check_suite(
+        self,
+        owner: str,
+        repo: str,
+        sha: str
+    ) -> dict:
+        """Получает Check Suite для коммита (агрегированные статусы)"""
+        path = f"repos/{owner}/{repo}/commits/{sha}/check-suites"
+        return await self._make_request(path)

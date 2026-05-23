@@ -2,20 +2,23 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from sqlalchemy import func, and_
 from datetime import datetime, timedelta
-from sqlalchemy import func
+from typing import List, Optional
+from fastapi.responses import JSONResponse
+import logging
 
-from app.core.config import settings
-from app.services.ai.insight_service import AIInsightService
-from app.services.ai.providers.openrouter_provider import OpenRouterProvider
 from app.db.session import get_db
-from app.db.models import IntegrationToken
-from app.db.models.core import Project, UserProject
-from app.db.timescale import timescale_engine
+from app.db.models import JiraIssue, UserProject, Project
+from app.db.models.normalized import GithubPullRequest, GithubCommit, GithubIssue
 from app.core.dependencies import get_current_user
 from app.db.models import User
-from app.db.models.normalized import JiraIssue, GithubIssue
+from app.services.ai.providers.openrouter_provider import OpenRouterProvider
+from app.services.ai.insight_service import AIInsightService
+from app.core.config import settings
+from app.services.cache_service import cache_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -30,12 +33,16 @@ def get_dashboard_digest(
     """
     GET /dashboard/digest
     Главная страница дайджеста с метриками по проектам.
-    
-    Возвращает данные для:
-    - Панели мониторинга состояния проектов (Project Health Cards)
-    - Монитора загрузки ресурсов (Team Workload)
-    - Визуализации активности (Activity Trends)
+    С кэшированием на 3 минуты.
     """
+    
+    # --- Ключ кэша ---
+    cache_key = f"dashboard_digest:{current_user.id}:{period}:{','.join(sorted(project_ids or []))}"
+    
+    # Пробуем получить из кэша
+    cached_digest = cache_service.get(cache_key)
+    if cached_digest is not None:
+        return cached_digest
     
     # Определяем период
     if period == "week":
@@ -63,7 +70,7 @@ def get_dashboard_digest(
         ).all()
     
     if not projects:
-        return {
+        result = {
             "success": True,
             "data": {
                 "period": period,
@@ -78,6 +85,8 @@ def get_dashboard_digest(
                 "user_id": current_user.id
             }
         }
+        cache_service.set(cache_key, result, expire=180)
+        return result
     
     project_keys = [p.key for p in projects]
     
@@ -129,7 +138,7 @@ def get_dashboard_digest(
         
         project_cards.append(card)
     
-    return {
+    result = {
         "success": True,
         "data": {
             "period": period,
@@ -147,6 +156,11 @@ def get_dashboard_digest(
             "total_projects": len(project_cards)
         }
     }
+    
+    # Сохраняем в кэш на 3 минуты
+    cache_service.set(cache_key, result, expire=180)
+    
+    return result
 
 
 @router.get("/project/{project_key}")
@@ -160,7 +174,7 @@ def get_project_dashboard(
     GET /dashboard/project/{project_key}
     Детальный дашборд конкретного проекта.
     """
-    
+
     # Определяем период
     period_days = {
         "week": 7,
@@ -302,8 +316,7 @@ def get_activity_trends(
     """
     GET /dashboard/activity-trends
     Возвращает данные для графика Activity Trends.
-    
-    Отображает динамику активности проектов по неделям.
+    С кэшированием на 5 минут.
     """
     from app.services.metrics.activity_trends import compare_projects_activity
     
@@ -324,7 +337,18 @@ def get_activity_trends(
             "message": "No accessible projects"
         }
     
+    # Ключ кэша
+    cache_key = f"activity_trends:{current_user.id}:{','.join(sorted(accessible_keys))}:{weeks}"
+    
+    # Пробуем получить из кэша
+    cached_trends = cache_service.get(cache_key)
+    if cached_trends is not None:
+        return cached_trends
+    
     trends = compare_projects_activity(db, accessible_keys, weeks)
+    
+    # Сохраняем в кэш на 5 минут
+    cache_service.set(cache_key, trends, expire=300)
     
     return {
         "success": True,
@@ -336,121 +360,8 @@ def get_activity_trends(
     }
 
 
-@router.get("/health-cards")
-def get_project_health_cards(
-    project_keys: Optional[List[str]] = Query(None, description="Список проектов (если None — все проекты пользователя)"),
-    period_days: int = Query(30, ge=7, le=90),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    GET /dashboard/health-cards
-    Возвращает данные для карточек здоровья проектов.
-    
-    Используется на главной странице для панели мониторинга.
-    """
-    from app.services.metrics.health_score import get_project_health_for_card
-    
-    # Получаем проекты пользователя
-    if project_keys:
-        projects = db.query(Project).filter(
-            Project.key.in_(project_keys),
-            Project.is_active == True
-        ).all()
-    else:
-        projects = db.query(Project).join(
-            UserProject, UserProject.project_id == Project.id
-        ).filter(
-            UserProject.user_id == current_user.id,
-            Project.is_active == True
-        ).all()
-    
-    cards = []
-    for project in projects:
-        try:
-            card = get_project_health_for_card(db, project.key, period_days)
-            card['project_id'] = project.id
-            card['project_key'] = project.key
-            card['project_name'] = project.name
-            card['avatar_url'] = project.avatar_url
-            cards.append(card)
-        except Exception as e:
-            logger.error(f"Failed to get health card for {project.key}: {e}")
-            cards.append({
-                'project_key': project.key,
-                'project_name': project.name,
-                'health': None,
-                'metrics': {},
-                'error': str(e)
-            })
-    
-    return {
-        "success": True,
-        "cards": cards,
-        "meta": {
-            "period_days": period_days,
-            "user_id": current_user.id,
-            "total": len(cards)
-        }
-    }
-
-
-@router.get("/health")
-def get_dashboard_health(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Проверка статуса дашборда и всех зависимостей"""
-    
-    # Проверяем подключение к TimescaleDB
-    timescale_status = "connected"
-    try:
-        from sqlalchemy.orm import Session as TimescaleSession
-        from app.db.models.metrics import UserMetric
-        with TimescaleSession(timescale_engine) as ts_db:
-            ts_db.query(UserMetric).limit(1).first()
-    except Exception as e:
-        timescale_status = f"error: {str(e)}"
-    
-    # Проверяем количество проектов
-    projects_count = db.query(Project).join(
-        UserProject, UserProject.project_id == Project.id
-    ).filter(
-        UserProject.user_id == current_user.id
-    ).count()
-    
-    # Проверяем количество задач
-    issues_count = db.query(JiraIssue).filter(
-        JiraIssue.project_key.in_(
-            db.query(Project.key).join(
-                UserProject, UserProject.project_id == Project.id
-            ).filter(UserProject.user_id == current_user.id)
-        )
-    ).count()
-    
-    return {
-        "success": True,
-        "data": {
-            "status": "healthy",
-            "components": {
-                "postgresql": "connected",
-                "timescaledb": timescale_status,
-                "redis": "connected"  # можно проверить реально
-            },
-            "stats": {
-                "projects_count": projects_count,
-                "issues_count": issues_count
-            }
-        }
-    }
-
-
-# Добавляем логгер
-import logging
-logger = logging.getLogger(__name__)
-
-@router.get("/projects-activity")
 @router.get("/api/projects-activity")
+@router.get("/projects-activity")
 def get_projects_activity(
     period: str = Query(
         ...,
@@ -461,6 +372,7 @@ def get_projects_activity(
 ):
     """
     Возвращает активность проектов по дням.
+    С кэшированием на 2 минуты.
 
     Формат:
     [
@@ -481,6 +393,14 @@ def get_projects_activity(
             detail=f"Invalid period. Allowed: {allowed_periods}"
         )
 
+    # --- Ключ кэша ---
+    cache_key = f"projects_activity:{current_user.id}:{period}"
+    
+    # Пробуем получить из кэша
+    cached_activity = cache_service.get(cache_key)
+    if cached_activity is not None:
+        return cached_activity
+
     # --- Получаем проекты пользователя ---
     user_projects = (
         db.query(Project)
@@ -493,64 +413,60 @@ def get_projects_activity(
     )
 
     if not user_projects:
-        return []
+        result = []
+    else:
+        project_keys = [p.key for p in user_projects]
 
-    project_keys = [p.key for p in user_projects]
-
-    # --- Фильтрация по времени ---
-    query = (
-        db.query(
-            func.date(JiraIssue.updated_at).label("activity_date"),
-            JiraIssue.project_key,
-            func.count(JiraIssue.id).label("activity_count")
-        )
-        .filter(
-            JiraIssue.project_key.in_(project_keys),
-            JiraIssue.is_deleted == False
-        )
-    )
-
-    # Последняя неделя
-    if period == "Последняя неделя":
-        week_ago = datetime.utcnow() - timedelta(days=7)
-
-        query = query.filter(
-            JiraIssue.updated_at >= week_ago
-        )
-
-    # --- Группировка ---
-    query = (
-        query.group_by(
-            func.date(JiraIssue.updated_at),
-            JiraIssue.project_key
-        )
-        .order_by(
-            func.date(JiraIssue.updated_at)
-        )
-    )
-
-    results = query.all()
-
-    # --- Маппинг project_key -> project_name ---
-    project_name_map = {
-        project.key: project.name
-        for project in user_projects
-    }
-
-    # --- Формируем ответ ---
-    response = []
-
-    for row in results:
-        response.append({
-            "date": row.activity_date.isoformat(),
-            "value": row.activity_count,
-            "project": project_name_map.get(
-                row.project_key,
-                row.project_key
+        # --- Фильтрация по времени ---
+        query = (
+            db.query(
+                func.date(JiraIssue.updated_at).label("activity_date"),
+                JiraIssue.project_key,
+                func.count(JiraIssue.id).label("activity_count")
             )
-        })
+            .filter(
+                JiraIssue.project_key.in_(project_keys),
+                JiraIssue.is_deleted == False
+            )
+        )
 
-    return response
+        # Последняя неделя
+        if period == "Последняя неделя":
+            week_ago = datetime.utcnow() - timedelta(days=7)
+            query = query.filter(JiraIssue.updated_at >= week_ago)
+
+        # --- Группировка ---
+        query = (
+            query.group_by(
+                func.date(JiraIssue.updated_at),
+                JiraIssue.project_key
+            )
+            .order_by(
+                func.date(JiraIssue.updated_at)
+            )
+        )
+
+        results = query.all()
+
+        # --- Маппинг project_key -> project_name ---
+        project_name_map = {
+            project.key: project.name
+            for project in user_projects
+        }
+
+        # --- Формируем ответ ---
+        result = []
+        for row in results:
+            result.append({
+                "date": row.activity_date.isoformat(),
+                "value": row.activity_count,
+                "project": project_name_map.get(row.project_key, row.project_key)
+            })
+
+    # Сохраняем в кэш на 2 минуты
+    cache_service.set(cache_key, result, expire=120)
+
+    return result
 
 @router.get("/projects-stats")
 def get_projects_stats(
@@ -560,10 +476,13 @@ def get_projects_stats(
 ):
     """
     Статистика по проектам для карточек dashboard
+    С кэшированием на 2 минуты.
     """
 
     from app.services.metrics.sla_score import calculate_sla_score
     from app.services.metrics.workload_index import calculate_workload_index
+    from app.db.models.core import Project
+    from app.db.models.identity import IntegrationToken
 
     if period not in ["Весь период", "Последняя неделя"]:
         raise HTTPException(
@@ -571,35 +490,83 @@ def get_projects_stats(
             detail="period must be 'Весь период' or 'Последняя неделя'"
         )
 
-    cutoff_date = None
+    # Ключ кэша
+    cache_key = f"projects_stats:{current_user.id}:{period}"
+    
+    # Пробуем получить из кэша
+    cached_stats = cache_service.get(cache_key)
+    if cached_stats is not None:
+        return cached_stats
 
+    cutoff_date = None
     if period == "Последняя неделя":
         cutoff_date = datetime.utcnow() - timedelta(days=7)
 
-    # Получаем проекты
+    # Получаем уникальные project_key из JiraIssue
     projects_query = db.query(JiraIssue.project_key).distinct()
-
     projects = projects_query.all()
+
+  
+    base_url = None
+    
+    # Способ 1: Ищем токен Atlassian текущего пользователя
+    atlassian_token = db.query(IntegrationToken).filter(
+        IntegrationToken.provider == "jira",
+        IntegrationToken.user_id == current_user.id
+    ).first()
+    
+    if atlassian_token and atlassian_token.instance_url:
+        base_url = atlassian_token.instance_url.rstrip('/')
+        print(f"[DEBUG] Found base_url from user's token: {base_url}")
+    else:
+        print(f"[DEBUG] No token found for user {current_user.id} with provider=atlassian")
+        
+        # Способ 2: Ищем любой токен Atlassian (fallback)
+        any_token = db.query(IntegrationToken).filter(
+            IntegrationToken.provider == "atlassian"
+        ).first()
+        
+        if any_token and any_token.instance_url:
+            base_url = any_token.instance_url.rstrip('/')
+            print(f"[DEBUG] Using fallback token (user_id={any_token.user_id}): {base_url}")
+        else:
+            print(f"[WARNING] No instance_url found in any Atlassian token")
+            
+            # Способ 3: Получаем из Project.avatar_url (костыль, но работает)
+            sample_project = db.query(Project).filter(
+                Project.avatar_url.isnot(None)
+            ).first()
+            
+            if sample_project and sample_project.avatar_url:
+                # avatar_url содержит cloud_id, но не полный URL
+                # Парсим cloud_id и формируем URL
+                import re
+                match = re.search(r'/ex/jira/([a-f0-9-]+)/', sample_project.avatar_url)
+                if match:
+                    cloud_id = match.group(1)
+                    base_url = f"https://api.atlassian.com/ex/jira/{cloud_id}"
+                    print(f"[DEBUG] Extracted cloud_id from avatar_url: {cloud_id}")
+                    print(f"[WARNING] Using API URL as base_url (may not work for direct links): {base_url}")
 
     result = []
 
     for idx, (project_key,) in enumerate(projects, start=1):
-
+        # Фильтруем задачи по проекту
         jira_query = db.query(JiraIssue).filter(
             JiraIssue.project_key == project_key
         )
 
-        github_query = db.query(GithubIssue).filter(
-            GithubIssue.project_id.isnot(None)
-        )
+        # Получаем Project из core.projects по jira_project_key (если есть)
+        project_obj = db.query(Project).filter(
+            Project.jira_project_key == project_key
+        ).first()
+        
+        # Получаем project_id для GitHub данных
+        project_id = project_obj.id if project_obj else None
 
         if cutoff_date:
             jira_query = jira_query.filter(
                 JiraIssue.updated_at >= cutoff_date
-            )
-
-            github_query = github_query.filter(
-                GithubIssue.updated_at >= cutoff_date
             )
 
         jira_issues = jira_query.all()
@@ -610,7 +577,6 @@ def get_projects_stats(
         # ---------------------------
         # WORKLOAD
         # ---------------------------
-
         assignees = db.query(
             JiraIssue.assignee_account_id
         ).filter(
@@ -619,21 +585,17 @@ def get_projects_stats(
         ).distinct().all()
 
         workload_values = []
-
         for (assignee_id,) in assignees:
-
             wi = calculate_workload_index(
                 db=db,
                 assignee_account_id=assignee_id,
                 project_key=project_key,
                 weeks=1 if period == "Последняя неделя" else 2
             )
-
             if wi:
                 workload_values.append(wi)
 
         avg_workload = 0
-
         if workload_values:
             avg_workload = round(
                 (sum(workload_values) / len(workload_values)) * 100
@@ -642,34 +604,24 @@ def get_projects_stats(
         # ---------------------------
         # REVIEW TIME
         # ---------------------------
-
         avg_review_hours = 0
-
         closed_issues = [
             i for i in jira_issues
             if i.closed_at and i.created_at
         ]
-
         if closed_issues:
-
             review_times = []
-
             for issue in closed_issues:
-
                 delta = issue.closed_at - issue.created_at
-
                 review_times.append(delta.total_seconds() / 3600)
-
             avg_review_hours = round(
                 sum(review_times) / len(review_times)
             )
-
         review_time_str = f"{avg_review_hours}ч"
 
         # ---------------------------
         # BUGS
         # ---------------------------
-
         bugs_count = len([
             i for i in jira_issues
             if i.issue_type
@@ -677,35 +629,42 @@ def get_projects_stats(
         ])
 
         # ---------------------------
-        # PR COUNT
+        # PR COUNT & COMMITS (GitHub)
         # ---------------------------
-
-        pr_count = github_query.count()
-
-        # ---------------------------
-        # COMMITS
-        # ---------------------------
-
-        commits_count = pr_count * 10
-
-        commits_str = f"{commits_count}↑"
+        from app.db.models.normalized import GithubPullRequest, GithubCommit
+        
+        pr_count = 0
+        commits_count = 0
+        
+        if project_id:
+            days = 30 if period == "Весь период" else 7
+            cutoff_date_pr = datetime.utcnow() - timedelta(days=days)
+            
+            pr_count = db.query(GithubPullRequest).filter(
+                GithubPullRequest.project_id == project_id,
+                GithubPullRequest.created_at >= cutoff_date_pr
+            ).count()
+            
+            commits_count = db.query(GithubCommit).filter(
+                GithubCommit.project_id == project_id,
+                GithubCommit.committed_at >= cutoff_date_pr
+            ).count()
+        
+        commits_str = f"{commits_count}↑" if commits_count > 0 else "0"
 
         # ---------------------------
         # SLA
         # ---------------------------
-
         sla_result = calculate_sla_score(
             db=db,
             project_key=project_key,
             period_days=7 if period == "Последняя неделя" else 30
         )
-
         sla_score = round(sla_result["sla_score"])
 
         # ---------------------------
         # STATUS
         # ---------------------------
-
         if sla_score < 70 or avg_workload > 100:
             status = "error"
         elif sla_score < 85 or avg_workload > 85:
@@ -713,10 +672,30 @@ def get_projects_stats(
         else:
             status = "success"
 
+        # 🔥 ФОРМИРУЕМ ССЫЛКУ НА JIRA
+        jira_url = None
+        if base_url and project_key:
+            # Если base_url содержит api.atlassian.com/ex/jira, нужно преобразовать
+            if "api.atlassian.com/ex/jira" in base_url:
+                # Это API URL, не подходит для прямых ссылок
+                # Пытаемся извлечь cloud_id и сформировать правильный URL
+                import re
+                match = re.search(r'/ex/jira/([a-f0-9-]+)', base_url)
+                if match:
+                    cloud_id = match.group(1)
+                    jira_url = f"https://your-domain.atlassian.net/jira/software/projects/{project_key}/summary"
+                    print(f"[WARNING] Cannot construct proper Jira URL without domain. Cloud ID: {cloud_id}")
+                else:
+                    jira_url = f"{base_url}/jira/software/projects/{project_key}/summary"
+            else:
+                jira_url = f"{base_url}/jira/software/projects/{project_key}/summary"
+
         result.append({
             "id": idx,
             "name": project_key,
+            "project_id": project_id,
             "status": status,
+            "jira_url": jira_url,
             "stats": {
                 "workload": avg_workload,
                 "reviewTime": review_time_str,
@@ -726,6 +705,9 @@ def get_projects_stats(
                 "sla": sla_score
             }
         })
+
+    # Сохраняем в кэш на 2 минуты
+    cache_service.set(cache_key, result, expire=120)
 
     return result
 
@@ -828,16 +810,35 @@ def get_teams_load(
     return result
 
 @router.get("/ai-insights")
-async def get_ai_insights(db=Depends(get_db)):
+async def get_ai_insights(
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db)
+):
+    """
+    GET /dashboard/ai-insights
+    Возвращает AI-инсайты с кэшированием на 5 минут.
+    """
+    # Ключ кэша с user_id (чтобы у разных пользователей были разные кэши)
+    cache_key = f"ai_insights:{current_user.id}"
 
+    # Пробуем получить из кэша
+    cached_insights = cache_service.get(cache_key)
+    if cached_insights is not None:
+        return cached_insights
+    
+    # Генерируем заново
     provider = OpenRouterProvider(
         api_key=settings.OPENROUTER_API_KEY,
         model=settings.OPENROUTER_MODEL
     )
 
     service = AIInsightService(db, provider)
-
-    return await service.build_insights()
+    insights = await service.build_insights()
+    
+    # Сохраняем в кэш на 5 минут (300 секунд)
+    cache_service.set(cache_key, insights, expire=300)
+    
+    return insights
 
 @router.get("/projects")
 def get_user_projects(
@@ -869,3 +870,21 @@ def get_user_projects(
         }
         for project in projects
     ]
+
+
+@router.post("/cache/clear")
+def clear_cache(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    POST /dashboard/cache/clear
+    Очищает кэш для текущего пользователя.
+    """
+    # Очищаем кэш только для этого пользователя
+    cache_service.delete_pattern(f"*:{current_user.id}:*")
+    
+    return {
+        "success": True,
+        "message": f"Cache cleared for user {current_user.id}"
+    }

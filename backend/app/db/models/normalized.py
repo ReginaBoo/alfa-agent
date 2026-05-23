@@ -242,6 +242,158 @@ class GithubIssueEvent(Base):
     synced_at = Column(DateTime, default=datetime.utcnow)
 
 
+class GithubCommit(Base):
+    """Нормализованные данные о коммитах GitHub"""
+    __tablename__ = "github_commits"
+    __table_args__ = (
+        Index("idx_github_commits_repo", "repo_full_name"),
+        Index("idx_github_commits_author", "author_login"),
+        Index("idx_github_commits_created", "created_at"),
+        Index("idx_github_commits_project", "project_id"),
+        {"schema": "normalized"}
+    )
+    
+    id = Column(Integer, primary_key=True)
+    project_integration_id = Column(Integer, nullable=True, index=True)
+    
+    # Информация о коммите
+    commit_sha = Column(String(40), nullable=False, index=True)
+    repo_full_name = Column(String(255), nullable=False, index=True)
+    repo_id = Column(Integer, nullable=True)
+    
+    # Автор
+    author_login = Column(String(255), nullable=True, index=True)
+    author_id = Column(Integer, nullable=True)
+    author_name = Column(String(255), nullable=True)
+    author_email = Column(String(255), nullable=True)
+    
+    # Содержание
+    message = Column(Text, nullable=True)
+    html_url = Column(String(500), nullable=True)
+    
+    # Статистика
+    additions = Column(Integer, default=0)
+    deletions = Column(Integer, default=0)
+    total_changes = Column(Integer, default=0)
+    
+    # Связи
+    project_id = Column(Integer, nullable=True, index=True)
+    
+    # Временные метки
+    committed_at = Column(DateTime, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_synced_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Флаги
+    is_deleted = Column(Boolean, default=False)
+    snapshot_version = Column(Integer, default=1)
+
+
+class GithubPullRequest(Base):
+    """Нормализованные данные о Pull Requests GitHub"""
+    __tablename__ = "github_pull_requests"
+    __table_args__ = (
+        Index("idx_github_pr_repo", "repo_full_name"),
+        Index("idx_github_pr_author", "author_login"),
+        Index("idx_github_pr_state", "state"),
+        Index("idx_github_pr_merged_at", "merged_at"),
+        Index("idx_github_pr_project", "project_id"),
+        {"schema": "normalized"}
+    )
+
+    id = Column(Integer, primary_key=True)
+    project_integration_id = Column(Integer, nullable=True, index=True)
+    
+    # Основной идентификатор
+    pr_id = Column(Integer, nullable=False, index=True, unique=True)
+    pr_number = Column(Integer, nullable=False)
+    repo_full_name = Column(String(255), nullable=False, index=True)
+    repo_id = Column(Integer, nullable=True)
+    
+    # Информация о PR
+    title = Column(Text, nullable=True)
+    body = Column(Text, nullable=True)
+    state = Column(String(50), nullable=False, index=True)
+    status = Column(String(50), nullable=True)  # open/closed/merged
+    
+    # Автор
+    author_login = Column(String(255), nullable=True, index=True)
+    author_id = Column(Integer, nullable=True)
+    
+    # Merge статус
+    mergeable = Column(Boolean, nullable=True)
+    mergeable_state = Column(String(50), nullable=True)
+    merged = Column(Boolean, default=False)
+    merged_at = Column(DateTime, nullable=True, index=True)
+    merged_by_login = Column(String(255), nullable=True)
+    merged_by_id = Column(Integer, nullable=True)
+    
+    # Ревьюверы (JSON массив логинов)
+    requested_reviewers = Column(JSON, nullable=True)
+    
+    # Даты
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+    closed_at = Column(DateTime, nullable=True)
+    
+    # Статистика
+    comments_count = Column(Integer, default=0)
+    review_comments_count = Column(Integer, default=0)
+    commits_count = Column(Integer, default=0)
+    additions = Column(Integer, default=0)
+    deletions = Column(Integer, default=0)
+    
+    # Ветки
+    head_branch = Column(String(255), nullable=True)
+    base_branch = Column(String(255), nullable=True)
+    head_sha = Column(String(40), nullable=True)
+    
+    # Связи
+    project_id = Column(Integer, nullable=True, index=True)
+    
+    # Временные метки
+    last_synced_at = Column(DateTime, default=datetime.utcnow)
+    is_deleted = Column(Boolean, default=False)
+    snapshot_version = Column(Integer, default=1)
+    
+    html_url = Column(String(500), nullable=True)
+
+
+class GithubPullRequestReview(Base):
+    """Нормализованные данные о ревью Pull Requests"""
+    __tablename__ = "github_pull_request_reviews"
+    __table_args__ = (
+        Index("idx_github_pr_reviews_pr", "pr_id"),
+        Index("idx_github_pr_reviews_user", "user_login"),
+        Index("idx_github_pr_reviews_state", "state"),
+        {"schema": "normalized"}
+    )
+    
+    id = Column(Integer, primary_key=True)
+    project_integration_id = Column(Integer, nullable=True, index=True)
+    
+    # Идентификаторы
+    review_id = Column(Integer, nullable=False, index=True, unique=True)
+    pr_id = Column(Integer, nullable=False, index=True)
+    repo_full_name = Column(String(255), nullable=False)
+    
+    # Информация о ревью
+    user_login = Column(String(255), nullable=True, index=True)
+    user_id = Column(Integer, nullable=True)
+    state = Column(String(50), nullable=False)  # APPROVED/CHANGES_REQUESTED/COMMENTED
+    body = Column(Text, nullable=True)
+    
+    # Даты
+    submitted_at = Column(DateTime, nullable=True)
+    
+    # Ссылки
+    html_url = Column(String(500), nullable=True)
+    pull_request_url = Column(String(500), nullable=True)
+    
+    # Временные метки
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_synced_at = Column(DateTime, default=datetime.utcnow)
+
 
 class ProjectStatusMapping(Base):
     """Маппинг статусов Jira проекта с их ролями для метрик"""

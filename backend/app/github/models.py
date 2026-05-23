@@ -105,3 +105,66 @@ class GitHubComment(BaseModel):
     created_at: str
     updated_at: str
     html_url: str
+
+
+class GitHubPullRequest(BaseModel):
+    """Модель Pull Request GitHub"""
+    id: int
+    number: int
+    title: str
+    state: str
+    user: Optional[GitHubUser] = None
+    body: Optional[str] = None
+    
+    # Merge информация
+    merged: bool = False
+    merged_at: Optional[str] = None
+    merged_by: Optional[GitHubUser] = None
+    mergeable: Optional[bool] = None
+    mergeable_state: Optional[str] = None
+    
+    # Даты
+    created_at: str
+    updated_at: str
+    closed_at: Optional[str] = None
+    
+    # Ветки
+    head: Optional[dict] = None  # {'ref': 'branch', 'sha': 'commit_sha'}
+    base: Optional[dict] = None
+    
+    # Статистика
+    comments: int = 0
+    review_comments: int = 0
+    commits: int = 0
+    additions: int = 0
+    deletions: int = 0
+    
+    # Ревьюверы
+    requested_reviewers: List[GitHubUser] = []
+    
+    # Ссылки
+    html_url: str
+    pull_request: Optional[dict] = None  # marker that this is a PR
+
+
+class GitHubPullRequestReview(BaseModel):
+    """Модель ревью Pull Request"""
+    id: int
+    user: Optional[GitHubUser] = None
+    state: str  # APPROVED, CHANGES_REQUESTED, COMMENTED
+    body: Optional[str] = None
+    submitted_at: Optional[str] = None
+    html_url: Optional[str] = None
+    pull_request_url: Optional[str] = None
+
+
+class GitHubCheckRun(BaseModel):
+    """Модель Check Run (CI/CD)"""
+    id: int
+    name: str
+    status: str  # queued, in_progress, completed
+    conclusion: Optional[str] = None  # success, failure, neutral, cancelled, etc.
+    head_sha: str
+    html_url: Optional[str] = None
+    completed_at: Optional[str] = None
+    started_at: Optional[str] = None

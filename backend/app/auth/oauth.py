@@ -10,7 +10,7 @@ def get_authorization_url(state: str) -> str:
         f"client_id={settings.ATLASSIAN_CLIENT_ID}&"
         f"scope={settings.SCOPES}&"
         f"redirect_uri={settings.ATLASSIAN_REDIRECT_URI}&"
-        f"state={state}&response_type=code&prompt=consent"
+        f"state={state}&response_type=code&prompt=select_account"  # consent → select_account
     )
     print(f"[DEBUG] Authorization URL with scopes: {settings.SCOPES}")
     return url

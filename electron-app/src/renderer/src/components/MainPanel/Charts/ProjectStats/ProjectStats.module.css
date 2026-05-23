@@ -8,6 +8,18 @@
   overflow: hidden;
 }
 
+.arrow {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  margin-left: 8px;
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+.arrow:hover {
+  transform: translateX(3px);
+}
+
 .cardHeader {
   display: flex;
   justify-content: space-between;

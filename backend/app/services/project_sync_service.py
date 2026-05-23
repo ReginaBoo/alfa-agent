@@ -96,6 +96,7 @@ def sync_projects_from_jira(
     
     created_count = 0
     updated_count = 0
+    linked_count = 0  # НОВЫЙ счетчик для созданных связей
     statuses_synced = 0
     
     # ========== 1. СОХРАНЯЕМ ПРОЕКТЫ ==========
@@ -103,7 +104,16 @@ def sync_projects_from_jira(
         project_key = jp['key']
         
         # Проверяем, существует ли проект в нашей БД
-        existing = db.query(Project).filter(Project.key == project_key).first()
+        existing_project = db.query(Project).filter(Project.key == project_key).first()
+        
+        # Проверяем, есть ли связь этого проекта с текущим пользователем
+        existing_link = None
+        if existing_project:
+            existing_link = db.query(UserProject).filter(
+                UserProject.user_id == user_id,
+                UserProject.project_id == existing_project.id
+            ).first()
+        
         jira_ui_url = f"https://{instance_name}.atlassian.net/jira/software/projects/{project_key}"
         
         project_data = {
@@ -117,15 +127,8 @@ def sync_projects_from_jira(
             'is_active': jp.get('isPrivate') == False,
         }
         
-        if existing:
-            existing.name = project_data['name']
-            existing.url = project_data['url']
-            existing.avatar_url = project_data['avatar_url']
-            existing.category = project_data['category']
-            existing.description = project_data['description']
-            existing.is_active = project_data['is_active']
-            updated_count += 1
-        else:
+        if not existing_project:
+            # СЛУЧАЙ 1: Проекта нет в БД - создаем проект и связь
             project = Project(**project_data)
             db.add(project)
             db.flush()
@@ -137,111 +140,151 @@ def sync_projects_from_jira(
             )
             db.add(user_project)
             created_count += 1
+            logger.info(f"Created new project {project_key} with link to user {user_id}")
+            
+        elif not existing_link:
+            # СЛУЧАЙ 2: Проект есть, но связи с пользователем нет - добавляем связь
+            user_project = UserProject(
+                user_id=user_id,
+                project_id=existing_project.id,
+                role='owner'
+            )
+            db.add(user_project)
+            linked_count += 1
+            
+            # Обновляем информацию о проекте
+            existing_project.name = project_data['name']
+            existing_project.url = project_data['url']
+            existing_project.avatar_url = project_data['avatar_url']
+            existing_project.category = project_data['category']
+            existing_project.description = project_data['description']
+            existing_project.is_active = project_data['is_active']
+            updated_count += 1
+            logger.info(f"Added missing link for user {user_id} to existing project {project_key}")
+            
+        else:
+            # СЛУЧАЙ 3: Проект есть и связь есть - просто обновляем
+            existing_project.name = project_data['name']
+            existing_project.url = project_data['url']
+            existing_project.avatar_url = project_data['avatar_url']
+            existing_project.category = project_data['category']
+            existing_project.description = project_data['description']
+            existing_project.is_active = project_data['is_active']
+            updated_count += 1
+            logger.debug(f"Updated existing project {project_key}")
     
     # ========== КОММИТИМ ПРОЕКТЫ ДО СТАТУСОВ ==========
     db.commit()
-    logger.info(f"Projects saved: {created_count} created, {updated_count} updated")
+    logger.info(f"Projects saved: {created_count} created, {updated_count} updated, {linked_count} links added")
     
-    # ========== 2. СИНХРОНИЗИРУЕМ СТАТУСЫ (БЕЗ JiraClient) ==========
+    # ========== 2. СИНХРОНИЗИРУЕМ СТАТУСЫ ==========
     if sync_statuses:
-        # Получаем список ключей проектов
-        project_keys_to_sync = [p['key'] for p in jira_projects]
+        # Получаем список ключей проектов (ТОЛЬКО тех, к которым есть доступ у пользователя)
+        user_project_keys = db.query(Project.key).join(
+            UserProject, UserProject.project_id == Project.id
+        ).filter(
+            UserProject.user_id == user_id
+        ).all()
         
-        # Удаляем старые статусы для этих проектов
-        deleted_count = db.query(ProjectStatusMapping).filter(
-            ProjectStatusMapping.project_key.in_(project_keys_to_sync)
-        ).delete(synchronize_session=False)
-        logger.info(f"Deleted {deleted_count} old status mappings")
+        project_keys_to_sync = [p[0] for p in user_project_keys]
         
-        # Синхронизируем статусы для каждого проекта напрямую
-        for project_key in project_keys_to_sync:
-            try:
-                statuses_url = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3/project/{project_key}/statuses"
-                statuses_response = _make_jira_request_with_refresh(statuses_url, token, db, user_id)
-                
-                if statuses_response.status_code == 200:
-                    statuses_data = statuses_response.json()
+        if project_keys_to_sync:
+            # Удаляем старые статусы для этих проектов
+            deleted_count = db.query(ProjectStatusMapping).filter(
+                ProjectStatusMapping.project_key.in_(project_keys_to_sync)
+            ).delete(synchronize_session=False)
+            logger.info(f"Deleted {deleted_count} old status mappings")
+            
+            # Синхронизируем статусы для каждого проекта
+            for project_key in project_keys_to_sync:
+                try:
+                    statuses_url = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3/project/{project_key}/statuses"
+                    statuses_response = _make_jira_request_with_refresh(statuses_url, token, db, user_id)
                     
-                    # ДЕДУПЛИКАЦИЯ: собираем уникальные статусы
-                    unique_statuses = {}
-                    for issue_type_data in statuses_data:
-                        for status in issue_type_data.get("statuses", []):
-                            status_name = status.get("name")
-                            if status_name not in unique_statuses:
-                                unique_statuses[status_name] = status
-                    
-                    # Сохраняем только уникальные статусы
-                    for status_name, status in unique_statuses.items():
-                        status_category = status.get("statusCategory", {})
-                        category_key = status_category.get("key", "").lower()
+                    if statuses_response.status_code == 200:
+                        statuses_data = statuses_response.json()
                         
-                        # Универсальная обработка категорий
-                        if category_key == "new":
-                            is_open = True
-                            is_in_progress = False
-                            is_closed = False
-                        elif category_key == "indeterminate":
-                            is_open = True
-                            is_in_progress = True
-                            is_closed = False
-                        elif category_key == "done":
-                            is_open = False
-                            is_in_progress = False
-                            is_closed = True
-                        elif category_key in ["undefined", "", None]:
-                            # Если категория не определена, используем эвристику по имени
-                            status_lower = status_name.lower()
-                            closed_keywords = ['done', 'closed', 'resolved', 'completed', 'finished', 'готово', 'выполнено']
-                            if any(kw in status_lower for kw in closed_keywords):
-                                is_open = False
+                        # ДЕДУПЛИКАЦИЯ: собираем уникальные статусы
+                        unique_statuses = {}
+                        for issue_type_data in statuses_data:
+                            for status in issue_type_data.get("statuses", []):
+                                status_name = status.get("name")
+                                if status_name not in unique_statuses:
+                                    unique_statuses[status_name] = status
+                        
+                        # Сохраняем только уникальные статусы
+                        for status_name, status in unique_statuses.items():
+                            status_category = status.get("statusCategory", {})
+                            category_key = status_category.get("key", "").lower()
+                            
+                            # Универсальная обработка категорий
+                            if category_key == "new":
+                                is_open = True
                                 is_in_progress = False
-                                is_closed = True
-                            elif any(kw in status_lower for kw in ['progress', 'review', 'работе', 'тестирование']):
+                                is_closed = False
+                            elif category_key == "indeterminate":
                                 is_open = True
                                 is_in_progress = True
                                 is_closed = False
+                            elif category_key == "done":
+                                is_open = False
+                                is_in_progress = False
+                                is_closed = True
+                            elif category_key in ["undefined", "", None]:
+                                # Если категория не определена, используем эвристику по имени
+                                status_lower = status_name.lower()
+                                closed_keywords = ['done', 'closed', 'resolved', 'completed', 'finished', 'готово', 'выполнено']
+                                if any(kw in status_lower for kw in closed_keywords):
+                                    is_open = False
+                                    is_in_progress = False
+                                    is_closed = True
+                                elif any(kw in status_lower for kw in ['progress', 'review', 'работе', 'тестирование']):
+                                    is_open = True
+                                    is_in_progress = True
+                                    is_closed = False
+                                else:
+                                    is_open = True
+                                    is_in_progress = False
+                                    is_closed = False
+                                logger.info(f"Status '{status_name}' (category='{category_key}') classified by name heuristic")
                             else:
+                                # Неизвестная категория
+                                logger.warning(f"Unknown category '{category_key}' for status '{status_name}', using open status as fallback")
                                 is_open = True
                                 is_in_progress = False
                                 is_closed = False
-                            logger.info(f"Status '{status_name}' (category='{category_key}') classified by name heuristic")
-                        else:
-                            # Неизвестная категория
-                            logger.warning(f"Unknown category '{category_key}' for status '{status_name}', using open status as fallback")
-                            is_open = True
-                            is_in_progress = False
-                            is_closed = False
+                            
+                            new_mapping = ProjectStatusMapping(
+                                project_key=project_key,
+                                status_name=status_name,
+                                is_open=is_open,
+                                is_in_progress=is_in_progress,
+                                is_closed=is_closed,
+                                jira_category=category_key,
+                                last_synced_at=datetime.utcnow(),
+                                synced_by_account_id=provider_user_id
+                            )
+                            db.add(new_mapping)
+                            statuses_synced += 1
                         
-                        new_mapping = ProjectStatusMapping(
-                            project_key=project_key,
-                            status_name=status_name,
-                            is_open=is_open,
-                            is_in_progress=is_in_progress,
-                            is_closed=is_closed,
-                            jira_category=category_key,
-                            last_synced_at=datetime.utcnow(),
-                            synced_by_account_id=provider_user_id
-                        )
-                        db.add(new_mapping)
-                        statuses_synced += 1
-                    
-                    db.commit()
-                    logger.info(f"Synced {len(unique_statuses)} statuses for {project_key}")
-                else:
-                    logger.error(f"Failed to get statuses for {project_key}: {statuses_response.status_code}")
-            except Exception as e:
-                logger.error(f"Failed to sync statuses for {project_key}: {e}")
-                db.rollback()
-                # Продолжаем со следующим проектом
-        
-        db.commit()
+                        db.commit()
+                        logger.info(f"Synced {len(unique_statuses)} statuses for {project_key}")
+                    else:
+                        logger.error(f"Failed to get statuses for {project_key}: {statuses_response.status_code}")
+                except Exception as e:
+                    logger.error(f"Failed to sync statuses for {project_key}: {e}")
+                    db.rollback()
+                    # Продолжаем со следующим проектом
+            
+            db.commit()
     
     logger.info(f"Sync completed: projects created={created_count}, updated={updated_count}, "
-                f"statuses synced={statuses_synced}")
+                f"links added={linked_count}, statuses synced={statuses_synced}")
     
     return {
         'created': created_count,
         'updated': updated_count,
+        'linked': linked_count,  # Добавили в ответ
         'total': created_count + updated_count,
         'statuses_synced': statuses_synced
     }
