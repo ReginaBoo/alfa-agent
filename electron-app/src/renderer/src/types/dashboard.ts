@@ -6,7 +6,7 @@ export interface ProjectActivityItem {
 }
 
 // Периоды дашбордов
-export type DashboardPeriod = 'Весь период' | 'Последняя неделя';
+export type DashboardPeriod = 'all' | 'last week';
 
 //Ai-выводы
 export interface InsightItem {
@@ -41,9 +41,32 @@ export interface LoadChartItem {
   description?: string;
 }
 
-export interface DashboardProject {
-  id: number;
-  key: string;
+
+//Выбор метрик
+export type DashboardMetric = 'effectiveness' | 'activity' | 'codeCount';
+
+//Список проектов
+export interface ProjectItem {
+  id: string;
   name: string;
-  avatar_url?: string;
+}
+
+
+export interface GanttProjectResponse {
+  viewRange: {
+    start: string;
+    end: string;
+  };
+  tasks: GanttRecord[];
+}
+
+export interface GanttRecord {
+  id: string;
+  task: string;
+  duration: string;
+  progress: number;
+  start?: string;
+  end?: string;
+  responsible?: string;
+  children?: GanttRecord[];
 }

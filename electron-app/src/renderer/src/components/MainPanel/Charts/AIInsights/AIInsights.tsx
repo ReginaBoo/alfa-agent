@@ -5,7 +5,6 @@ import { InsightItem } from '../../../../types/dashboard'
 const { Text } = Typography;
 
 
-
 interface AIInsightsProps {
   variant?: 'compact' | 'detailed';
   data: InsightItem[];

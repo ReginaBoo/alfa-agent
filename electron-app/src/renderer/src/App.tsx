@@ -38,19 +38,20 @@ function App() {
             {/* 1. Страница логина без MainPanel */}
             <Route path="/login" element={<LoginPage />} />
 
-            {/* 2. Все остальные страницы оборачиваем в MainPanel */}
-            <Route
-              path="/*"
-              element={
-                <MainPanel>
-                  <Routes>
-                    <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/project/:projectId" element={<ProjectDashboard />} />
-                  </Routes>
-                </MainPanel>
-              }
-            />
-          </Routes>
+
+          {/* 2. Все остальные страницы оборачиваем в MainPanel */}
+          <Route
+            path="/*"
+            element={
+              <MainPanel>
+                <Routes>
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/project/:id" element={<ProjectDashboard />} />
+                </Routes>
+              </MainPanel>
+            }
+          />
+        </Routes>
       </BrowserRouter>}
     </div>
   )

@@ -1,4 +1,4 @@
-# app/db/__init__.py
+# app/db/models/__init__.py
 
 from app.db.base import Base
 
