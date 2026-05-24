@@ -20,7 +20,7 @@ import {
 
 
 
-const URL = 'http://localhost:8080';
+const URL = 'http://localhost:8000';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
