@@ -1,4 +1,4 @@
-import { ProjectActivityItem, InsightItem, ProjectStatsItem, LoadChartItem, GanttProjectResponse } from '../../types/dashboard';
+import { ProjectActivityItem, InsightItem, ProjectStatsItem, LoadChartItem, GanttProjectResponse, CycleTimeData } from '../../types/dashboard';
 export const mockBackendData: ProjectActivityItem[] = [
   // МАРТ
   { date: '2026-03-01', value: 15, project: 'Проект 1' },
@@ -238,3 +238,16 @@ export const mockProjectInsightsData: InsightItem[] = [
     recommendation: 'Доступные резервы: Ольга (загрузка 0.4), обладает компетенциями для подключения к активным задачам текущего этапа.',
   },
 ];
+
+
+
+export const mockProjectCycleTimeData: CycleTimeData = {
+  averageTimeText: '4 дня, 18 часов',
+  stages: [
+    { id: "1", label: "Аналитика", hours: 12, warning: false },
+    { id: "2", label: "Разработка", hours: 40, warning: true, tooltip: "Много мерж-конфликтов" },
+    { id: "3", label: "Ревью", hours: 15 },
+    { id: "4", label: "Тестирование", hours: 20 },
+    { id: "5", label: "Тестирование 2", hours: 10 }
+  ]
+};

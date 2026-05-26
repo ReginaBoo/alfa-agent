@@ -9,7 +9,7 @@ import { TeamFocusChart } from '../../Charts/TeamFocusChart/TeamFocusChart';
 import { DownloadReportBtn, MetricsSelect, PeriodSelect, DashboardLoader, DashboardEmpty } from '../../../shared/DashboardControls';
 import { DashboardPeriod, DashboardMetric } from '../../../../types/dashboard';
 import { useState } from 'react';
-import { useProjectTasks, useProjectAIInsights } from '../../../../hooks/useProjectData';
+import { useProjectTasks, useProjectAIInsights, useProjectCycleTime } from '../../../../hooks/useProjectData';
 import { useParams } from 'react-router-dom';
 
 
@@ -22,6 +22,8 @@ export const ProjectDashboard = () => {
   ]);
   const { id } = useParams<{ id: string }>();
   const { data: aiInsights = [], isLoading: isAiInsightsLoading } = useProjectAIInsights(id || '');
+
+  const { data: cycleTimeData, isLoading: isCycleTimeLoading } = useProjectCycleTime(id || '', timePeriod);
   const { data: projectData, isLoading } = useProjectTasks(id || '', timePeriod);
   const handleDownloadReport = () => {
     console.log('Скачивание отчета за период:', timePeriod);
@@ -56,10 +58,19 @@ export const ProjectDashboard = () => {
         <Col span={16}>
           <div className={s.CycleSection}>
             <h1 className={s.blueTitle}>ВРЕМЯ ЦИКЛА</h1>
-            <div className={s.avgTime}>
-              Среднее время — 5 дней, 1 час
-            </div>
-            <CycleTimeChart />
+
+            {isCycleTimeLoading ? (
+              <DashboardLoader minHeight="200px" tip="Загружаем время цикла..." />
+            ) : !cycleTimeData || cycleTimeData.stages.length === 0 ? (
+              <DashboardEmpty description="Нет данных по времени цикла за этот период" minHeight="200px" />
+            ) : (
+              <>
+                <div className={s.avgTime}>
+                  Среднее время — {cycleTimeData.averageTimeText}
+                </div>
+                <CycleTimeChart stages={cycleTimeData.stages} />
+              </>
+            )}
           </div>
         </Col>
       </Row>

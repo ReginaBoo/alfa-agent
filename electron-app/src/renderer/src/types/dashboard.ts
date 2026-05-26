@@ -49,7 +49,7 @@ export interface ProjectItem {
   name: string;
 }
 
-
+//Гант
 export interface GanttProjectResponse {
   viewRange: {
     start: string;
@@ -67,4 +67,18 @@ export interface GanttRecord {
   end?: string;
   responsible?: string;
   children?: GanttRecord[];
+}
+
+//Время цикла
+export interface CycleStage {
+  id: string;
+  label: string;
+  hours: number;
+  warning?: boolean;
+  tooltip?: string;
+}
+
+export interface CycleTimeData {
+  stages: CycleStage[];
+  averageTimeText: string;
 }

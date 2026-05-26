@@ -5,18 +5,18 @@ import {
   InsightItem,
   ProjectStatsItem,
   LoadChartItem,
-  ProjectItem, GanttProjectResponse // Импортируем тип проекта
+  ProjectItem, GanttProjectResponse, CycleTimeData// Импортируем тип проекта
 } from '../types/dashboard';
 import {
   mockBackendData,
   mockInsightsData,
   mockProjectStats,
   mockLoadData,
-  mockProjectsData, mockGanttData, mockProjectInsightsData// Импортируем мок проектов
+  mockProjectsData, mockGanttData, mockProjectInsightsData, mockProjectCycleTimeData// Импортируем мок проектов
 } from './mocks/mocks';
 
 
-const URL = 'http://localhost:8080';
+const URL = 'http://localhost:8000';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
@@ -94,5 +94,16 @@ export const dashboardApi = {
     return response.data;
   },
 
+  getProjectCycleTime: async (projectId: string, period: string): Promise<CycleTimeData> => {
+    if (USE_MOCKS) {
+      return new Promise((resolve) => setTimeout(() => resolve(mockProjectCycleTimeData), 500));
+    }
+
+    const response = await axios.get<CycleTimeData>(
+      `${URL}/api/projects/${projectId}/cycle-time`,
+      { params: { period } }
+    );
+    return response.data;
+  },
 
 };
