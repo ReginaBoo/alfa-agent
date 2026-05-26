@@ -5,14 +5,14 @@ import {
   InsightItem,
   ProjectStatsItem,
   LoadChartItem,
-  ProjectItem, GanttProjectResponse, CycleTimeData, TeamWorkloadData// Импортируем тип проекта
+  ProjectItem, GanttProjectResponse, CycleTimeData, TeamWorkloadData, TeamFocusData// Импортируем тип проекта
 } from '../types/dashboard';
 import {
   mockBackendData,
   mockInsightsData,
   mockProjectStats,
   mockLoadData,
-  mockProjectsData, mockGanttData, mockProjectInsightsData, mockProjectCycleTimeData, mockTeamWorkloadData// Импортируем мок проектов
+  mockProjectsData, mockGanttData, mockProjectInsightsData, mockProjectCycleTimeData, mockTeamWorkloadData, mockTeamFocusData// Импортируем мок проектов
 } from './mocks/mocks';
 
 
@@ -112,6 +112,18 @@ export const dashboardApi = {
 
     const response = await axios.get<TeamWorkloadData>(
       `${URL}/api/projects/${projectId}/team-workload`,
+      { params: { period } }
+    );
+    return response.data;
+  },
+
+  getProjectTeamFocus: async (projectId: string, period: string): Promise<TeamFocusData> => {
+    if (USE_MOCKS) {
+      return new Promise((resolve) => setTimeout(() => resolve(mockTeamFocusData), 500));
+    }
+
+    const response = await axios.get<TeamFocusData>(
+      `${URL}/api/projects/${projectId}/team-focus`,
       { params: { period } }
     );
     return response.data;

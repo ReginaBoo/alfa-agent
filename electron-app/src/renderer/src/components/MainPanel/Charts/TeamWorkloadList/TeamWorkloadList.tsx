@@ -59,7 +59,7 @@ export const TeamWorkloadList = ({
 
       {recommendation && (
         <div className={s.footer}>
-          <Alert message={recommendation} type="info" showIcon={false} className={s.suggestionAlert} />
+          <Alert title={recommendation} type="info" showIcon={false} className={s.suggestionAlert} />
         </div>
       )}
     </div>

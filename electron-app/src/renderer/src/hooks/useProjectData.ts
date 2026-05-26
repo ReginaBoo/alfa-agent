@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { dashboardApi } from '../api/dashboardApi';
-import { GanttProjectResponse, DashboardPeriod, InsightItem, CycleTimeData, TeamWorkloadData } from '../types/dashboard';
+import { GanttProjectResponse, DashboardPeriod, InsightItem, CycleTimeData, TeamWorkloadData, TeamFocusData } from '../types/dashboard';
 
 export const useProjectTasks = (projectId: string, period: DashboardPeriod) => {
   const [data, setData] = useState<GanttProjectResponse | null>(null);
@@ -102,6 +102,33 @@ export const useProjectTeamWorkload = (id: string, period: string) => {
         setData(res);
       } catch (err: any) {
         setError(err.message || 'Не удалось загрузить загруженность команды');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [id, period]);
+
+  return { data, isLoading, error };
+};
+
+export const useProjectTeamFocus = (id: string, period: string) => {
+  const [data, setData] = useState<TeamFocusData | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) return;
+
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const res = await dashboardApi.getProjectTeamFocus(id, period);
+        setData(res);
+      } catch (err: any) {
+        setError(err.message || 'Не удалось загрузить фокус команды');
       } finally {
         setIsLoading(false);
       }

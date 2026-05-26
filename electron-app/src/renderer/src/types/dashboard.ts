@@ -83,6 +83,7 @@ export interface CycleTimeData {
   averageTimeText: string;
 }
 
+//Загрузка команды
 export type WorkloadCalculationType = 'story_points' | 'hours' | 'task_count';
 
 export interface TeamMemberWorkload {
@@ -96,4 +97,14 @@ export interface TeamWorkloadData {
   teamWorkloadBalance: number;              // Стандартное отклонение (Workload Balance)
   recommendationText: string;               // Текст рекомендации ИИ
   members: TeamMemberWorkload[];
+}
+
+//Фокус команды
+export interface FocusCategory {
+  type: string;  // "Новые фичи", "Рефактор/Долг", "Баги"
+  value: number; // Процентное значение (например: 60, 25, 15)
+}
+
+export interface TeamFocusData {
+  categories: FocusCategory[];
 }

@@ -1,4 +1,4 @@
-import { ProjectActivityItem, InsightItem, ProjectStatsItem, LoadChartItem, GanttProjectResponse, CycleTimeData, TeamWorkloadData } from '../../types/dashboard';
+import { ProjectActivityItem, InsightItem, ProjectStatsItem, LoadChartItem, GanttProjectResponse, CycleTimeData, TeamWorkloadData, TeamFocusData } from '../../types/dashboard';
 export const mockBackendData: ProjectActivityItem[] = [
   // МАРТ
   { date: '2026-03-01', value: 15, project: 'Проект 1' },
@@ -265,3 +265,12 @@ export const mockTeamWorkloadData: TeamWorkloadData =
     { "id": "4", "name": "Соня", "workloadIndex": 0.24 }
   ]
 }
+
+
+export const mockTeamFocusData: TeamFocusData = {
+  categories: [
+    { type: 'Новые фичи', value: 60 },
+    { type: 'Рефактор/Долг', value: 25 },
+    { type: 'Баги', value: 15 },
+  ]
+};
