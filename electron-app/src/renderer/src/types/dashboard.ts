@@ -82,3 +82,18 @@ export interface CycleTimeData {
   stages: CycleStage[];
   averageTimeText: string;
 }
+
+export type WorkloadCalculationType = 'story_points' | 'hours' | 'task_count';
+
+export interface TeamMemberWorkload {
+  id: string;
+  name: string;
+  workloadIndex: number; // Теперь передаем WI (например: 0.85, 1.4) вместо процентов
+}
+
+export interface TeamWorkloadData {
+  calculationType: WorkloadCalculationType; // 'story_points' | 'hours' | 'task_count'
+  teamWorkloadBalance: number;              // Стандартное отклонение (Workload Balance)
+  recommendationText: string;               // Текст рекомендации ИИ
+  members: TeamMemberWorkload[];
+}

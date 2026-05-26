@@ -5,14 +5,14 @@ import {
   InsightItem,
   ProjectStatsItem,
   LoadChartItem,
-  ProjectItem, GanttProjectResponse, CycleTimeData// Импортируем тип проекта
+  ProjectItem, GanttProjectResponse, CycleTimeData, TeamWorkloadData// Импортируем тип проекта
 } from '../types/dashboard';
 import {
   mockBackendData,
   mockInsightsData,
   mockProjectStats,
   mockLoadData,
-  mockProjectsData, mockGanttData, mockProjectInsightsData, mockProjectCycleTimeData// Импортируем мок проектов
+  mockProjectsData, mockGanttData, mockProjectInsightsData, mockProjectCycleTimeData, mockTeamWorkloadData// Импортируем мок проектов
 } from './mocks/mocks';
 
 
@@ -105,5 +105,16 @@ export const dashboardApi = {
     );
     return response.data;
   },
+  getProjectTeamWorkload: async (projectId: string, period: string): Promise<TeamWorkloadData> => {
+    if (USE_MOCKS) {
+      return new Promise((resolve) => setTimeout(() => resolve(mockTeamWorkloadData), 500));
+    }
 
+    const response = await axios.get<TeamWorkloadData>(
+      `${URL}/api/projects/${projectId}/team-workload`,
+      { params: { period } }
+    );
+    return response.data;
+  },
 };
+

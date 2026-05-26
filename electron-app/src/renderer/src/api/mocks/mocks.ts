@@ -1,4 +1,4 @@
-import { ProjectActivityItem, InsightItem, ProjectStatsItem, LoadChartItem, GanttProjectResponse, CycleTimeData } from '../../types/dashboard';
+import { ProjectActivityItem, InsightItem, ProjectStatsItem, LoadChartItem, GanttProjectResponse, CycleTimeData, TeamWorkloadData } from '../../types/dashboard';
 export const mockBackendData: ProjectActivityItem[] = [
   // МАРТ
   { date: '2026-03-01', value: 15, project: 'Проект 1' },
@@ -251,3 +251,17 @@ export const mockProjectCycleTimeData: CycleTimeData = {
     { id: "5", label: "Тестирование 2", hours: 10 }
   ]
 };
+
+
+export const mockTeamWorkloadData: TeamWorkloadData =
+{
+  "calculationType": "story_points",
+  "teamWorkloadBalance": 0.58,
+  "recommendationText": "Высокий дисбаланс нагрузки (0.58). Иван перегружен (WI: 1.15), в то время как Соня недогружена (WI: 0.24). Рекомендуется перераспределить задачи в работу Соне.",
+  "members": [
+    { "id": "1", "name": "Иван", "workloadIndex": 1.15 },
+    { "id": "2", "name": "Анна", "workloadIndex": 0.55 },
+    { "id": "3", "name": "Дмитрий", "workloadIndex": 0.70 },
+    { "id": "4", "name": "Соня", "workloadIndex": 0.24 }
+  ]
+}

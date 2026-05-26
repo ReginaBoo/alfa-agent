@@ -6,11 +6,13 @@ import { CycleTimeChart } from '../../Charts/CycleTimeChart/CycleTimeChart';
 import { TasksGanttChart } from '../../Charts/TasksGanttChart/TasksGanttChart';
 import { TeamWorkloadList } from '../../Charts/TeamWorkloadList/TeamWorkloadList';
 import { TeamFocusChart } from '../../Charts/TeamFocusChart/TeamFocusChart';
-import { DownloadReportBtn, MetricsSelect, PeriodSelect, DashboardLoader, DashboardEmpty } from '../../../shared/DashboardControls';
+import { DownloadReportBtn, MetricsSelect, PeriodSelect, DashboardLoader, DashboardEmpty, MetricInfoTooltip, MetricTypeBadge } from '../../../shared/DashboardControls';
 import { DashboardPeriod, DashboardMetric } from '../../../../types/dashboard';
 import { useState } from 'react';
-import { useProjectTasks, useProjectAIInsights, useProjectCycleTime } from '../../../../hooks/useProjectData';
+import { useProjectTasks, useProjectAIInsights, useProjectCycleTime, useProjectTeamWorkload } from '../../../../hooks/useProjectData';
 import { useParams } from 'react-router-dom';
+
+
 
 
 export const ProjectDashboard = () => {
@@ -22,7 +24,7 @@ export const ProjectDashboard = () => {
   ]);
   const { id } = useParams<{ id: string }>();
   const { data: aiInsights = [], isLoading: isAiInsightsLoading } = useProjectAIInsights(id || '');
-
+  const { data: workloadData, isLoading: isWorkloadLoading } = useProjectTeamWorkload(id || '', timePeriod);
   const { data: cycleTimeData, isLoading: isCycleTimeLoading } = useProjectCycleTime(id || '', timePeriod);
   const { data: projectData, isLoading } = useProjectTasks(id || '', timePeriod);
   const handleDownloadReport = () => {
@@ -58,7 +60,6 @@ export const ProjectDashboard = () => {
         <Col span={16}>
           <div className={s.CycleSection}>
             <h1 className={s.blueTitle}>ВРЕМЯ ЦИКЛА</h1>
-
             {isCycleTimeLoading ? (
               <DashboardLoader minHeight="200px" tip="Загружаем время цикла..." />
             ) : !cycleTimeData || cycleTimeData.stages.length === 0 ? (
@@ -96,14 +97,37 @@ export const ProjectDashboard = () => {
         <Col span={6}>
           <Row gutter={[16, 16]}>
             <div className={s.workloadStats}>
-              <TeamWorkloadList />
-            </div >
+              <div className={s.titles}>
+                <div className={s.title}>
+                  <h1 className={s.blueTitle}>ЗАГРУЖЕННОСТЬ КОМАНДЫ</h1>
+                  {workloadData && (
+                    <MetricInfoTooltip calculationType={workloadData.calculationType} />
+                  )}
+                </div>
+                {workloadData && (
+                  <MetricTypeBadge calculationType={workloadData.calculationType} />
+                )}
+              </div>
+
+              {isWorkloadLoading ? (
+                <DashboardLoader minHeight="180px" tip="Загрузка занятости..." />
+              ) : !workloadData ? (
+                <DashboardEmpty description="Нет данных по загрузке" minHeight="180px" />
+              ) : (
+                <TeamWorkloadList
+                  members={workloadData.members}
+                  recommendation={workloadData.recommendationText}
+                  calculationType={workloadData.calculationType}
+                  balance={workloadData.teamWorkloadBalance}
+                />
+              )}
+            </div>
             <div className={s.focusStats}>
               <TeamFocusChart />
             </div>
           </Row >
         </Col>
-      </Row>
+      </Row >
     </div >
   );
 };
