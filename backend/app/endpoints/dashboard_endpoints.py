@@ -749,3 +749,77 @@ def clear_cache(
         "success": True,
         "message": f"Cache cleared for user {current_user.id}"
     }
+
+
+@router.get("/api/projects/{project_key}/cycle-time")
+@router.get("/projects/{project_key}/cycle-time")
+def get_project_cycle_time(
+    project_key: str,
+    period: str = Query("all", pattern="^(all|last week)$"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Данные для блока Cycle Time на Dashboard.
+    """
+
+    from app.services.metrics.lead_time import (
+        calculate_lead_time,
+        calculate_lead_time_by_status
+    )
+
+    # period -> days
+    period_days = 3650 if period == "all" else 7
+
+    # Общий lead time
+    lead_time = calculate_lead_time(
+        db=db,
+        project_key=project_key,
+        period_days=period_days
+    )
+
+    # Разбивка по статусам
+    statuses = calculate_lead_time_by_status(
+        db=db,
+        project_key=project_key,
+        period_days=period_days
+    )
+
+    avg_hours = lead_time.get("avg_hours", 0)
+
+    days = int(avg_hours // 24)
+    hours = int(avg_hours % 24)
+
+    if days > 0:
+        average_time_text = f"{days} дн. {hours} ч."
+    else:
+        average_time_text = f"{hours} ч."
+
+    stages = []
+
+    for idx, (status_name, data) in enumerate(statuses.items(), start=1):
+        status_hours = round(data.get("avg_hours", 0), 1)
+
+        stage = {
+            "id": str(idx),
+            "label": status_name,
+            "hours": status_hours,
+        }
+
+        # Эвристика для bottleneck
+        if status_hours >= 72:
+            stage["warning"] = True
+            stage["tooltip"] = (
+                f"Этап занимает в среднем "
+                f"{round(status_hours / 24, 1)} дн."
+            )
+
+        stages.append(stage)
+
+    # Самые долгие этапы — первыми
+    stages.sort(key=lambda x: x["hours"], reverse=True)
+
+    return {
+        "averageTimeText": average_time_text,
+        "stages": stages
+    }

@@ -267,7 +267,13 @@ class JiraSyncService:
                 
                 # 2. СОХРАНЯЕМ CHANGELOG (ВСЕ изменения, а не только статусы)
                 changelog_data = issue.get('changelog', {})
-                for history in changelog_data.get('values', []):
+                histories = (
+                    changelog_data.get('values')
+                    or changelog_data.get('histories')
+                    or []
+                )
+
+                for history in histories:
                     changed_at = history.get('created')
                     author = history.get('author', {})
                     author_account_id = author.get('accountId') if author else None
