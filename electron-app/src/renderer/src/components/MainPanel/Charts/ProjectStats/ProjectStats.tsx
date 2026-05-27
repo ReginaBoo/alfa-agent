@@ -25,12 +25,6 @@ const getStatusConfig = (status: ProjectStatsItem['status']) => {
 export const ProjectStats = ({ data }: ProjectStatsProps) => {
   if (!Array.isArray(data) || !data || data.length === 0) return <Empty description="Нет статусов проектов" />;;
 
-  const handleProjectClick = (jiraUrl: string | undefined) => {
-    if (jiraUrl) {
-      window.open(jiraUrl, '_blank', 'noopener,noreferrer');
-    }
-  };
-
   return (
     <Row gutter={[16, 16]}>
       {data.map((p) => {
@@ -46,16 +40,7 @@ export const ProjectStats = ({ data }: ProjectStatsProps) => {
             >
               <div className={s.cardHeader}>
                 <Title level={5} className={s.projectTitle}>
-                  {p.name}
-                  {p.jira_url && (
-                    <ArrowRightOutlined
-                      className={s.arrow}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleProjectClick(p.jira_url);
-                      }}
-                    />
-                  )}
+                  {p.name} <ArrowRightOutlined className={s.arrow} />
                 </Title>
                 {icon}
               </div>
