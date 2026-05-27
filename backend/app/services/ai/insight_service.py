@@ -58,6 +58,14 @@ class AIInsightService:
         if not projects:
             return []
 
+        # Получаем названия проектов из core.projects
+        project_names = {}
+        projects_from_db = self.db.query(Project).filter(
+            Project.jira_project_key.in_(final_project_keys)
+        ).all()
+        for proj in projects_from_db:
+            project_names[proj.jira_project_key] = proj.name
+        
         projects_data = []
 
         for (project_key,) in projects:
@@ -98,7 +106,8 @@ class AIInsightService:
             
             # Формируем данные для проекта
             project_info = {
-                "project": project_key,
+                "project_key": project_key,
+                "project_name": project_names.get(project_key, project_key),
                 "total_issues": len(issues),
                 "open_issues": len(open_issues),
                 "closed_issues": len(closed_issues),
@@ -145,36 +154,37 @@ class AIInsightService:
     async def _analyze_project(self, project_data: dict) -> list:
         """Анализирует один проект и возвращает инсайты."""
         insights = []
-        project_key = project_data['project']
+        project_key = project_data['project_key']
+        project_name = project_data['project_name']
         
         # 1. Просроченные задачи
         if project_data['overdue_count'] > 0:
             insights.append({
                 'type': 'error',
-                'text': f"{project_key}: {project_data['overdue_count']} просроченных задач",
-                'recommendation': f"Срочно пересмотреть дедлайны в {project_key}"
+                'text': f"{project_name} ({project_key}): {project_data['overdue_count']} просроченных задач",
+                'recommendation': f"Срочно пересмотреть дедлайны в {project_name}"
             })
         
         # 2. Много багов
         if project_data['bugs_count'] > 5:
             insights.append({
                 'type': 'error',
-                'text': f"{project_key}: высокий уровень багов ({project_data['bugs_count']})",
-                'recommendation': f"Выделить спринт на технический долг в {project_key}"
+                'text': f"{project_name} ({project_key}): высокий уровень багов ({project_data['bugs_count']})",
+                'recommendation': f"Выделить спринт на технический долг в {project_name}"
             })
         elif project_data['bugs_count'] > 0:
             insights.append({
                 'type': 'warning',
-                'text': f"{project_key}: {project_data['bugs_count']} активных багов",
-                'recommendation': f"Включить баги в план работ {project_key}"
+                'text': f"{project_name} ({project_key}): {project_data['bugs_count']} активных багов",
+                'recommendation': f"Включить баги в план работ {project_name}"
             })
         
         # 3. Низкий completion rate
         if project_data['completion_rate'] < 50 and project_data['total_story_points'] > 0:
             insights.append({
                 'type': 'warning',
-                'text': f"{project_key}: низкая скорость закрытия ({project_data['completion_rate']}%)",
-                'recommendation': f"Проверить загрузку команды {project_key}"
+                'text': f"{project_name} ({project_key}): низкая скорость закрытия ({project_data['completion_rate']}%)",
+                'recommendation': f"Проверить загрузку команды {project_name}"
             })
         
         # 4. Перегрузка конкретных сотрудников
@@ -182,15 +192,15 @@ class AIInsightService:
             if data['count'] > 10:
                 insights.append({
                     'type': 'warning',
-                    'text': f"{project_key}: {assignee} перегружен ({data['count']} задач)",
-                    'recommendation': f"Перераспределить задачи в {project_key}"
+                    'text': f"{project_name} ({project_key}): {assignee} перегружен ({data['count']} задач)",
+                    'recommendation': f"Перераспределить задачи в {project_name}"
                 })
             
             if data['bugs'] > 3:
                 insights.append({
                     'type': 'warning',
-                    'text': f"{project_key}: {assignee} назначен на {data['bugs']} багов",
-                    'recommendation': f"Рассмотреть код-ревью для {assignee} в {project_key}"
+                    'text': f"{project_name} ({project_key}): {assignee} назначен на {data['bugs']} багов",
+                    'recommendation': f"Рассмотреть код-ревью для {assignee} в {project_name}"
                 })
         
         # 5. Положительный инсайт - хороший прогресс
@@ -199,8 +209,8 @@ class AIInsightService:
             project_data['bugs_count'] == 0):
             insights.append({
                 'type': 'success',
-                'text': f"{project_key}: ситуация стабильная ({project_data['completion_rate']}% готово)",
-                'recommendation': f"Можно подключать новые задачи в {project_key}"
+                'text': f"{project_name} ({project_key}): ситуация стабильная ({project_data['completion_rate']}% готово)",
+                'recommendation': f"Можно подключать новые задачи в {project_name}"
             })
         
         return insights

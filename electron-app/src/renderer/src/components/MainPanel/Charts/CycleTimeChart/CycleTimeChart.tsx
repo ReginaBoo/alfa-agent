@@ -26,7 +26,7 @@ export const CycleTimeChart = ({ stages }: CycleTimeChartProps) => {
         {stages.map((stage, index) => {
           const widthPercent = (stage.hours / totalHours) * 100;
 
-          // Берём цвет из массива по индексу. 
+          // Берём цвет из массива по индексу.
           // Оператор % (остаток от деления) защитит, если этапов будет больше, чем цветов в массиве
           const blockColor = STAGE_COLORS[index % STAGE_COLORS.length];
 
@@ -34,8 +34,7 @@ export const CycleTimeChart = ({ stages }: CycleTimeChartProps) => {
             <Tooltip
               key={stage.id}
               title={stage.tooltip || `${stage.label}: ${stage.hours}ч`}
-              color="white"
-              overlayInnerStyle={{ color: '#000' }}
+
             >
               <div
                 className={s.stageBlock}

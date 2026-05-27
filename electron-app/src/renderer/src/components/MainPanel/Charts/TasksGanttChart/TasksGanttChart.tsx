@@ -99,6 +99,10 @@ const generateGanttColumns = (
           const isActualStart = taskStart.isBetween(sDate, eDate, 'day', '[]');
           const isActualEnd = taskEnd.isBetween(sDate, eDate, 'day', '[]');
 
+          // Показываем имя ТОЛЬКО в первой неделе задачи (когда taskStart попадает в эту неделю)
+          const isFirstWeekOfTask = taskStart.isSame(sDate, 'day') || taskStart.isAfter(sDate, 'day');
+          const showResponsibleName = isFirstWeekOfTask && widthPercent >= 15 && record.responsible && record.responsible !== 'Не назначен';
+
           const responsibleName = record.responsible || 'default';
           const barColor = colorMap[responsibleName];
 
@@ -106,11 +110,24 @@ const generateGanttColumns = (
             <div className={s.anchorCell}>
               <Tooltip
                 title={
-                  <div style={{ padding: '4px' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{record.task}</div>
-                    <div>Исполнитель: <b>{record.responsible || 'Не назначен'}</b></div>
-                    <div>Сроки: {taskStart.format('DD.MM')} - {taskEnd.format('DD.MM')}</div>
-                    <div>Прогресс: {record.progress}%</div>
+                  <div style={{ padding: '8px', minWidth: '200px' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: 14 }}>{record.task}</div>
+                    <div style={{ marginBottom: '4px' }}>
+                      <span style={{ color: '#666' }}>Исполнитель:</span>{' '}
+                      <b>{record.responsible || 'Не назначен'}</b>
+                    </div>
+                    <div style={{ marginBottom: '4px' }}>
+                      <span style={{ color: '#666' }}>Сроки:</span>{' '}
+                      {taskStart.format('DD.MM')} - {taskEnd.format('DD.MM')}
+                    </div>
+                    <div style={{ marginBottom: '4px' }}>
+                      <span style={{ color: '#666' }}>Прогресс:</span>{' '}
+                      {record.progress}%
+                    </div>
+                    <div>
+                      <span style={{ color: '#666' }}>Длительность:</span>{' '}
+                      {record.duration}
+                    </div>
                   </div>
                 }
               >
@@ -121,14 +138,31 @@ const generateGanttColumns = (
                     width: `${widthPercent}%`,
                     backgroundColor: barColor,
                     borderRadius: `
-                      ${isActualStart ? '8px' : '0px'} 
-                      ${isActualEnd ? '8px' : '0px'} 
-                      ${isActualEnd ? '8px' : '0px'} 
-                      ${isActualStart ? '8px' : '0px'}
+                      ${isActualStart ? '6px' : '0px'}
+                      ${isActualEnd ? '6px' : '0px'}
+                      ${isActualEnd ? '6px' : '0px'}
+                      ${isActualStart ? '6px' : '0px'}
                     `,
                   }}
                 >
-                  {isActualStart && record.responsible}
+                  {/* Показываем имя только в первой неделе задачи */}
+                  {showResponsibleName && (
+                    <span style={{
+                      fontSize: 10,
+                      color: 'white',
+                      fontWeight: 500,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      padding: '0 4px',
+                      display: 'block',
+                      textAlign: 'center',
+                      lineHeight: '20px',
+                      textShadow: '0 1px 2px rgba(0,0,0,0.3)'
+                    }}>
+                      {record.responsible}
+                    </span>
+                  )}
                 </div>
               </Tooltip>
             </div>
@@ -149,17 +183,25 @@ const fixedColumns = [
     title: 'Задача',
     dataIndex: 'task',
     key: 'task',
-    width: 160, // Можно слегка увеличить базовую ширину
+    width: 250, // Увеличил с 160 до 250 для имени исполнителя
     fixed: 'left' as const,
-    ellipsis: true, // Включает автоматическое троеточие от Ant Design
-    render: (text: string) => (
-      <Tooltip
-        title={text}
-        placement="top"       /* Появляется сверху (можно "topLeft", "right" и т.д.) */
-        mouseEnterDelay={0.3} /* Небольшая задержка в сек, чтобы не раздражать при быстром скролле */
-      >
-        <span style={{ cursor: 'pointer' }}>{text}</span>
-      </Tooltip>
+    ellipsis: true,
+    render: (text: string, record: GanttRecord) => (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <Tooltip
+          title={text}
+          placement="topRight"
+          mouseEnterDelay={0.3}
+        >
+          <span style={{ cursor: 'pointer', fontWeight: 500 }}>{text}</span>
+        </Tooltip>
+        {/* Показываем исполнителя прямо в колонке */}
+        {record.responsible && record.responsible !== 'Не назначен' && (
+          <span style={{ fontSize: 11, color: '#666', fontWeight: 400 }}>
+            {record.responsible}
+          </span>
+        )}
+      </div>
     )
   },
   {
@@ -212,7 +254,7 @@ export const TasksGanttChart: React.FC<TasksGanttChartProps> = ({ data, viewRang
         <Table
           className={s.ganttTable}
           rowKey="id"
-          indentSize={15}
+          indentSize={20}
           columns={columns}
           dataSource={data}
           pagination={false}

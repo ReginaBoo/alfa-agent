@@ -257,8 +257,8 @@ def get_projects_stats(
             (p for p in user_projects if p.jira_project_key == project_key), 
             None
         )
-        
         project_id = project_obj.id if project_obj else None
+        project_name = project_obj.name if project_obj else project_key
 
         if cutoff_date:
             jira_query = jira_query.filter(
@@ -294,8 +294,12 @@ def get_projects_stats(
         avg_workload = 0
         if workload_values:
             avg_workload = round(
-                (sum(workload_values) / len(workload_values)) * 100
+                sum(workload_values) / len(workload_values),
+                2
             )
+
+        # Отображаем в процентах для UI (0.85 -> 85%)
+        avg_workload_percent = round(avg_workload * 100)
 
         # ---------------------------
         # REVIEW TIME
@@ -361,9 +365,10 @@ def get_projects_stats(
         # ---------------------------
         # STATUS
         # ---------------------------
-        if sla_score < 70 or avg_workload > 100:
+        # Статус по workload: 40-85% норма, 85-100% среднее, 101-120% перегруз
+        if sla_score < 70 or avg_workload_percent > 120:
             status = "error"
-        elif sla_score < 85 or avg_workload > 85:
+        elif sla_score < 85 or avg_workload_percent > 85:
             status = "warning"
         else:
             status = "success"
@@ -375,12 +380,13 @@ def get_projects_stats(
 
         result.append({
             "id": idx,
-            "name": project_key,
+            "name": project_name,
+            "project_key": project_key,
             "project_id": project_id,
             "status": status,
             "jira_url": jira_url,
             "stats": {
-                "workload": avg_workload,
+                "workload": avg_workload_percent,
                 "reviewTime": review_time_str,
                 "bugs": bugs_count,
                 "prCount": pr_count,
@@ -603,17 +609,19 @@ def get_project_tasks(
 ):
     """
     GET /api/projects/{project_id}/tasks
-    Возвращает задачи для диаграммы Гантта.
+    Возвращает рекурсивное дерево задач для диаграммы Гантта.
+    
+    Возвращает:
+    - viewRange: границы календарной сетки
+    - tasks: дерево задач с children (подзадачами)
     """
     from app.db.models.core import Project, UserProject
     from app.db.models import JiraIssue
     import re
     
     # Проверяем доступ к проекту
-    # Сначала пробуем найти по key (строка)
     project = db.query(Project).filter(Project.key == project_id).first()
     
-    # Если не нашли, пробуем найти по numeric ID (если project_id - число)
     if not project and re.match(r'^\d+$', project_id):
         project = db.query(Project).filter(Project.id == int(project_id)).first()
     
@@ -628,42 +636,91 @@ def get_project_tasks(
     if not user_project:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    # Определяем диапазон дат
+    # Определяем диапазон дат - РАСШИРЯЕМ!
     if period == "all":
-        start_date = datetime.utcnow() - timedelta(days=30)
+        # Показываем задачи за последние 60 дней и следующие 90 дней вперёд
+        start_date = datetime.utcnow() - timedelta(days=60)
         end_date = datetime.utcnow() + timedelta(days=90)
     else:  # last week
-        start_date = datetime.utcnow() - timedelta(days=7)
+        start_date = datetime.utcnow() - timedelta(days=14)
         end_date = datetime.utcnow() + timedelta(days=14)
     
-    # Получаем задачи проекта
+    # Получаем ВСЕ задачи проекта (включая подзадачи)
     project_key = project.jira_project_key or project.key
-    tasks_query = db.query(JiraIssue).filter(
+    all_tasks = db.query(JiraIssue).filter(
         JiraIssue.project_key == project_key,
         JiraIssue.is_deleted == False
-    )
+    ).all()
     
-    # Фильтруем по периоду
-    if period == "last week":
-        tasks_query = tasks_query.filter(
-            JiraIssue.updated_at >= start_date
+    # Вычисляем ДИНАМИЧЕСКИЙ диапазон дат на основе реальных задач
+    if all_tasks:
+        # Находим самую раннюю дату (created_at)
+        min_date = min(
+            (task.created_at for task in all_tasks if task.created_at),
+            default=datetime.utcnow() - timedelta(days=30)
         )
+        # Находим самую позднюю дату (due_date или updated_at)
+        max_date = max(
+            (task.due_date or task.updated_at or datetime.utcnow() + timedelta(days=30) 
+             for task in all_tasks if task.due_date or task.updated_at),
+            default=datetime.utcnow() + timedelta(days=30)
+        )
+        
+        # Добавляем отступы: 14 дней до и 30 дней после
+        start_date = min_date - timedelta(days=14)
+        end_date = max_date + timedelta(days=30)
+        
+        # Но не меньше чем "последняя неделя" по дефолту
+        if period == "last week":
+            start_date = datetime.utcnow() - timedelta(days=14)
+            end_date = datetime.utcnow() + timedelta(days=14)
+    else:
+        # Если задач нет, используем дефолтный диапазон
+        if period == "all":
+            start_date = datetime.utcnow() - timedelta(days=60)
+            end_date = datetime.utcnow() + timedelta(days=90)
+        else:
+            start_date = datetime.utcnow() - timedelta(days=14)
+            end_date = datetime.utcnow() + timedelta(days=14)
     
-    tasks = tasks_query.all()
+    # Разделяем на родительские задачи и подзадачи
+    parent_tasks = {}
+    child_tasks = []
     
-    # Формируем структуру для Гантта
-    task_tree = []
-    for issue in tasks:
-        task = {
-            "id": str(issue.id),
-            "task": issue.summary or f"Задача {issue.issue_key}",
-            "duration": f"{issue.time_spent or 8}ч",
-            "progress": 100 if issue.status in ["Done", "Closed", "Готово"] else 50,
-            "responsible": issue.assignee_name or "Не назначен",
-            "start": (issue.created_at or datetime.utcnow()).isoformat(),
-            "end": (issue.due_date or datetime.utcnow()).isoformat()
+    for task in all_tasks:
+        if task.parent_issue_id:
+            child_tasks.append(task)
+        else:
+            parent_tasks[task.id] = task
+    
+    # Строим дерево задач
+    def build_task_tree(task, all_tasks_dict, child_tasks_list):
+        """Рекурсивно строит дерево задач"""
+        task_children = [ct for ct in child_tasks_list if ct.parent_issue_id == task.id]
+        
+        task_data = {
+            "id": str(task.id),
+            "issueKey": task.issue_key,
+            "task": f"{task.issue_key}: {task.summary}" if task.summary else f"Задача {task.issue_key}",
+            "duration": f"{task.time_spent or 8}ч",
+            "progress": 100 if task.status in ["Done", "Closed", "Готово"] else 50,
+            "responsible": task.assignee_name or "Не назначен",
+            "start": (task.created_at or datetime.utcnow()).strftime("%Y-%m-%d"),
+            "end": (task.due_date or datetime.utcnow()).strftime("%Y-%m-%d")
         }
-        task_tree.append(task)
+        
+        if task_children:
+            task_data["children"] = [
+                build_task_tree(ct, all_tasks_dict, child_tasks_list)
+                for ct in task_children
+            ]
+        
+        return task_data
+    
+    # Формируем корневое дерево (только родительские задачи)
+    task_tree = []
+    for parent_id, parent_task in parent_tasks.items():
+        task_tree.append(build_task_tree(parent_task, parent_tasks, child_tasks))
     
     return {
         "viewRange": {
@@ -806,18 +863,25 @@ def get_project_cycle_time(
             "hours": status_hours,
         }
 
-        # Эвристика для bottleneck
-        if status_hours >= 72:
+        # Эвристика для bottleneck - НЕ показываем warning для Done/Closed/Resolved
+        is_final_status = status_name in ["Done", "Closed", "Resolved", "Готово"]
+        if status_hours >= 72 and not is_final_status:
             stage["warning"] = True
             stage["tooltip"] = (
-                f"Этап занимает в среднем "
+                f"Этот этап занимает в среднем "
                 f"{round(status_hours / 24, 1)} дн."
             )
 
         stages.append(stage)
 
-    # Самые долгие этапы — первыми
-    stages.sort(key=lambda x: x["hours"], reverse=True)
+    # Самые долгие этапы — первыми (но Done/Closed всегда в конце)
+    def sort_key(stage):
+        # Стадии с Done/Closed/Resolved всегда в конце
+        if stage["label"] in ["Done", "Closed", "Resolved", "Готово"]:
+            return (1, stage["hours"])  # Группа 1 (в конце), сортировка по времени
+        return (0, -stage["hours"])  # Группа 0 (в начале), обратная сортировка (от большего)
+    
+    stages.sort(key=sort_key)
 
     return {
         "averageTimeText": average_time_text,

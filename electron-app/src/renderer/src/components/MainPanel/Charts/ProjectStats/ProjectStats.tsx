@@ -46,7 +46,7 @@ export const ProjectStats = ({ data }: ProjectStatsProps) => {
             >
               <div className={s.cardHeader}>
                 <Title level={5} className={s.projectTitle}>
-                  {p.name}
+                  <span title={p.name}>{p.name}</span>
                   {p.jira_url && (
                     <ArrowRightOutlined
                       className={s.arrow}

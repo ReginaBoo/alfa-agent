@@ -68,6 +68,7 @@ export interface GanttRecord {
   start?: string;
   end?: string;
   responsible?: string;
+  issueKey?: string; // Добавим ключ задачи (например, "HEALTH-123")
   children?: GanttRecord[];
 }
 

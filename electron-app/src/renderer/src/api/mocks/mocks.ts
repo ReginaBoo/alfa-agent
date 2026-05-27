@@ -85,8 +85,8 @@ export const mockProjectStats: ProjectStatsItem[] = [
 
 export const mockLoadData: LoadChartItem[] = [
   { project: 'Проект 1', load: 1.75, statusType: 'overload', description: 'Критический перегруз ключевых разработчиков' },
-  { project: 'Проект 2', load: 0.62, statusType: 'optimal', description: 'Команда идет строго по графику спринта' },
-  { project: 'Проект 3', load: 0.45, statusType: 'high', description: 'Неравномерное распределение обязанностей' },
+  { project: 'Проект 2', load: 0.62, statusType: 'high', description: 'Команда идет строго по графику спринта' },
+  { project: 'Проект 3', load: 0.45, statusType: 'optimal', description: 'Неравномерное распределение обязанностей' },
   { project: 'Проект 4', load: 0.1, statusType: 'underload', description: 'Ресурсы освободились, можно подключать новые задачи' },
 
 ];

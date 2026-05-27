@@ -36,6 +36,8 @@ export const useProjectAIInsights = (id: string) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!id) return;
+
     const fetchData = async () => {
       try {
         setIsLoading(true);
@@ -49,7 +51,7 @@ export const useProjectAIInsights = (id: string) => {
       }
     };
     fetchData();
-  }, []); // Пустой массив — запрос только при монтировании дашборда
+  }, [id]); // Добавил id в зависимости - обновляется при смене проекта!
 
   return { data, isLoading, error };
 };

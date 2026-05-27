@@ -32,9 +32,10 @@ class JiraIssue(Base):
     time_spent = Column(Float, nullable=True)
     remaining_estimate = Column(Float, nullable=True)
     due_date = Column(DateTime, nullable=True)
-    closed_at = Column(DateTime, nullable=True, index=True)  # ← НОВОЕ ПОЛЕ
+    closed_at = Column(DateTime, nullable=True, index=True)
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False, index=True)
+    parent_issue_id = Column(Integer, nullable=True, index=True)
     last_synced_at = Column(DateTime, default=datetime.utcnow)
     is_deleted = Column(Boolean, default=False)
     snapshot_version = Column(Integer, default=1)
