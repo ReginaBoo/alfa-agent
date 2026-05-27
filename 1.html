@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Архитектура БД — Альфа Агент</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            color: #e0e0e0;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #fff, #e94560);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 50px;
+            font-size: 1rem;
+        }
+
+        /* Диаграмма связей */
+        .diagram {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 24px;
+            padding: 30px;
+            margin-bottom: 50px;
+            border: 1px solid rgba(233, 69, 96, 0.3);
+        }
+
+        .diagram-title {
+            font-size: 1.2rem;
+            color: #e94560;
+            margin-bottom: 25px;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+
+        .flow {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .flow-node {
+            background: linear-gradient(135deg, #2a2a4a, #1a1a3a);
+            border-radius: 16px;
+            padding: 12px 20px;
+            min-width: 140px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 0.9rem;
+            border-left: 3px solid #e94560;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .flow-node:hover {
+            transform: translateY(-2px);
+            background: linear-gradient(135deg, #3a3a6a, #2a2a4a);
+            border-left-color: #ff6b8a;
+        }
+
+        .flow-arrow {
+            font-size: 1.5rem;
+            color: #e94560;
+            font-weight: bold;
+        }
+
+        /* Сетка карточек */
+        .schemes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+            gap: 24px;
+        }
+
+        /* Карточка схемы */
+        .scheme-card {
+            background: rgba(30, 30, 50, 0.9);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            border: 1px solid rgba(233, 69, 96, 0.3);
+            overflow: hidden;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .scheme-card:hover {
+            transform: translateY(-5px);
+            border-color: #e94560;
+            box-shadow: 0 15px 40px rgba(233, 69, 96, 0.2);
+        }
+
+        .scheme-header {
+            background: linear-gradient(135deg, #1a1a3a, #0f0f2a);
+            padding: 18px 20px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s;
+            border-bottom: 1px solid rgba(233, 69, 96, 0.2);
+        }
+
+        .scheme-header:hover {
+            background: linear-gradient(135deg, #252550, #151535);
+        }
+
+        .scheme-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .scheme-number {
+            background: #e94560;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: white;
+        }
+
+        .scheme-role {
+            font-size: 0.8rem;
+            color: #e94560;
+            margin-top: 5px;
+        }
+
+        .toggle-icon {
+            font-size: 1.2rem;
+            color: #e94560;
+            transition: transform 0.3s;
+        }
+
+        .scheme-content {
+            padding: 0 20px;
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s ease, padding 0.3s;
+        }
+
+        .scheme-card.expanded .scheme-content {
+            max-height: 800px;
+            padding: 20px;
+        }
+
+        .scheme-card.expanded .toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        .scheme-description {
+            color: #bbb;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .entities-list {
+            list-style: none;
+        }
+
+        .entity-item {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            border-left: 3px solid #e94560;
+        }
+
+        .entity-name {
+            font-weight: 700;
+            color: #fff;
+            font-size: 0.95rem;
+            margin-bottom: 5px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .entity-desc {
+            font-size: 0.75rem;
+            color: #999;
+            line-height: 1.4;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #e94560;
+            font-size: 0.65rem;
+            padding: 2px 8px;
+            border-radius: 20px;
+            margin-top: 8px;
+            color: white;
+        }
+
+        .note {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 16px;
+            font-size: 0.85rem;
+            color: #888;
+            border: 1px dashed #e94560;
+        }
+
+        @media (max-width: 800px) {
+            .schemes-grid {
+                grid-template-columns: 1fr;
+            }
+            .flow-node {
+                font-size: 0.7rem;
+                padding: 8px 12px;
+                min-width: 100px;
+            }
+            h1 {
+                font-size: 1.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗄️ Архитектура базы данных</h1>
+        <div class="subtitle">Платформа управления проектами «Альфа Агент»</div>
+
+        <!-- Диаграмма взаимодействия схем -->
+        <div class="diagram">
+            <div class="diagram-title">🔄 Взаимодействие схем при работе платформы</div>
+            <div class="flow">
+                <div class="flow-node" onclick="scrollToScheme('identity')">1. Identity<br><span style="font-size:0.7rem; color:#aaa;">Кто заходит</span></div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node" onclick="scrollToScheme('core')">2. Core<br><span style="font-size:0.7rem; color:#aaa;">Что отслеживаем</span></div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node" onclick="scrollToScheme('integrations')">3. Integrations<br><span style="font-size:0.7rem; color:#aaa;">К чему подключены</span></div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node" onclick="scrollToScheme('raw')">4. Raw<br><span style="font-size:0.7rem; color:#aaa;">Сырые JSON</span></div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node" onclick="scrollToScheme('normalized')">5. Normalized<br><span style="font-size:0.7rem; color:#aaa;">Кеш данных</span></div>
+            </div>
+            <div class="flow" style="margin-top: 15px;">
+                <div class="flow-node" onclick="scrollToScheme('normalized')">5. Normalized</div>
+                <span class="flow-arrow">↙</span>
+                <div class="flow-node" onclick="scrollToScheme('analytics')">6. Analytics<br><span style="font-size:0.7rem; color:#aaa;">Готовые метрики</span></div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node" onclick="scrollToScheme('timescaledb')">7. TimescaleDB<br><span style="font-size:0.7rem; color:#aaa;">Графики и тренды</span></div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node" onclick="scrollToScheme('ai')">8. AI & Notifications<br><span style="font-size:0.7rem; color:#aaa;">Выводы и оповещения</span></div>
+                <span class="flow-arrow">→</span>
+                <div class="flow-node" style="background:#e94560; color:white;">📊 Дашборд</div>
+            </div>
+            <div style="text-align: center; margin-top: 20px; font-size: 0.7rem; color: #666;">
+                ⚡ Raw временно в PostgreSQL, в перспективе — выгрузка в S3/MinIO
+            </div>
+        </div>
+
+        <!-- Сетка карточек схем -->
+        <div class="schemes-grid" id="schemes-grid">
+            
+            <!-- Схема 1: Identity -->
+            <div class="scheme-card" id="scheme-identity">
+                <div class="scheme-header" onclick="toggleCard(this)">
+                    <div class="scheme-title">
+                        <span class="scheme-number">1</span>
+                        Identity
+                    </div>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="scheme-content">
+                    <div class="scheme-description">
+                        🔐 <strong>Роль:</strong> Входная дверь. Управляет аутентификацией, сессиями и OAuth-токенами для доступа к Jira и GitHub.
+                    </div>
+                    <ul class="entities-list">
+                        <li class="entity-item">
+                            <div class="entity-name">users</div>
+                            <div class="entity-desc">Пользователи системы — email, имя, аватар, дата регистрации</div>
+                        </li>
+                        <li class="entity-item">
+                            <div class="entity-name">sessions</div>
+                            <div class="entity-desc">Активные сессии — токен, срок действия, тип клиента (web/desktop)</div>
+                        </li>
+                        <li class="entity-item">
+                            <div class="entity-name">integration_tokens</div>
+                            <div class="entity-desc">OAuth-токены для Jira/GitHub — access_token, refresh_token, привязка к инстансу (cloud_id)</div>
+                        </li>
+                        <li class="entity-item">
+                            <div class="entity-name">user_settings</div>
+                            <div class="entity-desc">Настройки пользователя — режим "не беспокоить", автозапуск, тема</div>
+                        </li>
+                    </ul>
+                    <span class="badge">🔑 Основа всей системы</span>
+                </div>
+            </div>
+
+            <!-- Схема 2: Core -->
+            <div class="scheme-card" id="scheme-core">
+                <div class="scheme-header" onclick="toggleCard(this)">
+                    <div class="scheme-title">
+                        <span class="scheme-number">2</span>
+                        Core
+                    </div>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="scheme-content">
+                    <div class="scheme-description">
+                        🏗️ <strong>Роль:</strong> Организационная структура. Хранит проекты и права доступа к ним.
+                    </div>
+                    <ul class="entities-list">
+                        <li class="entity-item">
+                            <div class="entity-name">projects</div>
+                            <div class="entity-desc">Проекты внутри платформы — название, описание, владелец</div>
+                        </li>
+                        <li class="entity-item">
+                            <div class="entity-name">user_projects</div>
+                            <div class="entity-desc">Связь пользователей с проектами — роль (owner/manager/viewer)</div>
+                        </li>
+                    </ul>
+                    <span class="badge">📁 Центральная сущность</span>
+                </div>
+            </div>
+
+            <!-- Схема 3: Integrations -->
+            <div class="scheme-card" id="scheme-integrations">
+                <div class="scheme-header" onclick="toggleCard(this)">
+                    <div class="scheme-title">
+                        <span class="scheme-number">3</span>
+                        Integrations
+                    </div>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="scheme-content">
+                    <div class="scheme-description">
+                        🔌 <strong>Роль:</strong> Переводчик. Связывает наши проекты с внешними системами (Jira, GitHub).
+                    </div>
+                    <ul class="entities-list">
+                        <li class="entity-item">
+                            <div class="entity-name">project_integrations</div>
+                            <div class="entity-desc">Привязка проекта к Jira-проекту, GitHub-репозиторию или Confluence-пространству — external_id, type, token_id</div>
+                        </li>
+                    </ul>
+                    <span class="badge">🌉 Мост к внешним API</span>
+                </div>
+            </div>
+
+            <!-- Схема 4: Raw -->
+            <div class="scheme-card" id="scheme-raw">
+                <div class="scheme-header" onclick="toggleCard(this)">
+                    <div class="scheme-title">
+                        <span class="scheme-number">4</span>
+                        Raw
+                    </div>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="scheme-content">
+                    <div class="scheme-description">
+                        📦 <strong>Роль:</strong> Страховка и отладка. Хранит сырые JSON из API Jira/GitHub.
+                        <br><br>
+                        ⚠️ <strong>Временное решение:</strong> На старте храним в PostgreSQL. При росте объёмов — выгружаем в объектное хранилище (S3/MinIO).
+                    </div>
+                    <ul class="entities-list">
+                        <li class="entity-item">
+                            <div class="entity-name">raw_events</div>
+                            <div class="entity-desc">Сырые события — source (jira/github), event_type, payload (полный JSON), timestamp</div>
+                        </li>
+                    </ul>
+                    <span class="badge">💾 Immutable storage</span>
+                </div>
+            </div>
+
+            <!-- Схема 5: Normalized -->
+            <div class="scheme-card" id="scheme-normalized">
+                <div class="scheme-header" onclick="toggleCard(this)">
+                    <div class="scheme-title">
+                        <span class="scheme-number">5</span>
+                        Normalized
+                    </div>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="scheme-content">
+                    <div class="scheme-description">
+                        🗂️ <strong>Роль:</strong> Кеш внешних данных. Структурированное хранение задач и коммитов для быстрых запросов.
+                    </div>
+                    <ul class="entities-list">
+                        <li class="entity-item">
+                            <div class="entity-name">jira_issues</div>
+                            <div class="entity-desc">Задачи из Jira — issue_key, статус, исполнитель, story_points, оценки времени</div>
+                        </li>
+                        <li class="entity-item">
+                            <div class="entity-name">git_commits</div>
+                            <div class="entity-desc">Коммиты из GitHub — sha, автор, сообщение, jira_issue_key (из парсинга), изменения</div>
+                        </li>
+                        <li class="entity-item">
+                            <div class="entity-name">git_pull_requests</div>
+                            <div class="entity-desc">Pull Requests — состояние, ревью, время до мержа (для метрик)</div>
+                        </li>
+                    </ul>
+                    <span class="badge">⚡ Быстрый доступ к данным</span>
+                </div>
+            </div>
+
+            <!-- Схема 6: Analytics -->
+            <div class="scheme-card" id="scheme-analytics">
+                <div class="scheme-header" onclick="toggleCard(this)">
+                    <div class="scheme-title">
+                        <span class="scheme-number">6</span>
+                        Analytics
+                    </div>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="scheme-content">
+                    <div class="scheme-description">
+                        📈 <strong>Роль:</strong> Витрина для дашборда. Хранит предрассчитанные метрики.
+                    </div>
+                    <ul class="entities-list">
+                        <li class="entity-item">
+                            <div class="entity-name">project_metrics</div>
+                            <div class="entity-desc">Метрики проекта — коммиты, задачи, активные пользователи, velocity, SLA</div>
+                        </li>
+                        <li class="entity-item">
+                            <div class="entity-name">user_metrics</div>
+                            <div class="entity-desc">Метрики сотрудника — нагрузка (load_score), перегруз (is_overloaded), завершённые задачи</div>
+                        </li>
+                        <li class="entity-item">
+                            <div class="entity-name">project_health</div>
+                            <div class="entity-desc">Общее здоровье проекта — health_score (0-100), статус (OK/Risk/Critical)</div>
+                        </li>
+                    </ul>
+                    <span class="badge">🎯 Готово для дашборда</span>
+                </div>
+            </div>
+
+            <!-- Схема 7: TimescaleDB -->
+            <div class="scheme-card" id="scheme-timescaledb">
+                <div class="scheme-header" onclick="toggleCard(this)">
+                    <div class="scheme-title">
+                        <span class="scheme-number">7</span>
+                        TimescaleDB
+                    </div>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="scheme-content">
+                    <div class="scheme-description">
+                        📉 <strong>Роль:</strong> Хранилище для графиков и трендов. Оптимизировано под временные ряды (расширение PostgreSQL).
+                    </div>
+                    <ul class="entities-list">
+                        <li class="entity-item">
+                            <div class="entity-name">metrics_timeseries</div>
+                            <div class="entity-desc">Исторические значения метрик во времени — workload_index, activity_score, code_churn, sla_score</div>
+                        </li>
+                    </ul>
+                    <span class="badge">⏱️ Автоматическое партиционирование + сжатие</span>
+                </div>
+            </div>
+
+            <!-- Схема 8: AI & Notifications -->
+            <div class="scheme-card" id="scheme-ai">
+                <div class="scheme-header" onclick="toggleCard(this)">
+                    <div class="scheme-title">
+                        <span class="scheme-number">8</span>
+                        AI & Notifications
+                    </div>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="scheme-content">
+                    <div class="scheme-description">
+                        🤖 <strong>Роль:</strong> Интерфейс взаимодействия с пользователем. Чаты, выводы AI, уведомления.
+                    </div>
+                    <ul class="entities-list">
+                        <li class="entity-item">
+                            <div class="entity-name">chat_sessions</div>
+                            <div class="entity-desc">Сессии диалога с AI — привязка к пользователю и проекту</div>
+                        </li>
+                        <li class="entity-item">
+                            <div class="entity-name">chat_messages</div>
+                            <div class="entity-desc">Сообщения в чате — роль (user/assistant), текст, метаданные</div>
+                        </li>
+                        <li class="entity-item">
+                            <div class="entity-name">ai_insights</div>
+                            <div class="entity-desc">Выводы AI по проекту — тип (качество/сроки/нагрузка), текст, важность</div>
+                        </li>
+                        <li class="entity-item">
+                            <div class="entity-name">notifications</div>
+                            <div class="entity-desc">Уведомления пользователей — тип, приоритет, прочитано/скрыто</div>
+                        </li>
+                    </ul>
+                    <span class="badge">🔔 Оповещения + AI-аналитика</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="note">
+            💡 <strong>Как внедряем:</strong> Схемы вводятся в разработку поэтапно — сначала Identity + Core, затем Integrations, Raw, Normalized, Analytics, TimescaleDB, AI. <br>
+            Каждый этап проверяется на практике, БД дорабатывается по мере необходимости.<br>
+            📌 Raw — временное решение. При росте объёмов выгружаем в объектное хранилище (S3/MinIO).
+        </div>
+    </div>
+
+    <script>
+        function toggleCard(header) {
+            const card = header.closest('.scheme-card');
+            card.classList.toggle('expanded');
+        }
+
+        function scrollToScheme(schemeId) {
+            const element = document.getElementById(`scheme-${schemeId}`);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                element.classList.add('expanded');
+                setTimeout(() => {
+                    element.style.boxShadow = '0 0 0 2px #e94560';
+                    setTimeout(() => {
+                        element.style.boxShadow = '';
+                    }, 1500);
+                }, 100);
+            }
+        }
+
+        // Автоматически разворачиваем первую схему для примера
+        setTimeout(() => {
+            const firstCard = document.querySelector('.scheme-card');
+            if (firstCard) {
+                firstCard.classList.add('expanded');
+            }
+        }, 500);
+    </script>
+</body>
+</html>

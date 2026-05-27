@@ -12,6 +12,7 @@ export const Header = () => {
   const location = useLocation();
   const { data: projects = [] } = useProjects();
 
+
   const getCurrentValue = () => {
     const pathParts = location.pathname.split('/');
     if (pathParts[1] === 'project' && pathParts[2]) {
@@ -55,7 +56,7 @@ export const Header = () => {
               ),
             },
             ...projects.map(p => ({
-              value: p.id,
+              value: p.key,
               label: (
                 <Space>
                   <ProjectOutlined />

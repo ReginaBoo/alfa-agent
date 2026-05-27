@@ -1,4 +1,6 @@
+
 import axios from 'axios';
+
 import {
   ProjectActivityItem,
   DashboardPeriod,
@@ -7,6 +9,7 @@ import {
   LoadChartItem,
   ProjectItem, GanttProjectResponse, CycleTimeData, TeamWorkloadData, TeamFocusData// Импортируем тип проекта
 } from '../types/dashboard';
+
 import {
   mockBackendData,
   mockInsightsData,
@@ -21,6 +24,7 @@ const URL = 'http://localhost:8000';
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
 export const dashboardApi = {
+
   getProjects: async (): Promise<ProjectItem[]> => {
     if (USE_MOCKS) {
       return new Promise((resolve) => {
@@ -50,6 +54,7 @@ export const dashboardApi = {
     if (USE_MOCKS) {
       return new Promise((resolve) => setTimeout(() => resolve(mockInsightsData), 500));
     }
+
     const response = await axios.get<InsightItem[]>(`${URL}/api/ai-insights`);
     return response.data;
   },
@@ -58,6 +63,7 @@ export const dashboardApi = {
     if (USE_MOCKS) {
       return new Promise((resolve) => setTimeout(() => resolve(mockProjectStats), 500));
     }
+
     const response = await axios.get<ProjectStatsItem[]>(`${URL}/api/projects-stats`, {
       params: { period }
     });
@@ -68,9 +74,11 @@ export const dashboardApi = {
     if (USE_MOCKS) {
       return new Promise((resolve) => setTimeout(() => resolve(mockLoadData), 500));
     }
+
     const response = await axios.get<LoadChartItem[]>(`${URL}/api/teams-load`, {
       params: { period }
     });
+
     return response.data;
   },
 

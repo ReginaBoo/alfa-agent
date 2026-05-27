@@ -20,7 +20,9 @@ export interface InsightItem {
 export interface ProjectStatsItem {
   id: number;
   name: string;
-  status: 'error' | 'warning' | 'normal';
+  project_id?: number;
+  jira_url?: string;
+  status:'error' | 'warning' | 'success';
   stats: {
     workload: number;
     reviewTime: string;

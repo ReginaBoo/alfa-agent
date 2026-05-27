@@ -37,7 +37,9 @@ function createWindow(): void {
     hasShadow: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      webSecurity: false, // Разрешить CORS для dev
+      allowRunningInsecureContent: is.dev
     }
   })
 

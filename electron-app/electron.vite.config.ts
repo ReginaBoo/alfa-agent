@@ -5,12 +5,27 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   main: {},
   preload: {},
+
   renderer: {
     resolve: {
       alias: {
-        '@renderer': resolve('src/renderer/src')
-      }
+        '@renderer': resolve('src/renderer/src'),
+      },
     },
-    plugins: [react()]
-  }
+
+    plugins: [react()],
+
+    server: {
+      proxy: {
+        '/api': {
+          target: 'http://localhost:8000',
+          changeOrigin: true,
+          secure: false,
+
+          rewrite: (path) =>
+            path.replace(/^\/api/, ''),
+        },
+      },
+    },
+  },
 })
