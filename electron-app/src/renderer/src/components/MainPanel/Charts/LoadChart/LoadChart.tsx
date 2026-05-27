@@ -75,20 +75,20 @@ export const LoadChart = ({ backendData }: LoadChartProps) => {
       {/* HTML-Легенда */}
       <div className={s.legendContainer}>
         <div className={s.legendItem}>
-          <div className={s.legendMarker} style={{ backgroundColor: '#F27A41' }} />
-          <span>Недогруз</span>
+          <div className={s.legendMarker} style={{ backgroundColor: colorMap.overload }} />
+          <span>Перегруз</span>
         </div>
         <div className={s.legendItem}>
-          <div className={s.legendMarker} style={{ backgroundColor: '#13C2C2' }} />
-          <span>Оптимально</span>
-        </div>
-        <div className={s.legendItem}>
-          <div className={s.legendMarker} style={{ backgroundColor: '#FADB14' }} />
+          <div className={s.legendMarker} style={{ backgroundColor: colorMap.high }} />
           <span>Повышенная</span>
         </div>
         <div className={s.legendItem}>
-          <div className={s.legendMarker} style={{ backgroundColor: '#FF4D4F' }} />
-          <span>Перегруз</span>
+          <div className={s.legendMarker} style={{ backgroundColor: colorMap.optimal }} />
+          <span>Оптимально</span>
+        </div>
+        <div className={s.legendItem}>
+          <div className={s.legendMarker} style={{ backgroundColor: colorMap.underload }} />
+          <span>Недогруз</span>
         </div>
       </div>
     </div>

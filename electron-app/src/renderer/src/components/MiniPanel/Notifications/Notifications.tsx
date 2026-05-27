@@ -1,4 +1,4 @@
-import { List, Typography, Card } from 'antd';
+import { Typography, Card } from 'antd';
 import s from './Notifications.module.css';
 
 const { Text } = Typography;
@@ -8,7 +8,6 @@ const mockData = [
   { id: 2, source: 'Проект 3', task: 'Merge conflict в ветке feature/fuel-logic', status: 'Alert' },
   { id: 3, source: 'Проект 4', task: 'В проекте высокий риск срыва спринта (отставание на 3 дня). Обнаружен застой — 4 PR висят без ревью.', status: 'Warning' },
   { id: 4, source: 'Проект 2', task: 'Ситуация стабильная. Все проекты идут по плану. Общая готовность спринтов — 78%.', status: 'New' },
-
 ];
 
 export const Notifications = () => {
@@ -22,11 +21,10 @@ export const Notifications = () => {
 
   return (
     <div className={s.container}>
-      <List
-        split={false}
-        dataSource={mockData}
-        renderItem={(item) => (
+      <div className={s.listWrapper} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {mockData.map((item) => (
           <Card
+            key={item.id}
             size="small"
             className={`${s.notificationCard} ${getStatusClass(item.status)}`}
           >
@@ -40,10 +38,9 @@ export const Notifications = () => {
                 {item.task}
               </Text>
             </div>
-
           </Card>
-        )}
-      />
+        ))}
+      </div>
     </div>
   );
 };

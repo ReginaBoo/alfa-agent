@@ -12,7 +12,6 @@
     0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* Обязательно убедись, что body и html прозрачные */
 :global(body) {
   background: transparent !important;
   margin: 0;

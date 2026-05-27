@@ -34,8 +34,7 @@ export const CycleTimeChart = ({ stages }: CycleTimeChartProps) => {
             <Tooltip
               key={stage.id}
               title={stage.tooltip || `${stage.label}: ${stage.hours}ч`}
-              color="white"
-              overlayInnerStyle={{ color: '#000' }}
+
             >
               <div
                 className={s.stageBlock}

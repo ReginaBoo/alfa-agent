@@ -20,8 +20,7 @@
   position: relative;
   padding: 16px;
   border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  background: #F9FAFB;
   transition: all 0.3s ease;
 }
 
@@ -38,17 +37,20 @@
 
 /* Типы карточек */
 .error {
-  background: #fff1f0;
+  background: #F9FAFB;
+  border: 1px solid #ff4d4f;
   border-left: 6px solid #ff4d4f;
+
 }
 
 .warning {
-  background: #fffbe6;
+  background: #F9FAFB;
+  border: 1px solid #ffc53d;
   border-left: 6px solid #ffc53d;
 }
 
 .success {
-  background: #f0f5ff;
+  background: #F9FAFB;
   border-left: 6px solid #adc6ff;
   border: 1px solid #f0f0f0;
 }
