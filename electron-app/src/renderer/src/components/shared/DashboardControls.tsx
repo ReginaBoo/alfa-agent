@@ -1,8 +1,8 @@
-import { Row, Button, Select, Spin, Empty, Space, Checkbox, Dropdown } from 'antd';
+import { Row, Button, Select, Spin, Empty, Space, Checkbox, Dropdown, Tooltip } from 'antd';
 import {
-  DownloadOutlined, DownOutlined, FilterOutlined
+  DownloadOutlined, DownOutlined, FilterOutlined, InfoCircleOutlined
 } from '@ant-design/icons';
-import { DashboardPeriod, DashboardMetric } from '../../types/dashboard';
+import { DashboardPeriod, DashboardMetric, WorkloadCalculationType } from '../../types/dashboard';
 import s from './DashboardControls.module.css';
 
 interface DownloadReportBtnProps {
@@ -150,6 +150,75 @@ export const NoProjectsEmpty = () => {
         }
       >
       </Empty>
+    </div>
+  );
+};
+
+
+
+// Общий маппер коротких названий
+export const WORKLOAD_LABELS_MAP: Record<WorkloadCalculationType, string> = {
+  story_points: 'JIRA SP',
+  hours: 'ЧАСЫ TIME',
+  task_count: 'ЗАДАЧИ',
+};
+
+// Общий маппер текстов для формул
+export const WORKLOAD_TOOLTIPS_MAP: Record<WorkloadCalculationType, string> = {
+  story_points: 'Расчет по Story Points. Индекс (WI) = (SP в To Do + In Progress) / средняя velocity (SP за период).',
+  hours: 'Расчет по часам. Индекс (WI) = Remaining Estimate / (доступные рабочие часы * коэффициент фокуса).',
+  task_count: 'Расчет по количеству. Упрощенный режим: Индекс (WI) = (задачи в работе) / среднее количество закрытых задач.',
+};
+
+
+interface MetricInfoTooltipProps {
+  text?: string;
+  calculationType?: WorkloadCalculationType;
+  iconColor?: string;
+  fontSize?: string;
+}
+
+export const MetricInfoTooltip = ({
+  text,
+  calculationType,
+  iconColor = '#6B6C7E',
+  fontSize = '16px'
+}: MetricInfoTooltipProps) => {
+  const tooltipContent = calculationType
+    ? WORKLOAD_TOOLTIPS_MAP[calculationType]
+    : text;
+  if (!tooltipContent) return null;
+
+  return (
+    <Tooltip title={tooltipContent}>
+      <InfoCircleOutlined
+        style={{
+          color: iconColor,
+          cursor: 'pointer',
+          fontSize: fontSize,
+          display: 'inline-flex',
+          alignItems: 'center',
+          verticalAlign: 'middle',
+        }}
+      />
+    </Tooltip>
+  );
+};
+
+
+interface MetricTypeBadgeProps {
+  calculationType?: WorkloadCalculationType;
+  text?: string;
+}
+
+export const MetricTypeBadge = ({ calculationType, text }: MetricTypeBadgeProps) => {
+  const badgeText = calculationType ? WORKLOAD_LABELS_MAP[calculationType] : text;
+
+  if (!badgeText) return null;
+
+  return (
+    <div className={s.badge}>
+      {badgeText}
     </div>
   );
 };

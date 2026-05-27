@@ -31,12 +31,26 @@
 
 .blueTitle {
   margin: 0;
-  margin-bottom: 10px;
   padding: 0;
   color: #02489B !important;
   font-size: 16px !important;
   font-weight: 700 !important;
   text-transform: uppercase;
+  line-height: 1;
+}
+
+.titles {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* --- СЕКЦИЯ ЗАГРУЗКИ КОМАНД --- */

@@ -51,7 +51,7 @@ export interface ProjectItem {
   name: string;
 }
 
-
+//Гант
 export interface GanttProjectResponse {
   viewRange: {
     start: string;
@@ -69,4 +69,44 @@ export interface GanttRecord {
   end?: string;
   responsible?: string;
   children?: GanttRecord[];
+}
+
+//Время цикла
+export interface CycleStage {
+  id: string;
+  label: string;
+  hours: number;
+  warning?: boolean;
+  tooltip?: string;
+}
+
+export interface CycleTimeData {
+  stages: CycleStage[];
+  averageTimeText: string;
+}
+
+//Загрузка команды
+export type WorkloadCalculationType = 'story_points' | 'hours' | 'task_count';
+
+export interface TeamMemberWorkload {
+  id: string;
+  name: string;
+  workloadIndex: number; // Теперь передаем WI (например: 0.85, 1.4) вместо процентов
+}
+
+export interface TeamWorkloadData {
+  calculationType: WorkloadCalculationType; // 'story_points' | 'hours' | 'task_count'
+  teamWorkloadBalance: number;              // Стандартное отклонение (Workload Balance)
+  recommendationText: string;               // Текст рекомендации ИИ
+  members: TeamMemberWorkload[];
+}
+
+//Фокус команды
+export interface FocusCategory {
+  type: string;  // "Новые фичи", "Рефактор/Долг", "Баги"
+  value: number; // Процентное значение (например: 60, 25, 15)
+}
+
+export interface TeamFocusData {
+  categories: FocusCategory[];
 }

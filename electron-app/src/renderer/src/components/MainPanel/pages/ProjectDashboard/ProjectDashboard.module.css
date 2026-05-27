@@ -23,23 +23,54 @@
 
 .blueTitle {
   margin: 0;
-  margin-bottom: 10px;
   padding: 0;
   color: #02489B !important;
   font-size: 16px !important;
   font-weight: 700 !important;
   text-transform: uppercase;
+  line-height: 1;
+}
+
+.titles {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .CycleSection {
+  display: flex;
+  flex-direction: column;
   height: 280px;
   padding: 20px;
   border-radius: 8px;
   background-color: #ffffff;
-  display: flex;
   gap: 20px;
   flex-direction: column;
   width: 100%;
+}
+
+.CycleSection :global(.ant-empty) {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+/* ИСПРАВЛЕНО: заставляем лоадер занять ВСЁ свободное место под заголовком */
+.CycleSection :global(.ant-row) {
+  flex-grow: 1;
+  min-height: 0 !important;
+  /* Сбрасываем инлайновые 200px, чтобы флекс работал корректно */
+  height: 100%;
 }
 
 .avgTime {
@@ -90,7 +121,28 @@
 }
 
 .workloadStats {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  border-radius: 8px;
+  background-color: #ffffff;
   width: 100%;
+  min-height: 250px;
+}
+
+.workloadStats :global(.ant-empty) {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+
+.workloadStats :global(.ant-row) {
+  flex-grow: 1;
+  min-height: 0 !important;
+  height: 100%;
 }
 
 .focusStats {
@@ -98,7 +150,21 @@
   border-radius: 8px;
   padding: 20px;
   width: 100%;
+}
 
+.focusStats :global(.ant-empty) {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+
+.focusStats :global(.ant-row) {
+  flex-grow: 1;
+  min-height: 0 !important;
+  height: 100%;
 }
 
 .gantSection {
@@ -124,14 +190,4 @@
   min-height: 0 !important;
   /* Сбрасываем инлайновые 200px, чтобы флекс работал корректно */
   height: 100%;
-}
-
-.blueTitle {
-  margin: 0;
-  margin-bottom: 10px;
-  padding: 0;
-  color: #02489B !important;
-  font-size: 16px !important;
-  font-weight: 700 !important;
-  text-transform: uppercase;
 }

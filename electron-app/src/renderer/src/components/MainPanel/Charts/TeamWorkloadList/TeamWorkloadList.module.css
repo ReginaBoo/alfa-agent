@@ -1,18 +1,3 @@
-.card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  width: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-}
-
 .titleGroup {
   display: flex;
   align-items: center;
@@ -44,7 +29,7 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 
 .item {
@@ -82,7 +67,6 @@
   font-size: 13px !important;
 }
 
-/* Перекрашиваем полоску в красный, если перегруз (>100%) */
 :global(.ant-progress-bg) {
   border-radius: 100px !important;
 }

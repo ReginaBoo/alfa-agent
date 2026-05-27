@@ -7,7 +7,7 @@ import {
   InsightItem,
   ProjectStatsItem,
   LoadChartItem,
-  ProjectItem, GanttProjectResponse // Импортируем тип проекта
+  ProjectItem, GanttProjectResponse, CycleTimeData, TeamWorkloadData, TeamFocusData// Импортируем тип проекта
 } from '../types/dashboard';
 
 import {
@@ -15,9 +15,8 @@ import {
   mockInsightsData,
   mockProjectStats,
   mockLoadData,
-  mockProjectsData, mockGanttData, mockProjectInsightsData// Импортируем мок проектов
+  mockProjectsData, mockGanttData, mockProjectInsightsData, mockProjectCycleTimeData, mockTeamWorkloadData, mockTeamFocusData// Импортируем мок проектов
 } from './mocks/mocks';
-
 
 
 const URL = 'http://localhost:8000';
@@ -103,5 +102,39 @@ export const dashboardApi = {
     return response.data;
   },
 
+  getProjectCycleTime: async (projectId: string, period: string): Promise<CycleTimeData> => {
+    if (USE_MOCKS) {
+      return new Promise((resolve) => setTimeout(() => resolve(mockProjectCycleTimeData), 500));
+    }
 
+    const response = await axios.get<CycleTimeData>(
+      `${URL}/api/projects/${projectId}/cycle-time`,
+      { params: { period } }
+    );
+    return response.data;
+  },
+  getProjectTeamWorkload: async (projectId: string, period: string): Promise<TeamWorkloadData> => {
+    if (USE_MOCKS) {
+      return new Promise((resolve) => setTimeout(() => resolve(mockTeamWorkloadData), 500));
+    }
+
+    const response = await axios.get<TeamWorkloadData>(
+      `${URL}/api/projects/${projectId}/team-workload`,
+      { params: { period } }
+    );
+    return response.data;
+  },
+
+  getProjectTeamFocus: async (projectId: string, period: string): Promise<TeamFocusData> => {
+    if (USE_MOCKS) {
+      return new Promise((resolve) => setTimeout(() => resolve(mockTeamFocusData), 500));
+    }
+
+    const response = await axios.get<TeamFocusData>(
+      `${URL}/api/projects/${projectId}/team-focus`,
+      { params: { period } }
+    );
+    return response.data;
+  },
 };
+

@@ -1,4 +1,4 @@
-import { ProjectActivityItem, InsightItem, ProjectStatsItem, LoadChartItem, GanttProjectResponse } from '../../types/dashboard';
+import { ProjectActivityItem, InsightItem, ProjectStatsItem, LoadChartItem, GanttProjectResponse, CycleTimeData, TeamWorkloadData, TeamFocusData } from '../../types/dashboard';
 export const mockBackendData: ProjectActivityItem[] = [
   // МАРТ
   { date: '2026-03-01', value: 15, project: 'Проект 1' },
@@ -238,3 +238,39 @@ export const mockProjectInsightsData: InsightItem[] = [
     recommendation: 'Доступные резервы: Ольга (загрузка 0.4), обладает компетенциями для подключения к активным задачам текущего этапа.',
   },
 ];
+
+
+
+export const mockProjectCycleTimeData: CycleTimeData = {
+  averageTimeText: '4 дня, 18 часов',
+  stages: [
+    { id: "1", label: "Аналитика", hours: 12, warning: false },
+    { id: "2", label: "Разработка", hours: 40, warning: true, tooltip: "Много мерж-конфликтов" },
+    { id: "3", label: "Ревью", hours: 15 },
+    { id: "4", label: "Тестирование", hours: 20 },
+    { id: "5", label: "Тестирование 2", hours: 10 }
+  ]
+};
+
+
+export const mockTeamWorkloadData: TeamWorkloadData =
+{
+  "calculationType": "story_points",
+  "teamWorkloadBalance": 0.58,
+  "recommendationText": "Высокий дисбаланс нагрузки (0.58). Иван перегружен (WI: 1.15), в то время как Соня недогружена (WI: 0.24). Рекомендуется перераспределить задачи в работу Соне.",
+  "members": [
+    { "id": "1", "name": "Иван", "workloadIndex": 1.15 },
+    { "id": "2", "name": "Анна", "workloadIndex": 0.55 },
+    { "id": "3", "name": "Дмитрий", "workloadIndex": 0.70 },
+    { "id": "4", "name": "Соня", "workloadIndex": 0.24 }
+  ]
+}
+
+
+export const mockTeamFocusData: TeamFocusData = {
+  categories: [
+    { type: 'Новые фичи', value: 60 },
+    { type: 'Рефактор/Долг', value: 25 },
+    { type: 'Баги', value: 15 },
+  ]
+};

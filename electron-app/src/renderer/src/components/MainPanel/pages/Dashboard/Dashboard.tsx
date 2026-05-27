@@ -6,7 +6,7 @@ import { AIInsights } from '../../Charts/AIInsights/AIInsights';
 import { useState } from 'react';
 import s from './Dashboard.module.css';
 import { useProjectActivity, useAIInsights, useProjectStats, useTeamsLoad, useProjects } from '../../../../hooks/useDashboardData';
-import { DownloadReportBtn, DashboardLoader, DashboardEmpty, PeriodSelect, NoProjectsEmpty } from '../../../shared/DashboardControls';
+import { DownloadReportBtn, DashboardLoader, DashboardEmpty, PeriodSelect, NoProjectsEmpty, MetricInfoTooltip } from '../../../shared/DashboardControls';
 import { DashboardPeriod } from '../../../../types/dashboard';
 
 export const Dashboard = () => {
@@ -49,7 +49,14 @@ export const Dashboard = () => {
           <Row gutter={[16, 16]}>
             <Col span={24}>
               <div className={s.aiSection}>
-                <h1 className={s.blueTitle}>AI-ВЫВОДЫ</h1>
+                <div className={s.titles}>
+                  <div className={s.title}>
+                    <h1 className={s.blueTitle}>ai-выводы</h1>
+                    {aiInsights && (
+                      <MetricInfoTooltip text="ИИ анализирует ключевые метрики проектов и формирует текстовый блок с интерпретацией состояния проектов, выявлением проблем и рекомендациями." />
+                    )}
+                  </div>
+                </div>
                 {aiInsights.isLoading ? (
                   <DashboardLoader minHeight="200px" />
                 ) : (
@@ -60,8 +67,14 @@ export const Dashboard = () => {
 
             <Col span={24}>
               <div className={s.loadSection} style={{ marginBottom: '24px' }}>
-                <h1 className={s.blueTitle}>ЗАГРУЖЕННОСТЬ КОМАНД</h1>
-
+                <div className={s.titles}>
+                  <div className={s.title}>
+                    <h1 className={s.blueTitle}>загруженность команд</h1>
+                    {teamsLoad && (
+                      <MetricInfoTooltip text="Общий уровень загрузки команд по всем проектам" />
+                    )}
+                  </div>
+                </div>
                 {teamsLoad.isLoading ? (
                   <DashboardLoader minHeight="240px" tip="Анализируем загруженность команд..." />
                 ) : (
@@ -87,8 +100,14 @@ export const Dashboard = () => {
 
             <Col span={24}>
               <div className={s.chartSection}>
-                <h1 className={s.blueTitle}>АКТИВНОСТЬ ПО ПРОЕКТАМ</h1>
-
+                <div className={s.titles}>
+                  <div className={s.title}>
+                    <h1 className={s.blueTitle}>активность по проектам</h1>
+                    {activity && (
+                      <MetricInfoTooltip text="Показывает, насколько активно команда работает над проектом, учитывая действия: коммиты, Pull Requests и обновления задач в Jira" />
+                    )}
+                  </div>
+                </div>
                 {activity.isLoading ? (
                   <DashboardLoader minHeight="200px" tip="Загружаем активность" />
                 ) : activity.data.length === 0 ? (
