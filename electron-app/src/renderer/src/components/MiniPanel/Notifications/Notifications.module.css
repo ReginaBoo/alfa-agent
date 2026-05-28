@@ -10,6 +10,7 @@
   border-radius: 8px !important;
   border-left: 4px solid transparent !important;
   transition: all 0.3s ease;
+  background-color: #ffffff !important;
 }
 
 /* Статус: Alert (Критический) */
@@ -57,7 +58,7 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #64748B;
+  color: #334155;
 
   /* Если источник слишком длинный, обрежем в одну строку */
   white-space: nowrap;

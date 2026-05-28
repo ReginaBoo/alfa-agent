@@ -22,13 +22,13 @@ const getStatusClass = (type: string) => {
 const getTypeLabel = (type: string) => {
   switch (type?.toLowerCase()) {
     case 'error':
-      return '🔴 Критично';
+      return 'Критично';
     case 'warning':
-      return '🟡 Внимание';
+      return 'Внимание';
     case 'success':
-      return '🔵 Информация';
+      return 'Информация';
     default:
-      return '⚪ Уведомление';
+      return 'Уведомление';
   }
 };
 
@@ -108,7 +108,7 @@ export const Notifications = () => {
             {item.recommendation && (
               <div style={{ marginTop: 8, padding: 8, background: '#f5f5f5', borderRadius: 6 }}>
                 <Text type="secondary" style={{ fontSize: 11 }}>
-                  💡 {item.recommendation}
+                  {item.recommendation}
                 </Text>
               </div>
             )}
