@@ -388,6 +388,7 @@ async def ai_chat_completion(
     """
     Улучшенный чат с AI.
     AI анализирует вопрос и возвращает SQL, который мы выполняем.
+    Затем AI формирует ответ на основе полученных данных.
     """
     session_id = request.session_id or str(uuid.uuid4())
     
@@ -403,29 +404,76 @@ async def ai_chat_completion(
         ]
         
         ai_response = await ai_provider.chat_completions(messages)
-        print(f"AI Response: {ai_response[:500]}")
+        logger.info(f"AI Response (SQL gen): {ai_response[:1000] if len(ai_response) > 1000 else ai_response}")
         
         # ШАГ 2: Извлекаем SQL из ответа
         sql_queries = _extract_sql_queries(ai_response)
-        print(f"Extracted SQL queries: {sql_queries}")
+        logger.info(f"Extracted SQL queries: {sql_queries}")
+        
+        # Если SQL не найден — это обычный разговорный ответ, возвращаем его
+        if not sql_queries:
+            logger.info("No SQL found, returning conversational AI response")
+            # Очищаем ответ от markdown блоков если они есть
+            clean_answer = re.sub(r'```sql\s*\n.*?\n```', '', ai_response, flags=re.DOTALL).strip()
+            clean_answer = re.sub(r'```\s*\n.*?\n```', '', clean_answer, flags=re.DOTALL).strip()
+            if clean_answer:
+                return ChatResponse(
+                    answer=clean_answer,
+                    session_id=session_id,
+                    metadata={
+                        "sql_queries": [],
+                        "rows_count": 0
+                    }
+                )
+            
+            # Fallback: пробуем программно сгенерировать SQL
+            logger.info("Trying programmatic SQL generation...")
+            sql_queries = _generate_sql_from_question(request.message)
+            logger.info(f"Programmatic SQL queries: {sql_queries}")
         
         # ШАГ 3: Выполняем SQL запросы
         all_results = []
         executed_sqls = []
         
         for sql in sql_queries[:3]:
+            logger.info(f"Attempting to execute SQL: {sql[:200]}...")
             result = _execute_safe_sql(db, sql)
-            print(f"SQL result: success={result.success}, rows={result.row_count}")
+            logger.info(f"SQL result: success={result.success}, rows={result.row_count}, error={result.error}")
             if result.success and result.data:
                 all_results.extend(result.data[:10])
                 executed_sqls.append(sql)
         
-        # ШАГ 4: Формируем ответ
+        # ШАГ 4: AI формирует ответ на основе данных
         if all_results:
-            # У нас есть реальные данные из БД
-            answer = _format_results_as_answer(all_results, request.message)
+            logger.info(f"Got {len(all_results)} results, generating answer...")
+            # Отправляем данные AI для формирования ответа
+            data_prompt = f"""Пользователь спросил: "{request.message}"
+
+Данные из базы данных:
+{json.dumps(all_results[:10], ensure_ascii=False, default=str)}
+
+Сформулируй краткий ответ на русском языке (2-3 предложения).
+Используй конкретные цифры и имена из данных.
+Не упоминай SQL или технические детали.
+Отвечай понятным языком, как аналитик."""
+
+            answer_messages = [
+                {"role": "system", "content": "Ты — аналитический ассистент Alpha Agent. Отвечай кратко и по существу."},
+                {"role": "user", "content": data_prompt}
+            ]
+            
+            try:
+                answer = await ai_provider.chat_completions(answer_messages)
+                answer = answer.strip()
+                logger.info(f"Final AI answer: {answer[:500]}")
+            except Exception as e:
+                logger.warning(f"AI answer generation failed: {e}")
+                # Fallback: программный ответ
+                answer = _format_results_as_answer(all_results, request.message)
+                logger.info(f"Using fallback answer: {answer}")
         else:
             # Если SQL не найден или не выполнился
+            logger.warning(f"No SQL queries extracted or executed. AI response: {ai_response[:500]}")
             answer = "Не удалось получить данные. Попробуйте переформулировать вопрос."
         
         return ChatResponse(
@@ -438,7 +486,7 @@ async def ai_chat_completion(
         )
         
     except Exception as e:
-        logger.error(f"AI chat error: {e}")
+        logger.error(f"AI chat error: {e}", exc_info=True)
         return ChatResponse(
             answer="Извините, произошла ошибка.",
             session_id=session_id,
@@ -456,37 +504,152 @@ def _format_results_as_answer(results: List[Dict], question: str) -> str:
     # Определяем тип вопроса
     if 'проблемн' in question_lower or 'хуже' in question_lower:
         # Ищем самый проблемный проект
-        if 'project_key' in results[0]:
-            # Сортируем если есть показатели
-            if 'overdue_count' in results[0]:
-                sorted_results = sorted(results, key=lambda x: x.get('overdue_count', 0), reverse=True)
-            elif 'bug_count' in results[0]:
-                sorted_results = sorted(results, key=lambda x: x.get('bug_count', 0), reverse=True)
+        if 'project_name' in results[0] or 'project_key' in results[0]:
+            # Сортируем по сумме проблем
+            if 'total_problems' in results[0]:
+                sorted_results = sorted(results, key=lambda x: x.get('total_problems', 0), reverse=True)
+            elif 'overdue' in results[0] or 'overdue_count' in results[0]:
+                sorted_results = sorted(results, key=lambda x: x.get('overdue', x.get('overdue_count', 0)) + x.get('bug_count', x.get('bugs', 0)), reverse=True)
+            elif 'bug_count' in results[0] or 'bugs_count' in results[0]:
+                sorted_results = sorted(results, key=lambda x: x.get('bug_count', x.get('bugs_count', 0)), reverse=True)
             else:
                 sorted_results = results
             
             worst = sorted_results[0]
-            project = worst.get('project_key', 'Неизвестно')
-            return f"Самый проблемный проект — {project}. Подробнее: {json.dumps(worst, ensure_ascii=False, default=str)}"
+            project_name = worst.get('project_name') or worst.get('project_key', 'Неизвестно')
+            
+            # Формируем подробный ответ с конкретикой
+            overdue = worst.get('overdue_count', worst.get('overdue', 0))
+            bugs = worst.get('bug_count', worst.get('bugs', worst.get('bugs_count', 0)))
+            old = worst.get('old_tasks', 0)
+            total = worst.get('open_tasks', worst.get('count', 0))
+            total_problems = worst.get('total_problems', overdue + bugs)
+            
+            details = []
+            if total:
+                details.append(f"{total} открытых задач")
+            if overdue:
+                details.append(f"{overdue} просроченных")
+            if bugs:
+                details.append(f"{bugs} багов")
+            if old:
+                details.append(f"{old} старых задач")
+            
+            if details:
+                return f"Самый проблемный проект — {project_name} ({total_problems} проблем): {', '.join(details)}."
+            else:
+                return f"Самый проблемный проект — {project_name} ({total_problems} проблем)."
+    
+    # Просроченные задачи — показываем топ проектов
+    if 'просроченн' in question_lower:
+        if 'overdue_count' in results[0] and 'project_name' in results[0]:
+            # Есть данные по проектам — показываем топ 3
+            top_results = sorted(results, key=lambda x: x.get('overdue_count', 0), reverse=True)[:3]
+            parts = []
+            for i, item in enumerate(top_results, 1):
+                project = item.get('project_name') or item.get('project_key', 'проект')
+                count = item.get('overdue_count', 0)
+                parts.append(f"{i}. {project} — {count}")
+            
+            if len(parts) == 1:
+                return f"Проект {top_results[0].get('project_name', 'Неизвестно')} — {top_results[0].get('overdue_count', 0)} просроченных задач."
+            else:
+                return f"Топ проектов по просроченным задачам:\n" + "\n".join(parts)
+        elif 'count' in results[0]:
+            count = results[0]['count']
+            return f"Найдено {count} просроченных задач."
+        elif 'total' in results[0]:
+            count = results[0]['total']
+            return f"Найдено {count} просроченных задач."
+    
+    # Баги
+    if 'баг' in question_lower:
+        if 'bug_count' in results[0]:
+            count = results[0]['bug_count']
+            project = results[0].get('project_name') or results[0].get('project_key', 'Неизвестно')
+            if len(results) == 1:
+                return f"В проекте {project} найдено {count} багов."
+            else:
+                return f"Найдено {count} багов в проекте {project}."
+        elif 'bugs_count' in results[0]:
+            count = results[0]['bugs_count']
+            project = results[0].get('project_name') or results[0].get('project_key', 'Неизвестно')
+            return f"В проекте {project} найдено {count} багов."
+        elif 'count' in results[0]:
+            count = results[0]['count']
+            return f"Найдено {count} багов."
+    
+    # Задачи у человека
+    if 'у' in question_lower and ('задач' in question_lower or 'task' in question_lower):
+        if 'assignee_name' in results[0] or 'name' in results[0]:
+            name = results[0].get('assignee_name') or results[0].get('name', 'Неизвестно')
+            count = results[0].get('count', results[0].get('task_count', 0))
+            bugs = results[0].get('bug_count', 0)
+            overdue = results[0].get('overdue_count', 0)
+            
+            details = [f"{count} активных задач"]
+            if bugs:
+                details.append(f"{bugs} багов")
+            if overdue:
+                details.append(f"{overdue} просроченных")
+            
+            return f"У {name}: {', '.join(details)}."
+        elif 'count' in results[0]:
+            count = results[0]['count']
+            return f"Найдено {count} задач."
+    
+    # Подсчёт по проектам
+    if 'проект' in question_lower and ('сколько' in question_lower or 'много' in question_lower):
+        if 'project_name' in results[0] and 'count' in results[0]:
+            project = results[0]['project_name']
+            count = results[0]['count']
+            return f"В проекте {project} найдено {count} записей."
+    
+    # Сколько задач (без указания человека) — показываем топ проектов
+    if 'сколько' in question_lower and 'задач' in question_lower:
+        if 'project_name' in results[0] and 'total_open' in results[0]:
+            top_results = sorted(results, key=lambda x: x.get('total_open', 0), reverse=True)[:3]
+            parts = []
+            for i, item in enumerate(top_results, 1):
+                project = item.get('project_name') or item.get('project_key', 'проект')
+                total = item.get('total_open', 0)
+                overdue = item.get('overdue', 0)
+                bugs = item.get('bugs', 0)
+                parts.append(f"{i}. {project} — {total} задач{('' if total == 1 else 'и' if total % 10 > 1 and total % 10 < 5 else '')}")
+                if overdue or bugs:
+                    extra = []
+                    if overdue:
+                        extra.append(f"{overdue} просроченных")
+                    if bugs:
+                        extra.append(f"{bugs} багов")
+                    parts[-1] += f" ({', '.join(extra)})"
+            
+            return "Топ проектов по количеству задач:\n" + "\n".join(parts)
     
     # Универсальный ответ для списков
     if len(results) == 1:
         # Одна запись
         parts = []
         for key, value in results[0].items():
-            if value is not None and key not in ['id', 'issue_id']:
+            if value is not None and key not in ['id', 'issue_id', 'project_key']:
                 parts.append(f"{key}: {value}")
-        return f"Найдено: {', '.join(parts)}"
+        if parts:
+            return f"Найдено: {', '.join(parts)}"
+        else:
+            return f"Найдено: {json.dumps(results[0], ensure_ascii=False, default=str)}"
     else:
         # Много записей
         first = results[0]
-        keys = list(first.keys())[:3]
+        keys = [k for k in list(first.keys())[:3] if k not in ['id', 'issue_id']]
         summary = []
         for key in keys:
             if key in first:
                 summary.append(f"{key}: {first[key]}")
         
-        return f"Найдено {len(results)} записей. Например: {', '.join(summary)}"
+        if summary:
+            return f"Найдено {len(results)} записей. Например: {', '.join(summary)}"
+        else:
+            return f"Найдено {len(results)} записей."
 
 
 def _extract_sql_queries(text: str) -> List[str]:
@@ -495,7 +658,7 @@ def _extract_sql_queries(text: str) -> List[str]:
     
     # Ищем SQL в markdown блоках
     pattern = r'```sql\s*\n(.*?)\n```'
-    matches = re.findall(pattern, text, re.DOTALL)
+    matches = re.findall(pattern, text, re.DOTALL | re.IGNORECASE)
     
     for match in matches:
         sql = match.strip()
@@ -510,13 +673,40 @@ def _extract_sql_queries(text: str) -> List[str]:
             if match and match.upper().startswith('SELECT'):
                 sql_queries.append(match)
     
-    # Ищем просто SELECT ... (без блоков)
+    # Ищем SQL в markdown блоках без указания языка
     if not sql_queries:
-        pattern = r'(SELECT\s+.*?)(?=\n\n|\Z)'
+        pattern = r'```\s*\n(SELECT\s+.*?)\n```'
         matches = re.findall(pattern, text, re.DOTALL | re.IGNORECASE)
         for match in matches:
             sql = match.strip()
-            if sql and len(sql) > 10:
+            if sql and sql.upper().startswith('SELECT'):
+                sql_queries.append(sql)
+    
+    # Ищем просто SELECT ... (без блоков) — более агрессивный поиск
+    if not sql_queries:
+        # Ищем SELECT до LIMIT или GROUP BY или ORDER BY
+        pattern = r'(SELECT\s+[^(]*?(?:FROM\s+[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?\s+)?(?:WHERE\s+[^LIMIT]*?\s+)?(?:LIMIT\s+\d+)?(?:GROUP\s+BY\s+[^L]*?)?(?:ORDER\s+BY\s+[^L]*?)?)'
+        matches = re.findall(pattern, text, re.DOTALL | re.IGNORECASE)
+        for match in matches:
+            sql = match.strip()
+            if sql and len(sql) > 20 and 'SELECT' in sql.upper():
+                sql_queries.append(sql)
+    
+    # Если ничего не нашли, пробуем найти любой SELECT запрос
+    if not sql_queries:
+        # Ищем SELECT ... FROM ... где есть таблица
+        pattern = r'(SELECT\s+.*?\s+FROM\s+[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)?.*?)(?:\n\n|\Z|```)'
+        matches = re.findall(pattern, text, re.DOTALL | re.IGNORECASE)
+        for match in matches:
+            sql = match.strip()
+            # Убираем лишнее
+            sql = re.sub(r'\s+', ' ', sql).strip()
+            if sql and len(sql) > 20 and 'SELECT' in sql.upper() and 'FROM' in sql.upper():
+                # Убираем LIMIT если он больше 100
+                if 'LIMIT' in sql.upper():
+                    limit_match = re.search(r'LIMIT\s+(\d+)', sql, re.IGNORECASE)
+                    if limit_match and int(limit_match.group(1)) > 100:
+                        sql = re.sub(r'LIMIT\s+\d+', 'LIMIT 100', sql, flags=re.IGNORECASE)
                 sql_queries.append(sql)
     
     return sql_queries
@@ -529,9 +719,9 @@ def _extract_sql_queries(text: str) -> List[str]:
 def _build_system_prompt_with_schema() -> str:
     """Формирует системный промпт с описанием схемы БД"""
     return """Ты — умный аналитический ассистент для платформы Alpha Agent.
-Ты имеешь доступ к базе данных проектов Jira и GitHub.
+Ты имеешь доступ к данным проектов Jira и GitHub.
 
-СХЕМА БАЗЫ ДАННЫХ:
+СХЕМА ДАННЫХ:
 
 1. normalized.jira_issues — задачи Jira
    - id (integer)
@@ -566,8 +756,8 @@ def _build_system_prompt_with_schema() -> str:
 
 3. core.projects — проекты
    - id (integer)
-   - key (string)
-   - name (string)
+   - key (string) — ключ проекта (например "KANBAN")
+   - name (string) — название проекта (например "CRM Система")
    - jira_project_key (string)
    - is_active (boolean)
 
@@ -590,80 +780,254 @@ def _build_system_prompt_with_schema() -> str:
    - committed_at (datetime)
 
 ============================================================
-ИНТЕРПРЕТАЦИЯ ВОПРОСОВ ПОЛЬЗОВАТЕЛЯ
-============================================================
-
-Когда пользователь спрашивает о «проблемах» или «проблемных проектах», 
-используй ЭТИ критерии (не приоритет!):
-
-1. Просроченные задачи (due_date < NOW() И статус не Done/Closed)
-2. Баги (issue_type = 'Bug' И статус не Done/Closed)
-3. Задачи в статусе слишком долго (старые created_at)
-
-«Проблемный проект» = проект с БОЛЬШИМ количеством:
-- Просроченных задач
-- Багов
-- Старых незакрытых задач
-
-============================================================
 ПРАВИЛА ДЛЯ AI:
 ============================================================
 
-1. Для получения данных используй SQL запросы
+1. ВСЕГДА пиши SQL запрос в markdown блоке с языком sql: ```sql ... ```
 2. ТОЛЬКО SELECT запросы
 3. ВСЕГДА добавляй LIMIT 100
 4. Используй схему: normalized.jira_issues, core.projects и т.д.
+5. После SQL блока напиши краткий ответ (2-3 предложения)
+6. В ответах НЕ упоминай "база данных", "БД", "таблица" — отвечай как аналитик
+7. Для получения названий проектов используй JOIN:
+   ```sql
+   SELECT ji.project_key, p.name as project_name
+   FROM normalized.jira_issues ji
+   LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key
+   ```
 
-ВАЖНО: SQL запросы пиши ТОЛЬКО внутри блоков ```sql ... ```. 
-Эти блоки будут извлечены бэкендом и выполнены автоматически.
-Пользователь НЕ ДОЛЖЕН видеть SQL запросы в ответе.
+ПРИМЕР ПРАВИЛЬНОГО ОТВЕТА:
 
-ПОСЛЕ SQL блока напиши краткий текстовый ответ (2-3 предложения).
-Текстовый ответ будет показан пользователю.
-
-Пример правильного ответа AI:
 ```sql
-SELECT project_key, COUNT(*) FROM normalized.jira_issues WHERE status NOT IN ('Done', 'Closed') GROUP BY project_key LIMIT 100
+SELECT p.name as project_name, ji.project_key, COUNT(*) as open_tasks FROM normalized.jira_issues ji LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key WHERE ji.status NOT IN ('Done', 'Closed') GROUP BY p.name, ji.project_key LIMIT 10
 ```
+
 Анализирую данные по проектам...
 
-В этом примере:
-- SQL будет извлечён и выполнен бэкендом
-- Текст "Анализирую данные по проектам..." будет показан пользователю
-- Бэкенд заменит текст на конкретный ответ с цифрами
-
 ============================================================
-ПРИМЕРЫ SQL ЗАПРОСОВ:
+ПРИМЕРЫ ВОПРОСОВ И ОТВЕТОВ:
+
+Вопрос: «Привет»
+Ответ: Здравствуйте! Чем я могу вам помочь сегодня?
 
 Вопрос: «Какой проект самый проблемный?»
 ```sql
-SELECT project_key, 
-       COUNT(CASE WHEN due_date < NOW() AND status NOT IN ('Done', 'Closed') THEN 1 END) as overdue_count,
-       COUNT(CASE WHEN issue_type = 'Bug' AND status NOT IN ('Done', 'Closed') THEN 1 END) as bugs_count
-FROM normalized.jira_issues 
-WHERE status NOT IN ('Done', 'Closed')
-GROUP BY project_key 
-ORDER BY overdue_count + bugs_count DESC 
-LIMIT 10
+SELECT project_name, project_key, overdue, bugs, (overdue + bugs) as total_problems FROM (SELECT p.name as project_name, ji.project_key, COUNT(*) FILTER (WHERE ji.due_date < NOW()) as overdue, COUNT(*) FILTER (WHERE ji.issue_type = 'Bug') as bugs FROM normalized.jira_issues ji LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key WHERE ji.status NOT IN ('Done', 'Closed') GROUP BY p.name, ji.project_key) AS subq ORDER BY total_problems DESC LIMIT 10
 ```
+Ответ: Топ проектов с наибольшим количеством проблем...
 
 Вопрос: «Сколько просроченных задач?»
 ```sql
-SELECT COUNT(*) FROM normalized.jira_issues 
-WHERE due_date < NOW() AND status NOT IN ('Done', 'Closed') 
-LIMIT 100
+SELECT p.name as project_name, ji.project_key, COUNT(*) as overdue_count FROM normalized.jira_issues ji LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key WHERE ji.due_date < NOW() AND ji.status NOT IN ('Done', 'Closed') GROUP BY p.name, ji.project_key ORDER BY overdue_count DESC LIMIT 10
 ```
+Ответ: Топ проектов по просроченным задачам...
 
 Вопрос: «Где много багов?»
 ```sql
-SELECT project_key, COUNT(*) as bug_count 
-FROM normalized.jira_issues 
-WHERE issue_type = 'Bug' AND status NOT IN ('Done', 'Closed') 
-GROUP BY project_key 
-ORDER BY bug_count DESC 
-LIMIT 10
-```"""
+SELECT p.name as project_name, ji.project_key, COUNT(*) as bug_count FROM normalized.jira_issues ji LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key WHERE ji.issue_type = 'Bug' AND ji.status NOT IN ('Done', 'Closed') GROUP BY p.name, ji.project_key ORDER BY bug_count DESC LIMIT 10
+```
+Ответ: Проекты с наибольшим количеством багов...
 
+Вопрос: «Сколько задач у Ивана?»
+```sql
+SELECT ji.assignee_name, COUNT(*) as task_count FROM normalized.jira_issues ji WHERE ji.assignee_name LIKE '%Иван%' AND ji.status NOT IN ('Done', 'Closed') GROUP BY ji.assignee_name LIMIT 10
+```
+Ответ: У Ивана X активных задач...
+
+Вопрос: «Покажи все проекты?»
+```sql
+SELECT key, name, is_active FROM core.projects WHERE is_active = true LIMIT 100
+```
+Ответ: Вот список проектов...
+
+ВАЖНО: Всегда начинай ответ с SQL блока в markdown формате!
+ВАЖНО: В ответах используй реальные названия проектов (p.name), а не ключи (project_key).
+ВАЖНО: НЕ упоминай "база данных", "БД", "таблицы" в ответах пользователям."""
+
+
+
+def _normalize_name(name: str) -> str:
+    """Нормализует имя для поиска (варианты имён)"""
+    name_lower = name.lower()
+    
+    # Варианты имён
+    name_variants = {
+        'леши': 'Алексей',
+        'леша': 'Алексей',
+        'алекс': 'Алексей',
+        'саша': 'Александр',
+        'саня': 'Александр',
+        'александ': 'Александр',
+        'серёжа': 'Сергей',
+        'сергей': 'Сергей',
+        'дяша': 'Дмитрий',
+        'димас': 'Дмитрий',
+        'дима': 'Дмитрий',
+        'вик': 'Виктор',
+        'виктор': 'Виктор',
+        'макс': 'Максим',
+        'максим': 'Максим',
+        'андрюша': 'Андрей',
+        'андрей': 'Андрей',
+        'оля': 'Ольга',
+        'ольга': 'Ольга',
+        'настя': 'Анастасия',
+        'нastas': 'Анастасия',
+        'катя': 'Екатерина',
+        'екатерина': 'Екатерина',
+        'таня': 'Татьяна',
+        'татьяна': 'Татьяна',
+    }
+    
+    return name_variants.get(name_lower, name.capitalize())
+
+
+def _generate_sql_from_question(question: str) -> List[str]:
+    """
+    Программно генерирует SQL на основе вопроса пользователя.
+    Это fallback если AI не смог сгенерировать SQL.
+    """
+    question_lower = question.lower()
+    
+    # Проблемный проект — детальный запрос с реальными названиями
+    if 'проблемн' in question_lower or 'хуже' in question_lower:
+        return [
+            """SELECT project_name, project_key, overdue_count, bug_count, old_tasks,
+                (overdue_count + bug_count) as total_problems
+            FROM (
+                SELECT 
+                    p.name as project_name, 
+                    ji.project_key,
+                    COUNT(*) FILTER (WHERE ji.status NOT IN ('Done', 'Closed')) as open_tasks,
+                    COUNT(*) FILTER (WHERE ji.due_date < NOW() AND ji.status NOT IN ('Done', 'Closed')) as overdue_count,
+                    COUNT(*) FILTER (WHERE ji.issue_type = 'Bug' AND ji.status NOT IN ('Done', 'Closed')) as bug_count,
+                    COUNT(*) FILTER (WHERE ji.created_at < NOW() - INTERVAL '30 days' AND ji.status NOT IN ('Done', 'Closed')) as old_tasks
+                FROM normalized.jira_issues ji
+                LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key
+                WHERE ji.status NOT IN ('Done', 'Closed')
+                GROUP BY p.name, ji.project_key
+            ) AS subq
+            ORDER BY total_problems DESC
+            LIMIT 10"""
+        ]
+    
+    # Просроченные задачи — показываем топ проектов
+    if 'просроченн' in question_lower:
+        return [
+            """SELECT 
+                p.name as project_name,
+                ji.project_key,
+                COUNT(*) as overdue_count
+            FROM normalized.jira_issues ji
+            LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key
+            WHERE ji.due_date < NOW() AND ji.status NOT IN ('Done', 'Closed')
+            GROUP BY p.name, ji.project_key
+            ORDER BY overdue_count DESC
+            LIMIT 10"""
+        ]
+    
+    # Баги
+    if 'баг' in question_lower:
+        return [
+            """SELECT 
+                p.name as project_name,
+                ji.project_key,
+                COUNT(*) as bug_count
+            FROM normalized.jira_issues ji
+            LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key
+            WHERE ji.issue_type = 'Bug' AND ji.status NOT IN ('Done', 'Closed')
+            GROUP BY p.name, ji.project_key
+            ORDER BY bug_count DESC
+            LIMIT 10"""
+        ]
+    
+    # Задачи у человека — с нормализацией имён
+    if 'у' in question_lower and ('задач' in question_lower or 'task' in question_lower):
+        # Пытаемся извлечь имя
+        name_match = re.search(r'у\s+([а-яёa-z]+)', question_lower)
+        if name_match:
+            raw_name = name_match.group(1)
+            normalized_name = _normalize_name(raw_name)
+            return [
+                f"""SELECT 
+                    ji.assignee_name,
+                    COUNT(*) as task_count,
+                    COUNT(*) FILTER (WHERE ji.issue_type = 'Bug') as bug_count,
+                    COUNT(*) FILTER (WHERE ji.due_date < NOW()) as overdue_count
+                FROM normalized.jira_issues ji
+                WHERE ji.assignee_name ILIKE '%{normalized_name}%' AND ji.status NOT IN ('Done', 'Closed')
+                GROUP BY ji.assignee_name
+                LIMIT 10"""
+            ]
+        return [
+            """SELECT 
+                ji.assignee_name,
+                COUNT(*) as task_count,
+                COUNT(*) FILTER (WHERE ji.issue_type = 'Bug') as bug_count
+            FROM normalized.jira_issues ji
+            WHERE ji.status NOT IN ('Done', 'Closed')
+            GROUP BY ji.assignee_name
+            ORDER BY task_count DESC
+            LIMIT 10"""
+        ]
+    
+    # Запрос "сколько задач у..." (без "у")
+    if 'сколько' in question_lower and 'задач' in question_lower:
+        name_match = re.search(r'у\s+([а-яёa-z]+)', question_lower)
+        if name_match:
+            raw_name = name_match.group(1)
+            normalized_name = _normalize_name(raw_name)
+            return [
+                f"""SELECT 
+                    ji.assignee_name,
+                    COUNT(*) as task_count,
+                    COUNT(*) FILTER (WHERE ji.issue_type = 'Bug') as bug_count
+                FROM normalized.jira_issues ji
+                WHERE ji.assignee_name ILIKE '%{normalized_name}%' AND ji.status NOT IN ('Done', 'Closed')
+                GROUP BY ji.assignee_name
+                LIMIT 10"""
+            ]
+        # Если без имени — показываем топ проектов по задачам
+        return [
+            """SELECT 
+                p.name as project_name,
+                ji.project_key,
+                COUNT(*) as total_open,
+                COUNT(*) FILTER (WHERE ji.due_date < NOW()) as overdue,
+                COUNT(*) FILTER (WHERE ji.issue_type = 'Bug') as bugs
+            FROM normalized.jira_issues ji
+            LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key
+            WHERE ji.status NOT IN ('Done', 'Closed')
+            GROUP BY p.name, ji.project_key
+            ORDER BY total_open DESC
+            LIMIT 10"""
+        ]
+    
+    # Все проекты
+    if 'проект' in question_lower and ('всё' in question_lower or 'все' in question_lower or 'покажи' in question_lower):
+        return [
+            "SELECT key, name, is_active FROM core.projects WHERE is_active = true LIMIT 100"
+        ]
+    
+    # Считаем задачи
+    if 'сколько' in question_lower and 'задач' in question_lower:
+        return [
+            """SELECT 
+                p.name as project_name,
+                ji.project_key,
+                COUNT(*) as total_open,
+                COUNT(*) FILTER (WHERE ji.due_date < NOW()) as overdue,
+                COUNT(*) FILTER (WHERE ji.issue_type = 'Bug') as bugs
+            FROM normalized.jira_issues ji
+            LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key
+            WHERE ji.status NOT IN ('Done', 'Closed')
+            GROUP BY p.name, ji.project_key
+            ORDER BY total_open DESC
+            LIMIT 10"""
+        ]
+    
+    # По умолчанию - ничего
+    return []
 
 
 def _generate_answer_programmatically(tool_results: List, question: str) -> str:

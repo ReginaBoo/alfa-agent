@@ -1,5 +1,5 @@
 import { Input, Button, Space, Spin, Alert } from 'antd';
-import { SendOutlined, DatabaseOutlined } from '@ant-design/icons';
+import { SendOutlined } from '@ant-design/icons';
 import { useState, useRef, useEffect } from 'react';
 import { dashboardApi } from '../../../api/dashboardApi';
 import s from './ChatBot.module.css';
@@ -7,7 +7,6 @@ import s from './ChatBot.module.css';
 interface Message {
   role: 'user' | 'assistant';
   text: string;
-  sqlQueries?: string[];
 }
 
 interface ChatHistoryItem {
@@ -22,7 +21,6 @@ export const ChatBot = () => {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showSqlDebug, setShowSqlDebug] = useState(false);
   const [sessionId, setSessionId] = useState<string>(() => {
     // Восстанавливаем сессию из localStorage
     const saved = localStorage.getItem('chat_session_id');
@@ -99,8 +97,7 @@ export const ChatBot = () => {
         ...prev,
         {
           role: 'assistant',
-          text: response.answer,
-          sqlQueries: response.metadata?.sql_queries || []
+          text: response.answer
         }
       ]);
 
@@ -134,19 +131,9 @@ export const ChatBot = () => {
       {/* Заголовок с кнопкой очистки */}
       <div className={s.chatHeader}>
         <span>Чат с AI</span>
-        <Space size="small">
-          <Button
-            size="small"
-            type={showSqlDebug ? 'primary' : 'default'}
-            icon={<DatabaseOutlined />}
-            onClick={() => setShowSqlDebug(!showSqlDebug)}
-          >
-            SQL
-          </Button>
-          <Button size="small" onClick={handleClearHistory}>
-            Очистить
-          </Button>
-        </Space>
+        <Button size="small" onClick={handleClearHistory}>
+          Очистить
+        </Button>
       </div>
 
       {/* Область сообщений */}
@@ -156,15 +143,6 @@ export const ChatBot = () => {
             <Space align="start" className={msg.role === 'user' ? s.reverseRow : ''}>
               <div className={`${s.bubble} ${msg.role === 'assistant' ? s.aiBubble : s.userBubble}`}>
                 {msg.text}
-                {/* Отображение SQL запросов (debug mode) */}
-                {showSqlDebug && msg.sqlQueries && msg.sqlQueries.length > 0 && (
-                  <div className={s.sqlDebug}>
-                    <strong>SQL запросы:</strong>
-                    {msg.sqlQueries.map((sql, i) => (
-                      <pre key={i}>{sql}</pre>
-                    ))}
-                  </div>
-                )}
               </div>
             </Space>
           </div>
