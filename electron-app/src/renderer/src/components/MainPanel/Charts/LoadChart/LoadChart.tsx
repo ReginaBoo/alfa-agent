@@ -8,9 +8,14 @@ interface LoadChartProps {
 }
 
 export const LoadChart = ({ backendData }: LoadChartProps) => {
-  if (!Array.isArray(backendData) || !backendData || backendData.length === 0) {
+  if (!Array.isArray(backendData) || backendData.length === 0) {
     return <Empty description="Нет данных по загруженности" />;
   }
+
+  const normalizedData = backendData.map(item => ({
+    ...item,
+    displayLoad: Math.min(item.load, 2),
+  }));
 
   const colorMap = {
     underload: '#F27A41', // Недогруз
@@ -20,20 +25,34 @@ export const LoadChart = ({ backendData }: LoadChartProps) => {
   };
 
   const config = {
-    data: backendData,
+    data: normalizedData,
     xField: 'project',
-    yField: 'load',
+    yField: 'displayLoad',
+
+    // АДАПТИВНОСТЬ: График занимает 100% ширины своего родителя
+    autoFit: true,
+    height: 175, // Высоту оставляем фиксированной для предсказуемости сетки дашборда
+
 
     scale: {
       y: {
-        domain: [0, 2], // От 0 до 2, чтобы 1.0 была ровно по центру
+        domain: [0, 2],
         tickCount: 5,
       },
     },
 
     axis: {
+      x: {
+        labelFormatter: (text: string) => {
+          if (text.length > 10) return text.slice(0, 10) + '...';
+          return text;
+        },
+        labelAutoHide: true,
+        labelAutoRotate: false,
+      },
       y: {
-        labelFormatter: (v: number) => v === 1 ? '1,0' : v.toString().replace('.', ','),
+        labelFormatter: (v: number) =>
+          v === 1 ? '1,0' : v.toString().replace('.', ','),
       },
     },
 
@@ -52,12 +71,7 @@ export const LoadChart = ({ backendData }: LoadChartProps) => {
           value: `${(datum.load * 100).toFixed(0)}%`,
         }),
         (datum: LoadChartItem) =>
-          datum.description
-            ? {
-              name: 'Описание',
-              value: datum.description,
-            }
-            : null,
+          datum.description ? { name: 'Описание', value: datum.description } : null,
       ],
     },
     legend: false,
@@ -66,13 +80,10 @@ export const LoadChart = ({ backendData }: LoadChartProps) => {
   return (
     <div className={s.chartContainer}>
       <div className={s.chartCanvasWrapper}>
-        <div className={s.gridLineTop} />
-        <div className={s.gridLineBottom} />
-
         <Column {...config} />
       </div>
 
-      {/* HTML-Легенда */}
+      {/* Легенда (на флексах, полностью адаптивная) */}
       <div className={s.legendContainer}>
         <div className={s.legendItem}>
           <div className={s.legendMarker} style={{ backgroundColor: colorMap.overload }} />

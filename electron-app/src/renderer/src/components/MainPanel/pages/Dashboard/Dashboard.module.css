@@ -1,42 +1,44 @@
 .dashboardWrapper {
   width: 100%;
-  padding: 20px;
+  padding: 16px;
 }
 
-/* --- AI СЕКЦИЯ --- */
-.aiSection {
+/* Колонки-контейнеры */
+.dashboardColumn {
   display: flex;
   flex-direction: column;
+  gap: 24px;
+  height: 100%;
+  /* Отступ между карточками внутри одной колонки */
+}
+
+/* Универсальная базовая карточка */
+.dashboardCard {
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
   padding: 20px;
   border-radius: 8px;
-  background-color: #ffffff;
-  height: 450px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  width: 100%;
+  min-height: 200px;
 }
 
-.aiSection :global(.ant-empty) {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-}
-
-/* ИСПРАВЛЕНО: заставляем лоадер занять ВСЁ свободное место под заголовком */
-.aiSection :global(.ant-row) {
-  flex-grow: 1;
-  min-height: 0 !important;
-  /* Сбрасываем инлайновые 200px, чтобы флекс работал корректно */
-  height: 100%;
-}
-
+/* --- Заголовки --- */
 .blueTitle {
   margin: 0;
   padding: 0;
   color: #02489B !important;
-  font-size: 16px !important;
+  font-size: 14px !important;
   font-weight: 700 !important;
   text-transform: uppercase;
-  line-height: 1;
+  line-height: 1.2;
+}
+
+@media (min-width: 768px) {
+  .blueTitle {
+    font-size: 16px !important;
+  }
 }
 
 .titles {
@@ -44,7 +46,6 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
-
 }
 
 .title {
@@ -53,38 +54,47 @@
   gap: 8px;
 }
 
-/* --- СЕКЦИЯ ЗАГРУЗКИ КОМАНД --- */
-.loadSection {
-  display: flex;
-  flex-direction: column;
-  background: #ffffff;
-  padding: 20px;
-  width: auto;
-  height: 270px;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+/* --- Контент с автоматическим скроллом (для AI-выводов) --- */
+.scrollableContent {
+  flex-grow: 1;
+  min-height: 0;
 }
 
-.loadSection :global(.ant-empty) {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+/* На больших экранах даем блоку AI больше пространства */
+@media (min-width: 1200px) {
+  .scrollableContent {
+    max-height: 400px;
+  }
 }
 
-/* ИСПРАВЛЕНО: аналогично убираем жесткие 270px */
-.loadSection> :global(.ant-row) {
+/* --- Контейнеры для графиков (ChartContainer) --- */
+.chartContainer {
   flex-grow: 1;
+  width: 100%;
+  height: 250px;
+  /* Фиксированная базовая высота для мобильных, чтобы графики не сплющивались */
+}
+
+/* На десктопах увеличиваем высоту графиков для наглядности */
+@media (min-width: 1200px) {
+  .chartContainer {
+    height: 350px;
+  }
+}
+
+/* Чтобы Recharts / Сhasrt.js внутри контейнера корректно растягивались */
+.chartContainer>div,
+.chartContainer :global(.ant-row) {
+  width: 100% !important;
+  height: 100% !important;
   min-height: 0 !important;
-  height: 100%;
 }
 
-/* --- СЕКЦИЯ СТАТИСТИКИ --- */
+/* --- СЕКЦИЯ СТАТИСТИКИ (маленькие карточки с цифрами) --- */
 .statsSection {
   display: flex;
   flex-direction: column;
-  min-height: 170px;
+  width: 100%;
 }
 
 .statsSection :global(.ant-empty) {
@@ -95,68 +105,13 @@
   align-items: center;
 }
 
-.statsSection> :global(.ant-row) {
-  flex-grow: 1;
-  min-height: 0 !important;
-  height: 100%;
-}
-
-/* --- СЕКЦИЯ ГРАФИКА АКТИВНОСТИ --- */
-.chartSection {
+.dashboardCard,
+.statsSection {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 550px;
-  background: #ffffff;
-  padding: 20px;
-  border-radius: 8px;
 }
 
-.chartSection :global(.ant-empty) {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-}
-
-.chartSection>.blueTitle+* {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  /* Центрируем содержимое по вертикали */
-  align-items: center;
-  /* Центрируем содержимое по горизонтали */
-
-  /* Сбрасываем жесткие 200px из пропсов, чтобы элемент занял все 550px секции */
-  min-height: 0 !important;
-  height: 100%;
-}
-
-/* ИСПРАВЛЕНО: добавили стрелочный селектор для точности */
-.chartSection> :global(.ant-row) {
-  flex-grow: 1;
-  min-height: 0 !important;
-  height: 100%;
-}
-
-/* Вспомогательные плейсхолдеры */
-.placeholder,
-.placeholderCard,
-.chartPlaceholder {
-  background: #ffffff;
-  border: 1px dashed #cbd5e1;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #94a3b8;
-}
-
-.placeholderCard {
-  height: 200px;
-}
-
-.projectsGrid {
-  min-height: 180px;
+.statsSection>* {
+  flex: 1;
 }

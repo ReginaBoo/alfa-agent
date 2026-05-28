@@ -16,7 +16,7 @@ const getStatusConfig = (status: ProjectStatsItem['status']) => {
       return { color: '#FF4D4F', icon: <InfoCircleOutlined style={{ color: '#FF4D4F' }} /> };
     case 'warning':
       return { color: '#FAAD14', icon: <FlagFilled style={{ color: '#FAAD14' }} /> };
-    case 'normal':
+    case 'success':
     default:
       return { color: '#F0F0F0', icon: null };
   }
@@ -33,17 +33,22 @@ export const ProjectStats = ({ data }: ProjectStatsProps) => {
 
   return (
     <Row gutter={[16, 16]}>
-      {data.map((p) => {
+      {data.map((p, index) => {
         const { color, icon } = getStatusConfig(p.status);
         const isError = p.status === 'error';
         const isWarning = p.status === 'warning';
 
         return (
-          <Col xs={24} sm={12} xl={6} key={p.id}>
+          <Col xs={24}
+            sm={12}
+            xl={8}
+            key={`${p.id}-${index}`}
+            style={{ display: 'flex' }}>
             <Card
               className={s.projectCard}
               style={{ borderTop: `4px solid ${color}` }}
             >
+              {/* Шапка карточки (всегда показываем название проекта) */}
               <div className={s.cardHeader}>
                 <Title level={5} className={s.projectTitle}>
                   <span title={p.name}>{p.name}</span>
@@ -60,51 +65,59 @@ export const ProjectStats = ({ data }: ProjectStatsProps) => {
                 {icon}
               </div>
 
-              <div className={s.statsGrid}>
-                {/* Загрузка */}
-                <div className={s.statItem}>
-                  <div className={s.statValue} style={{ color: isError ? '#FF4D4F' : '#3460DC' }}>
-                    {p.stats.workload}%
+              {/* Тело карточки: либо заглушка, либо сетка метрик */}
+              {p.noData ? (
+                <div className={s.noDataWrapper}>
+                  <span className={s.noDataText}>Нет данных за период</span>
+                </div>
+              ) : (
+                <div className={s.statsGrid}>
+                  {/* Загрузка */}
+                  <div className={s.statItem}>
+                    <div className={s.statValue} style={{ color: isError ? '#FF4D4F' : '#3460DC' }}>
+                      {p.stats.workload}%
+                    </div>
+                    <div className={s.statLabel}>Загрузка</div>
                   </div>
-                  <div className={s.statLabel}>Загрузка</div>
-                </div>
 
-                {/* Ревью */}
-                <div className={s.statItem}>
-                  <div className={s.statValue}>{p.stats.reviewTime}</div>
-                  <div className={s.statLabel}>Ревью</div>
-                </div>
-
-                {/* Баги */}
-                <div className={s.statItem}>
-                  <div className={s.statValue}>{p.stats.bugs}</div>
-                  <div className={s.statLabel}>Баги</div>
-                </div>
-
-                {/* PR */}
-                <div className={s.statItem}>
-                  <div className={s.statValue} style={{ color: isError ? '#FF4D4F' : isWarning ? '#FAAD14' : '#3460DC' }}>
-                    {p.stats.prCount}
+                  {/* Ревью */}
+                  <div className={s.statItem}>
+                    <div className={s.statValue}>{p.stats.reviewTime}</div>
+                    <div className={s.statLabel}>Ревью</div>
                   </div>
-                  <div className={s.statLabel}>PR</div>
-                </div>
 
-                {/* Коммиты */}
-                <div className={s.statItem}>
-                  <div className={s.statValue}>{p.stats.commits}</div>
-                  <div className={s.statLabel}>Коммиты</div>
-                </div>
-
-                {/* SLA */}
-                <div className={s.statItem}>
-                  <div className={s.statValue} style={{ color: isError ? '#FAAD14' : '#3460DC' }}>
-                    {p.stats.sla}%
+                  {/* Баги */}
+                  <div className={s.statItem}>
+                    <div className={s.statValue}>{p.stats.bugs}</div>
+                    <div className={s.statLabel}>Баги</div>
                   </div>
-                  <div className={s.statLabel}>SLA</div>
+
+                  {/* PR */}
+                  <div className={s.statItem}>
+                    <div className={s.statValue} style={{ color: isError ? '#FF4D4F' : isWarning ? '#FAAD14' : '#3460DC' }}>
+                      {p.stats.prCount}
+                    </div>
+                    <div className={s.statLabel}>PR</div>
+                  </div>
+
+                  {/* Коммиты */}
+                  <div className={s.statItem}>
+                    <div className={s.statValue}>{p.stats.commits}</div>
+                    <div className={s.statLabel}>Коммиты</div>
+                  </div>
+
+                  {/* SLA */}
+                  <div className={s.statItem}>
+                    <div className={s.statValue} style={{ color: isError ? '#FAAD14' : '#3460DC' }}>
+                      {p.stats.sla}%
+                    </div>
+                    <div className={s.statLabel}>SLA</div>
+                  </div>
                 </div>
-              </div>
+              )}
             </Card>
           </Col>
+
         );
       })}
     </Row>
