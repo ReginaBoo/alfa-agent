@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button, Card, Typography, message } from 'antd';
+import { Button, Typography, message } from 'antd';
 import api from '../../api/client';
-
-const { Title } = Typography;
-
+import { LoginOutlined } from '@ant-design/icons';
+import s from './LoginPage.module.css'; // Убедись, что путь к стилям правильный
+const { Title, Text } = Typography;
 export const LoginPage = () => {
   const navigate = useNavigate();
 
@@ -37,13 +37,30 @@ export const LoginPage = () => {
   };
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-      <Card style={{ maxWidth: 400 }}>
-        <Title level={3}>Вход в систему</Title>
-        <Button type="primary" onClick={handleLogin}>
-          Войти через Atlassian
-        </Button>
-      </Card>
+    <div className={s.pageWrapper}>
+      <div className={s.loginCard}>
+        {/* Заголовок входа */}
+        <Title level={3} className={s.loginTitle}>
+          Вход в систему
+        </Title>
+
+        <Text type="secondary" style={{ display: 'block', marginBottom: 24, fontSize: 13 }}>
+          Для продолжения работы вам необходимо пройти аутентификацию.
+        </Text>
+
+        {/* Контейнер с кнопкой авторизации */}
+        <div className={s.socialButtons}>
+          <Button
+            type="primary"
+            icon={<LoginOutlined />}
+            onClick={handleLogin}
+            className={s.continueBtn}
+            block
+          >
+            Войти через Atlassian
+          </Button>
+        </div>
+      </div>
     </div>
   );
 };

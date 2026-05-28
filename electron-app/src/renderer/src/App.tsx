@@ -9,13 +9,15 @@ import { LoginPage } from './components/LoginPage/LoginPage';
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { Spin, Button, Typography, Card } from 'antd';
-import { LoginOutlined } from '@ant-design/icons';
+import { Spin, Typography } from 'antd';
 
-const { Title, Text } = Typography;
+// Меняем тип пропсов для ElectronAuthChecker, теперь children — это функция
+interface ElectronAuthCheckerProps {
+  children: (authProps: { authorized: boolean; handleLogin: () => Promise<void>; isLoggingIn: boolean }) => React.ReactNode;
+}
 
 // Electron компонент проверки авторизации
-function ElectronAuthChecker({ children }: { children: React.ReactNode }) {
+function ElectronAuthChecker({ children }: ElectronAuthCheckerProps) {
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -77,26 +79,17 @@ function ElectronAuthChecker({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (loading) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-      <Spin size="large" />
-    </div>;
-  }
-
-  if (!authorized) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <Card style={{ maxWidth: 400, textAlign: 'center' }}>
-          <Title level={3}>Требуется авторизация</Title>
-          <Text>Для работы с Мини Панелью необходимо авторизоваться</Text>
-          <Button type="primary" onClick={handleLogin} loading={isLoggingIn} style={{ marginTop: 20 }}>
-            Авторизоваться
-          </Button>
-        </Card>
+        <Spin size="large" />
       </div>
     );
   }
 
-  return <>{children}</>;
+  /* ЗДЕСЬ ИЗМЕНЕНИЕ: Мы больше не блокируем рендер карточкой.
+    Мы всегда рендерим внутренности MiniPanel, передавая туда состояние авторизации 
+  */
+  return <>{children({ authorized, handleLogin, isLoggingIn })}</>;
 }
 
 // Веб-компонент проверки авторизации
@@ -122,8 +115,11 @@ function App() {
   return (
     <div>
       {isElectron ? (
+        /* ЗДЕСЬ ИЗМЕНЕНИЕ: Получаем пропсы из чекера 
+          и прокидываем их развернутым объектом в MiniPanel
+        */
         <ElectronAuthChecker>
-          <MiniPanel />
+          {(authProps) => <MiniPanel {...authProps} />}
         </ElectronAuthChecker>
       ) : (
         <BrowserRouter>
@@ -148,4 +144,4 @@ function App() {
   )
 }
 
-export default App
+export default App;

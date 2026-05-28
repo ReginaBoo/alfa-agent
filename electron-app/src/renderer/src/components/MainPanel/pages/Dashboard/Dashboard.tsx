@@ -17,6 +17,7 @@ export const Dashboard = () => {
   const projectStats = useProjectStats(timePeriod);
   const { data: projects = [], isLoading: isProjectsLoading } = useProjects();
   const teamsLoad = useTeamsLoad(timePeriod);
+
   const handleDownloadReport = () => {
     console.log('Скачивание отчета за период:', timePeriod);
   };
@@ -25,28 +26,23 @@ export const Dashboard = () => {
     if (!projects.length) return [];
 
     return projects.map((proj) => {
-      // Ищем данные от бэкенда по имени проекта (так как на графиках выводятся имена)
       const existingData = projectStats.data?.find(
         (stat: any) => stat.name === proj.name
       );
 
-      // Если данные по проекту есть — отдаем их без изменений
-      if (existingData) {
-        return existingData;
-      }
+      if (existingData) return existingData;
 
-      // Если данных нет — генерируем карточку-заглушку с флагом noData
       return {
-        id: Number(proj.id), // Принудительно приводим к числу
+        id: Number(proj.id),
         name: proj.name,
-        status: 'success',   // Дефолтный статус из доступных литералов
-        noData: true,        // Тот самый флаг для отображения заглушки
+        status: 'success',
+        noData: true,
         stats: {
           workload: 0,
           reviewTime: '0ч',
           bugs: 0,
           prCount: 0,
-          commits: '0',      // Строковое значение согласно интерфейсу
+          commits: '0',
           sla: 0,
         },
       };
@@ -76,21 +72,19 @@ export const Dashboard = () => {
         </Col>
       </Row>
 
-      {/* Основная сетка: на мобильных в 1 колонку, на десктопах в 2 колонки */}
-      <Row gutter={[24, 24]}>
+      {/* Главный контейнер сетки с флагом выравнивания высоты колонок align="stretch" */}
+      <Row gutter={[24, 24]} align="stretch">
 
         {/* ЛЕВАЯ КОЛОНКА (AI + Загрузка) */}
         <Col xs={24} xl={12} className={s.dashboardColumn}>
+          {/* Верхняя карточка: подстраивается под свой контент */}
           <div className={s.dashboardCard}>
             <div className={s.titles}>
               <div className={s.title}>
                 <h1 className={s.blueTitle}>ai-выводы</h1>
-                {aiInsights && (
-                  <MetricInfoTooltip text="ИИ анализирует ключевые метрики..." />
-                )}
+                {aiInsights && <MetricInfoTooltip text="ИИ анализирует ключевые метрики..." />}
               </div>
             </div>
-            {/* Обертка для контента, которая будет скроллиться */}
             <div className={s.scrollableContent}>
               {aiInsights.isLoading ? (
                 <DashboardLoader minHeight="150px" />
@@ -100,20 +94,17 @@ export const Dashboard = () => {
             </div>
           </div>
 
-          <div className={s.dashboardCard}>
+          {/* Нижняя карточка: благодаря классу s.fillCard займет ВСЁ оставшееся в колонке место */}
+          <div className={`${s.dashboardCard} ${s.fillCard}`}>
             <div className={s.titles}>
               <div className={s.title}>
                 <h1 className={s.blueTitle}>загруженность команд</h1>
-                {teamsLoad && (
-                  <MetricInfoTooltip text="Общий уровень загрузки команд по всем проектам" />
-                )}
+                {teamsLoad && <MetricInfoTooltip text="Общий уровень загрузки команд" />}
               </div>
             </div>
-
-
-            <div>
+            <div className={s.chartContainer}>
               {teamsLoad.isLoading ? (
-                <DashboardLoader minHeight="180px" tip="Анализируем загруженность команд..." />
+                <DashboardLoader minHeight="180px" tip="Анализируем загруженность..." />
               ) : (
                 <LoadChart backendData={teamsLoad.data} />
               )}
@@ -123,6 +114,7 @@ export const Dashboard = () => {
 
         {/* ПРАВАЯ КОЛОНКА (Статистика + Активность) */}
         <Col xs={24} xl={12} className={s.dashboardColumn}>
+          {/* Верхняя карточка проекта */}
           <div className={s.statsSection}>
             {projectStats.isLoading ? (
               <DashboardLoader minHeight="120px" tip="Считаем коммиты..." />
@@ -131,13 +123,12 @@ export const Dashboard = () => {
             )}
           </div>
 
-          <div className={s.dashboardCard}>
+          {/* Нижняя карточка: тоже s.fillCard, растягивается до самого низа */}
+          <div className={`${s.dashboardCard} ${s.fillCard}`}>
             <div className={s.titles}>
               <div className={s.title}>
                 <h1 className={s.blueTitle}>активность по проектам</h1>
-                {activity && (
-                  <MetricInfoTooltip text="Показывает, насколько активно команда работает..." />
-                )}
+                {activity && <MetricInfoTooltip text="Показывает активность работы..." />}
               </div>
             </div>
             <div className={s.chartContainer}>

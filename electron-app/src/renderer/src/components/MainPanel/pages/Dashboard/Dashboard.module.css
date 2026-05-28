@@ -3,13 +3,15 @@
   padding: 16px;
 }
 
-/* Колонки-контейнеры */
+/* ВАЖНО: Делаем сами колонки Ant Design Flex-контейнерами.
+  По умолчанию на больших экранах (xl) обе колонки станут строго ОДИНАКОВОЙ высоты 
+  (благодаря поведению align="stretch" у Row).
+*/
 .dashboardColumn {
-  display: flex;
+  display: flex !important;
   flex-direction: column;
   gap: 24px;
-  height: 100%;
-  /* Отступ между карточками внутри одной колонки */
+  /* Фиксированный отступ между верхней и нижней карточкой */
 }
 
 /* Универсальная базовая карточка */
@@ -21,7 +23,15 @@
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
   width: 100%;
-  min-height: 200px;
+}
+
+/* ГЛАВНЫЙ СЕКРЕТ: Этот класс заставляет нижнюю карточку 
+  «жадно» забирать себе всё свободное пространство внизу колонки.
+*/
+.fillCard {
+  flex-grow: 1;
+  min-height: 300px;
+  /* Минимальный базовый размер, чтоб график не сжимался в ноль на мелких экранах */
 }
 
 /* --- Заголовки --- */
@@ -54,64 +64,45 @@
   gap: 8px;
 }
 
-/* --- Контент с автоматическим скроллом (для AI-выводов) --- */
+/* --- Контент AI-выводов --- */
 .scrollableContent {
   flex-grow: 1;
   min-height: 0;
+  overflow-y: auto;
 }
 
-/* На больших экранах даем блоку AI больше пространства */
 @media (min-width: 1200px) {
   .scrollableContent {
     max-height: 400px;
   }
 }
 
-/* --- Контейнеры для графиков (ChartContainer) --- */
+/* --- Секция статистики проектов --- */
+.statsSection {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Контейнеры графиков внутри растянутых карточек */
 .chartContainer {
   flex-grow: 1;
+  /* График внутри карточки тоже забирает всю высоту */
   width: 100%;
-  height: 250px;
-  /* Фиксированная базовая высота для мобильных, чтобы графики не сплющивались */
+  min-height: 220px;
 }
 
-/* На десктопах увеличиваем высоту графиков для наглядности */
-@media (min-width: 1200px) {
-  .chartContainer {
-    height: 350px;
-  }
-}
-
-/* Чтобы Recharts / Сhasrt.js внутри контейнера корректно растягивались */
-.chartContainer>div,
-.chartContainer :global(.ant-row) {
+/* Фикс для Recharts/Chart.js чтобы они видели реальную высоту флекс-родителя */
+.chartContainer>div {
   width: 100% !important;
   height: 100% !important;
-  min-height: 0 !important;
+  position: absolute;
+  /* Уберет баг бесконечного расширения графиков во флексах */
+  top: 0;
+  left: 0;
 }
 
-/* --- СЕКЦИЯ СТАТИСТИКИ (маленькие карточки с цифрами) --- */
-.statsSection {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-.statsSection :global(.ant-empty) {
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-}
-
-.dashboardCard,
-.statsSection {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.statsSection>* {
-  flex: 1;
+/* Чтобы контейнер под абсолютный график не схлопывался */
+.chartContainer {
+  position: relative;
 }

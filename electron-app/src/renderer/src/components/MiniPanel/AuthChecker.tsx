@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Spin, Button, Typography, Card } from 'antd';
 import { LoginOutlined } from '@ant-design/icons';
-import api, { setAuthToken } from '../../api/client';
-
+import api from '../../api/client';
+import setAuthToken from '../../api/client';
 const { Title, Text } = Typography;
 
 interface AuthCheckerProps {

@@ -95,3 +95,60 @@
   color: #bfbfbf;
   margin-top: 4px;
 }
+
+/* Container, same as before */
+.carouselContainer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+/* Base grid styling: Now only animates opacity, and slightly slower for a nicer fade */
+.cardsRow {
+  width: 100%;
+  transition: opacity 0.3s ease-in-out;
+  /* Slower, ease-in-out makes it feel more deliberate and smoother */
+  will-change: opacity;
+}
+
+/* The state where content is visible (default) */
+.fadeIn {
+  opacity: 1;
+}
+
+/* The moment the data is fading out to change */
+.fadeOut {
+  opacity: 0;
+}
+
+/* Dots and Pagination - style them as needed, leaving this part as you requested for custom dots */
+.customPagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  width: 100%;
+}
+
+.dot {
+  width: 50px;
+  height: 4px;
+  border: none;
+  border-radius: 2px;
+  background-color: #E9E9E9;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 0;
+}
+
+.dot:hover {
+  background-color: #A5B4FC;
+  /* Subtle change on hover */
+}
+
+.activeDot {
+  background-color: #3460DC;
+  /* Your primary blue when active */
+  width: 24px;
+}
