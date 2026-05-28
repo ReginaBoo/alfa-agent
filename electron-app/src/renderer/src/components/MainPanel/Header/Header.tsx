@@ -56,7 +56,7 @@ export const Header = () => {
               ),
             },
             ...projects.map(p => ({
-              value: p.key,
+              value: String(p.id),
               label: (
                 <Space>
                   <ProjectOutlined />

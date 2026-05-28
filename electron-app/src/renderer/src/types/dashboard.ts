@@ -22,7 +22,8 @@ export interface ProjectStatsItem {
   name: string;
   project_id?: number;
   jira_url?: string;
-  status:'error' | 'warning' | 'success';
+  status: 'error' | 'warning' | 'success';
+  noData?: boolean;
   stats: {
     workload: number;
     reviewTime: string;

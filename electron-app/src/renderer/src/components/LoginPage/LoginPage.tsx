@@ -1,10 +1,4 @@
 import { Button } from 'antd'
-import {
-  GoogleOutlined,
-  AppleFilled,
-  WindowsOutlined,
-  SlackOutlined,
-} from '@ant-design/icons'
 
 import s from './LoginPage.module.css'
 import atlassianIcon from './atlassian.svg'
@@ -41,39 +35,6 @@ export const LoginPage = () => {
         >
           Войти через Atlassian
         </Button>
-
-        <p className={s.orLabel}>Или продолжите с</p>
-
-        <div className={s.socialButtons}>
-          <Button
-            block
-            icon={
-              <GoogleOutlined style={{ color: '#EA4335' }} />
-            }
-          >
-            Google
-          </Button>
-
-          <Button
-            block
-            icon={
-              <WindowsOutlined style={{ color: '#00A4EF' }} />
-            }
-          >
-            Microsoft
-          </Button>
-
-          <Button block icon={<AppleFilled />}>
-            Apple
-          </Button>
-
-          <Button
-            block
-            icon={<SlackOutlined style={{ color: '#4A154B' }} />}
-          >
-            Slack
-          </Button>
-        </div>
       </div>
     </div>
   )

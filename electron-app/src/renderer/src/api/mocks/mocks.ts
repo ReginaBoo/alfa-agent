@@ -72,23 +72,32 @@ export const mockProjectStats: ProjectStatsItem[] = [
   {
     id: 3,
     name: 'Проект 3',
-    status: 'normal',
+    status: 'success',
     stats: { workload: 78, reviewTime: '4ч', bugs: 1, prCount: 2, commits: '80↑', sla: 96 }
   },
   {
     id: 4,
     name: 'Проект 4',
-    status: 'normal',
+    status: 'success',
     stats: { workload: 60, reviewTime: '2ч', bugs: 0, prCount: 1, commits: '15↑', sla: 99 }
   },
 ];
 
 export const mockLoadData: LoadChartItem[] = [
-  { project: 'Проект 1', load: 1.75, statusType: 'overload', description: 'Критический перегруз ключевых разработчиков' },
-  { project: 'Проект 2', load: 0.62, statusType: 'high', description: 'Команда идет строго по графику спринта' },
-  { project: 'Проект 3', load: 0.45, statusType: 'optimal', description: 'Неравномерное распределение обязанностей' },
+  { project: 'Проектааааааааааааа 1', load: 1.75, statusType: 'overload', description: 'Критический перегруз ключевых разработчиков' },
+  { project: 'Проектааааааааааааа 2', load: 0.62, statusType: 'high', description: 'Команда идет строго по графику спринта' },
+  { project: 'Проектааааааааааа 3', load: 0.45, statusType: 'optimal', description: 'Неравномерное распределение обязанностей' },
   { project: 'Проект 4', load: 0.1, statusType: 'underload', description: 'Ресурсы освободились, можно подключать новые задачи' },
-
+  { project: 'Проект 5', load: 0.1, statusType: 'underload', description: 'Ресурсы освободились, можно подключать новые задачи' },
+  { project: 'Проект 6', load: 0.1, statusType: 'underload', description: 'Ресурсы освободились, можно подключать новые задачи' },
+  { project: 'Проект 7', load: 0.1, statusType: 'underload', description: 'Ресурсы освободились, можно подключать новые задачи' },
+  { project: 'Проект 8', load: 0.1, statusType: 'underload', description: 'Ресурсы освободились, можно подключать новые задачи' },
+  { project: 'Проект 9', load: 0.1, statusType: 'underload', description: 'Ресурсы освободились, можно подключать новые задачи' },
+  { project: 'Проект 11', load: 0.1, statusType: 'underload', description: 'Ресурсы освободились, можно подключать новые задачи' },
+  { project: 'Проект 12', load: 0.1, statusType: 'underload', description: 'Ресурсы освободились, можно подключать новые задачи' },
+  { project: 'Проект 13', load: 0.1, statusType: 'underload', description: 'Ресурсы освободились, можно подключать новые задачи' },
+  { project: 'Проект 14', load: 0.1, statusType: 'underload', description: 'Ресурсы освободились, можно подключать новые задачи' },
+  { project: 'Проект 15', load: 0.1, statusType: 'underload', description: 'Ресурсы освободились, можно подключать новые задачи' },
 ];
 
 export const mockProjectsData = [
