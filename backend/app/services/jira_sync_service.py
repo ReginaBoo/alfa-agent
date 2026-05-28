@@ -330,7 +330,10 @@ class JiraSyncService:
                 
                 # Если текущий статус закрытый
                 if status_name and status_name in closed_statuses:
-                    closed_at = fields.get("updated")
+                    closed_at = self._get_closed_at_from_changelog(
+                        issue_key=issue_key,
+                        closed_statuses=closed_statuses
+                    )
                 else:
                     # Ищем в changelog первый переход в закрытый статус
                     closing_event = self.db.query(IssueChangelog).filter(

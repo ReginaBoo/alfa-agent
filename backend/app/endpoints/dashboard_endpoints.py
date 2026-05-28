@@ -85,7 +85,7 @@ def get_projects_activity(
 
     # --- Ключ кэша ---
     cache_key = f"projects_activity:{current_user.id}:{period}"
-    
+
     # Пробуем получить из кэша
     cached_activity = cache_service.get(cache_key)
     if cached_activity is not None:
@@ -158,6 +158,7 @@ def get_projects_activity(
 
     return result
 
+
 @router.get("/api/projects-stats")
 @router.get("/projects-stats")
 def get_projects_stats(
@@ -184,7 +185,7 @@ def get_projects_stats(
 
     # Ключ кэша
     cache_key = f"projects_stats:{current_user.id}:{period}"
-    
+
     # Пробуем получить из кэша
     cached_stats = cache_service.get(cache_key)
     if cached_stats is not None:
@@ -194,8 +195,6 @@ def get_projects_stats(
     if period == "last week":
         cutoff_date = datetime.utcnow() - timedelta(days=7)
 
-   
-    
     # Получаем проекты пользователя из core.projects через UserProject
     user_projects = db.query(Project).join(
         UserProject, UserProject.project_id == Project.id
@@ -203,33 +202,34 @@ def get_projects_stats(
         UserProject.user_id == current_user.id,
         Project.is_active == True
     ).all()
-    
+
     # Извлекаем Jira project keys (jira_project_key)
-    user_project_keys = [p.jira_project_key for p in user_projects if p.jira_project_key]
-    
+    user_project_keys = [
+        p.jira_project_key for p in user_projects if p.jira_project_key]
+
     if not user_project_keys:
         # Нет проектов у пользователя — возвращаем пустой результат
         return []
-    
+
     # Фильтруем JiraIssue только по проектам пользователя
     projects_query = db.query(JiraIssue.project_key).filter(
         JiraIssue.project_key.in_(user_project_keys)
     ).distinct()
-    
+
     projects = projects_query.all()
-    
+
     # ============================================================
     # ПОЛУЧАЕМ base_url ДЛЯ ССЫЛОК
     # ============================================================
-    
+
     base_url = None
-    
+
     # Ищем токен текущего пользователя
     atlassian_token = db.query(IntegrationToken).filter(
         IntegrationToken.provider == "jira",
         IntegrationToken.user_id == current_user.id
     ).first()
-    
+
     if atlassian_token and atlassian_token.instance_url:
         base_url = atlassian_token.instance_url.rstrip('/')
         print(f"[DEBUG] Found base_url from user's token: {base_url}")
@@ -238,7 +238,7 @@ def get_projects_stats(
         any_token = db.query(IntegrationToken).filter(
             IntegrationToken.provider == "jira"
         ).first()
-        
+
         if any_token and any_token.instance_url:
             base_url = any_token.instance_url.rstrip('/')
             print(f"[DEBUG] Using fallback token: {base_url}")
@@ -255,7 +255,7 @@ def get_projects_stats(
 
         # Находим Project объект (уже есть в user_projects)
         project_obj = next(
-            (p for p in user_projects if p.jira_project_key == project_key), 
+            (p for p in user_projects if p.jira_project_key == project_key),
             None
         )
         project_id = project_obj.id if project_obj else None
@@ -287,7 +287,7 @@ def get_projects_stats(
                 db=db,
                 assignee_account_id=assignee_id,
                 project_key=project_key,
-                weeks=1 if period == "Последняя неделя" else 2
+                weeks=1 if period == "last week" else 2
             )
             if wi:
                 workload_values.append(wi)
@@ -333,24 +333,24 @@ def get_projects_stats(
         # PR COUNT & COMMITS (GitHub)
         # ---------------------------
         from app.db.models.normalized import GithubPullRequest, GithubCommit
-        
+
         pr_count = 0
         commits_count = 0
-        
+
         if project_id:
             days = 30 if period == "all" else 7
             cutoff_date_pr = datetime.utcnow() - timedelta(days=days)
-            
+
             pr_count = db.query(GithubPullRequest).filter(
                 GithubPullRequest.project_id == project_id,
                 GithubPullRequest.created_at >= cutoff_date_pr
             ).count()
-            
+
             commits_count = db.query(GithubCommit).filter(
                 GithubCommit.project_id == project_id,
                 GithubCommit.committed_at >= cutoff_date_pr
             ).count()
-        
+
         commits_str = f"{commits_count}↑" if commits_count > 0 else "0"
 
         # ---------------------------
@@ -400,6 +400,7 @@ def get_projects_stats(
     cache_service.set(cache_key, result, expire=120)
 
     return result
+
 
 @router.get("/api/teams-load")
 @router.get("/teams-load")
@@ -513,7 +514,7 @@ async def get_ai_insights(
     Возвращает AI-инсайты только для проектов пользователя.
     С кэшированием на 5 минут.
     """
-    
+
     # Получаем проекты пользователя
     user_projects = db.query(Project).join(
         UserProject, UserProject.project_id == Project.id
@@ -521,17 +522,18 @@ async def get_ai_insights(
         UserProject.user_id == current_user.id,
         Project.is_active == True
     ).all()
-    
-    user_project_keys = [p.jira_project_key for p in user_projects if p.jira_project_key]
-    
+
+    user_project_keys = [
+        p.jira_project_key for p in user_projects if p.jira_project_key]
+
     # Ключ кэша с user_id
     cache_key = f"ai_insights:{current_user.id}"
-    
+
     # Пробуем получить из кэша
     cached_insights = cache_service.get(cache_key)
     if cached_insights is not None:
         return cached_insights
-    
+
     # Генерируем заново с фильтрацией по проектам пользователя
     provider = OpenRouterProvider(
         api_key=settings.OPENROUTER_API_KEY,
@@ -539,13 +541,13 @@ async def get_ai_insights(
     )
 
     service = AIInsightService(db, provider)
-    
+
     # Передаем проекты пользователя в сервис
     insights = await service.build_insights(project_keys=user_project_keys)
-    
+
     # Сохраняем в кэш на 5 минут
     cache_service.set(cache_key, insights, expire=300)
-    
+
     return insights
 
 
@@ -567,10 +569,10 @@ def get_user_projects(
         IntegrationToken.provider == "jira",
         IntegrationToken.user_id == current_user.id
     ).first()
-    
+
     if atlassian_token and atlassian_token.instance_url:
         base_url = atlassian_token.instance_url.rstrip('/')
-    
+
     projects = (
         db.query(Project)
         .join(UserProject, UserProject.project_id == Project.id)
@@ -590,11 +592,11 @@ def get_user_projects(
             "name": project.name,
             "avatar_url": project.avatar_url
         }
-        
+
         # Добавляем ссылку на Jira, если base_url есть
         if base_url and project.jira_project_key:
             project_data["jira_url"] = f"{base_url}/jira/software/projects/{project.jira_project_key}/summary"
-        
+
         result.append(project_data)
 
     return result
@@ -611,7 +613,7 @@ def get_project_tasks(
     """
     GET /api/projects/{project_id}/tasks
     Возвращает рекурсивное дерево задач для диаграммы Гантта.
-    
+
     Возвращает:
     - viewRange: границы календарной сетки
     - tasks: дерево задач с children (подзадачами)
@@ -619,24 +621,25 @@ def get_project_tasks(
     from app.db.models.core import Project, UserProject
     from app.db.models import JiraIssue
     import re
-    
+
     # Проверяем доступ к проекту
     project = db.query(Project).filter(Project.key == project_id).first()
-    
+
     if not project and re.match(r'^\d+$', project_id):
-        project = db.query(Project).filter(Project.id == int(project_id)).first()
-    
+        project = db.query(Project).filter(
+            Project.id == int(project_id)).first()
+
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     user_project = db.query(UserProject).filter(
         UserProject.project_id == project.id,
         UserProject.user_id == current_user.id
     ).first()
-    
+
     if not user_project:
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
     # Определяем диапазон дат - РАСШИРЯЕМ!
     if period == "all":
         # Показываем задачи за последние 60 дней и следующие 90 дней вперёд
@@ -645,14 +648,14 @@ def get_project_tasks(
     else:  # last week
         start_date = datetime.utcnow() - timedelta(days=14)
         end_date = datetime.utcnow() + timedelta(days=14)
-    
+
     # Получаем ВСЕ задачи проекта (включая подзадачи)
     project_key = project.jira_project_key or project.key
     all_tasks = db.query(JiraIssue).filter(
         JiraIssue.project_key == project_key,
         JiraIssue.is_deleted == False
     ).all()
-    
+
     # Вычисляем ДИНАМИЧЕСКИЙ диапазон дат на основе реальных задач
     if all_tasks:
         # Находим самую раннюю дату (created_at)
@@ -662,15 +665,15 @@ def get_project_tasks(
         )
         # Находим самую позднюю дату (due_date или updated_at)
         max_date = max(
-            (task.due_date or task.updated_at or datetime.utcnow() + timedelta(days=30) 
+            (task.due_date or task.updated_at or datetime.utcnow() + timedelta(days=30)
              for task in all_tasks if task.due_date or task.updated_at),
             default=datetime.utcnow() + timedelta(days=30)
         )
-        
+
         # Добавляем отступы: 14 дней до и 30 дней после
         start_date = min_date - timedelta(days=14)
         end_date = max_date + timedelta(days=30)
-        
+
         # Но не меньше чем "последняя неделя" по дефолту
         if period == "last week":
             start_date = datetime.utcnow() - timedelta(days=14)
@@ -683,46 +686,172 @@ def get_project_tasks(
         else:
             start_date = datetime.utcnow() - timedelta(days=14)
             end_date = datetime.utcnow() + timedelta(days=14)
-    
+
     # Разделяем на родительские задачи и подзадачи
     parent_tasks = {}
     child_tasks = []
-    
+
     for task in all_tasks:
         if task.parent_issue_id:
             child_tasks.append(task)
         else:
             parent_tasks[task.id] = task
-    
+
     # Строим дерево задач
     def build_task_tree(task, all_tasks_dict, child_tasks_list):
         """Рекурсивно строит дерево задач"""
-        task_children = [ct for ct in child_tasks_list if ct.parent_issue_id == task.id]
-        
+        task_children = [
+            ct for ct in child_tasks_list if ct.parent_issue_id == task.id]
+        from math import ceil
+
+        now = datetime.utcnow()
+
+        status = (
+        task.status.lower().strip()
+        if task.status
+            else ""
+        )
+
+        is_done = status in [
+            "done",
+            "closed",
+            "resolved",
+            "готово"
+        ]
+
+        # END DATE
+        is_overdue = False
+        overdue_since = None
+
+        # DONE TASK
+        if is_done:
+            end_date = (
+                task.closed_at
+                or task.due_date
+                or task.updated_at
+                or now
+            )
+
+        # ACTIVE TASK WITH DEADLINE
+        elif task.due_date:
+
+            # ПРОСРОЧЕНА
+            if task.due_date < now:
+                is_overdue = True
+                overdue_since = task.due_date
+
+                # тянем до текущего дня
+                end_date = now
+
+            # ЕЩЕ НЕ ПРОСРОЧЕНА
+            else:
+                end_date = task.due_date
+
+        # ACTIVE TASK WITHOUT DEADLINE
+        else:
+            end_date = now
+
+        # DURATION
+        duration_hours = 8
+
+        # 1. Есть реальные worklogs Jira
+        if task.time_spent and task.time_spent > 0:
+
+            # Jira хранит секунды
+            duration_hours = max(
+                1,
+                round(task.time_spent / 3600)
+            )
+
+        # 2. Считаем по датам
+        elif (
+            task.created_at
+            and end_date
+            and end_date >= task.created_at
+        ):
+
+            delta = end_date - task.created_at
+
+            duration_hours = max(
+                1,
+                ceil(delta.total_seconds() / 3600)
+            )
+
+        # 3. Кривые даты
+        else:
+            duration_hours = 8
+
+        # PROGRESS
+        progress = 0
+
+        status = (
+            task.status.lower().strip()
+            if task.status
+            else ""
+        )
+
+        # DONE
+        if status in [
+            "done",
+            "closed",
+            "resolved",
+            "готово"
+        ]:
+            progress = 100
+
+        # Есть estimate + spent
+        elif (
+            task.time_spent
+            and task.original_estimate
+            and task.original_estimate > 0
+        ):
+            progress = min(
+                99,
+                round(
+                    (task.time_spent / task.original_estimate) * 100
+                )
+            )
+
+        # Есть просто spent
+        elif task.time_spent and task.time_spent > 0:
+            progress = 50
+
+        # Есть assignee + задача старая
+        elif task.assignee_name:
+            progress = 50
+
+        # Вообще ничего нет
+        else:
+            progress = 10
+
         task_data = {
             "id": str(task.id),
             "issueKey": task.issue_key,
             "task": f"{task.issue_key}: {task.summary}" if task.summary else f"Задача {task.issue_key}",
-            "duration": f"{task.time_spent or 8}ч",
-            "progress": 100 if task.status in ["Done", "Closed", "Готово"] else 50,
+            "duration": f"{duration_hours}ч",
+            "progress": progress,
             "responsible": task.assignee_name or "Не назначен",
-            "start": (task.created_at or datetime.utcnow()).strftime("%Y-%m-%d"),
-            "end": (task.due_date or datetime.utcnow()).strftime("%Y-%m-%d")
+            "start": (task.created_at or now).strftime("%Y-%m-%d"),
+            "end": end_date.strftime("%Y-%m-%d"),
+            "isOverdue": is_overdue,
+            "overdueSince": overdue_since.strftime("%Y-%m-%d") if overdue_since else None,
+            "status": task.status
         }
-        
+
         if task_children:
             task_data["children"] = [
                 build_task_tree(ct, all_tasks_dict, child_tasks_list)
                 for ct in task_children
             ]
-        
+
         return task_data
-    
+
     # Формируем корневое дерево (только родительские задачи)
     task_tree = []
     for parent_id, parent_task in parent_tasks.items():
-        task_tree.append(build_task_tree(parent_task, parent_tasks, child_tasks))
-    
+        task_tree.append(build_task_tree(
+            parent_task, parent_tasks, child_tasks))
+
     return {
         "viewRange": {
             "start": start_date.strftime("%Y-%m-%d"),
@@ -745,34 +874,35 @@ async def get_project_ai_insights(
     """
     from app.db.models.core import Project, UserProject
     import re
-    
+
     # Проверяем доступ к проекту
     # Сначала пробуем найти по key (строка)
     project = db.query(Project).filter(Project.key == project_id).first()
-    
+
     # Если не нашли, пробуем найти по numeric ID (если project_id - число)
     if not project and re.match(r'^\d+$', project_id):
-        project = db.query(Project).filter(Project.id == int(project_id)).first()
-    
+        project = db.query(Project).filter(
+            Project.id == int(project_id)).first()
+
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     user_project = db.query(UserProject).filter(
         UserProject.project_id == project.id,
         UserProject.user_id == current_user.id
     ).first()
-    
+
     if not user_project:
         raise HTTPException(status_code=403, detail="Access denied")
-    
+
     # Ключ кэша
     cache_key = f"project_ai_insights:{current_user.id}:{project_id}"
-    
+
     # Пробуем получить из кэша
     cached_insights = cache_service.get(cache_key)
     if cached_insights is not None:
         return cached_insights
-    
+
     # Генерируем инсайты для конкретного проекта
     provider = OpenRouterProvider(
         api_key=settings.OPENROUTER_API_KEY,
@@ -780,7 +910,7 @@ async def get_project_ai_insights(
     )
 
     service = AIInsightService(db, provider)
-    
+
     # Фильтруем по одному проекту
     project_key = project.jira_project_key or project.key
     insights = await service.build_insights(project_keys=[project_key])
@@ -802,17 +932,17 @@ def clear_cache(
     """
     # Очищаем кэш только для этого пользователя
     cache_service.delete_pattern(f"*:{current_user.id}:*")
-    
+
     return {
         "success": True,
         "message": f"Cache cleared for user {current_user.id}"
     }
 
 
-@router.get("/api/projects/{project_key}/cycle-time")
-@router.get("/projects/{project_key}/cycle-time")
+@router.get("/api/projects/{project_id}/cycle-time")
+@router.get("/projects/{project_id}/cycle-time")
 def get_project_cycle_time(
-    project_key: str,
+    project_id: str,
     period: str = Query("all", pattern="^(all|last week)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -825,7 +955,36 @@ def get_project_cycle_time(
         calculate_lead_time,
         calculate_lead_time_by_status
     )
+    from app.db.models.core import Project, UserProject
+    import re
 
+    project = db.query(Project).filter(
+        Project.key == project_id
+    ).first()
+
+    if not project and re.match(r'^\d+$', project_id):
+        project = db.query(Project).filter(
+            Project.id == int(project_id)
+        ).first()
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    user_project = db.query(UserProject).filter(
+        UserProject.project_id == project.id,
+        UserProject.user_id == current_user.id
+    ).first()
+
+    if not user_project:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied"
+        )
+
+    project_key = project.jira_project_key or project.key
     # period -> days
     period_days = 3650 if period == "all" else 7
 
@@ -865,7 +1024,7 @@ def get_project_cycle_time(
         }
 
         # Эвристика для bottleneck - НЕ показываем warning для Done/Closed/Resolved
-        is_final_status = status_name in ["Done", "Closed", "Resolved", "Готово"]
+        is_final_status = status_name == "Done" or status_name == "Closed" or status_name == "Resolved"
         if status_hours >= 72 and not is_final_status:
             stage["warning"] = True
             stage["tooltip"] = (
@@ -878,7 +1037,7 @@ def get_project_cycle_time(
     # Самые долгие этапы — первыми (но Done/Closed всегда в конце)
     def sort_key(stage):
         # Стадии с Done/Closed/Resolved всегда в конце
-        if stage["label"] in ["Done", "Closed", "Resolved", "Готово"]:
+        if stage["label"] in ["Done", "Closed", "Resolved"]:
             return (1, stage["hours"])  # Группа 1 (в конце), сортировка по времени
         return (0, -stage["hours"])  # Группа 0 (в начале), обратная сортировка (от большего)
     
@@ -889,7 +1048,6 @@ def get_project_cycle_time(
         "stages": stages
     }
 
-
 @router.get("/api/mini-panel/insights")
 @router.get("/mini-panel/insights")
 async def get_mini_panel_insights(
@@ -899,10 +1057,184 @@ async def get_mini_panel_insights(
     """
     AI-инсайты для Мини Панели.
     """
-    # Создаём сервис инсайтов (без AI провайдера, если он не нужен)
     insight_service = AIInsightService(db, ai_provider=None)
-    
-    # Генерируем инсайты для текущего пользователя
     insights = await insight_service.build_insights(user_id=current_user.id)
-    
     return insights
+
+
+@router.get("/api/projects/{project_id}/team-workload")
+@router.get("/projects/{project_id}/team-workload")
+def get_project_team_workload(
+    project_id: int,
+    period: str = Query("all", pattern="^(all|last week)$"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Аналитика загруженности команды (Team Workload)
+    """
+
+    from app.services.metrics.workload_index import (
+        get_project_workload_detail
+    )
+    from app.db.models.core import Project, UserProject
+
+    project = (
+        db.query(Project)
+        .join(UserProject, UserProject.project_id == Project.id)
+        .filter(
+            UserProject.user_id == current_user.id,
+            Project.id == project_id
+        )
+        .first()
+    )
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    project_key = project.key
+    weeks = 1 if period == "last week" else 4
+    workload_data = get_project_workload_detail(
+        db=db,
+        project_key=project_key,
+        weeks=weeks,
+        mode="story_points"
+    )
+
+    members = workload_data.get("members", [])
+    balance = workload_data.get("balance", 0)
+
+    recommendation_text = "Нагрузка распределена равномерно."
+
+    if members:
+        sorted_members = sorted(
+            members,
+            key=lambda x: x["workload_index"],
+            reverse=True
+        )
+        overloaded = sorted_members[0]
+        underloaded = sorted_members[-1]
+        overloaded_name = (
+            overloaded.get("assignee_name")
+            or overloaded["assignee_account_id"]
+        )
+        underloaded_name = (
+            underloaded.get("assignee_name")
+            or underloaded["assignee_account_id"]
+        )
+        overloaded_wi = overloaded["workload_index"]
+        underloaded_wi = underloaded["workload_index"]
+
+        if balance > 0.5:
+            recommendation_text = (
+                f"Высокий дисбаланс нагрузки ({balance}). "
+                f"{overloaded_name} перегружен "
+                f"(WI: {overloaded_wi}), "
+                f"в то время как {underloaded_name} "
+                f"недогружен (WI: {underloaded_wi}). "
+                f"Рекомендуется перераспределить задачи."
+            )
+        elif balance > 0.2:
+            recommendation_text = (
+                f"Есть небольшие отклонения в распределении "
+                f"нагрузки (дисбаланс: {balance})."
+            )
+
+    response_members = []
+    for idx, member in enumerate(members, start=1):
+        response_members.append({
+            "id": str(idx),
+            "name": (
+                member.get("assignee_name")
+                or member["assignee_account_id"]
+            ),
+            "workloadIndex": member["workload_index"]
+        })
+
+    return {
+        "calculationType": "story_points",
+        "teamWorkloadBalance": balance,
+        "recommendationText": recommendation_text,
+        "members": response_members
+    }
+
+
+@router.get("/api/projects/{project_id}/team-focus")
+@router.get("/projects/{project_id}/team-focus")
+def get_team_focus_dashboard(
+    project_id: str,
+    period: str = Query(..., pattern="^(all|last week)$"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Team Focus donut chart.
+    """
+
+    from app.db.models.core import Project, UserProject
+    import re
+
+    project = db.query(Project).filter(Project.key == project_id).first()
+    if not project and re.match(r'^\d+$', project_id):
+        project = db.query(Project).filter(Project.id == int(project_id)).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    user_project = db.query(UserProject).filter(
+        UserProject.project_id == project.id,
+        UserProject.user_id == current_user.id
+    ).first()
+    if not user_project:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    query = db.query(JiraIssue).filter(
+        JiraIssue.project_key == (project.jira_project_key or project.key),
+        JiraIssue.is_deleted == False
+    )
+
+    if period == "last week":
+        cutoff = datetime.utcnow() - timedelta(days=7)
+        query = query.filter(JiraIssue.updated_at >= cutoff)
+
+    issues = query.all()
+
+    if not issues:
+        return {"categories": []}
+
+    categories = {
+        "Новые фичи": 0,
+        "Рефактор/Долг": 0,
+        "Баги": 0,
+        "Поддержка": 0
+    }
+
+    for issue in issues:
+        issue_type = issue.issue_type.lower().strip() if issue.issue_type else ""
+
+        if issue_type in ["bug", "defect", "error", "ошибка", "баг"]:
+            categories["Баги"] += 1
+        elif issue_type in ["refactoring", "technical debt", "tech debt", "chore", "рефакторинг"]:
+            categories["Рефактор/Долг"] += 1
+        elif issue_type in ["support", "maintenance", "поддержка"]:
+            categories["Поддержка"] += 1
+        else:
+            categories["Новые фичи"] += 1
+
+    total = sum(categories.values())
+    result = []
+
+    for category_name, count in categories.items():
+        if count == 0:
+            continue
+        percent = round((count / total) * 100)
+        result.append({"type": category_name, "value": percent})
+
+    total_percent = sum(item["value"] for item in result)
+    if result and total_percent != 100:
+        diff = 100 - total_percent
+        result[0]["value"] += diff
+
+    return {"categories": result}

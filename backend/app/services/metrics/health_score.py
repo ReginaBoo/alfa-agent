@@ -15,34 +15,9 @@ from app.db.timescale import timescale_engine
 from app.db.models.metrics import ProjectHealth
 from app.services.metrics.sla_score import calculate_sla_score, calculate_deadline_stability
 from app.services.metrics.workload_index import WorkloadIndexCalculator
+from app.services.project_status_service import ProjectStatusService
 
 logger = logging.getLogger(__name__)
-
-
-def _get_closed_statuses_for_project(db: Session, project_key: str) -> list:
-    """Получает закрытые статусы для проекта из БД"""
-    mappings = db.query(ProjectStatusMapping).filter(
-        ProjectStatusMapping.project_key == project_key,
-        ProjectStatusMapping.is_closed == True
-    ).all()
-    
-    if mappings:
-        return [m.status_name for m in mappings]
-    
-    return ['Done', 'Closed', 'Resolved', 'Готово', 'Выполнено', 'Закрыто']
-
-
-def _get_open_statuses_for_project(db: Session, project_key: str) -> list:
-    """Получает открытые статусы для проекта из БД"""
-    mappings = db.query(ProjectStatusMapping).filter(
-        ProjectStatusMapping.project_key == project_key,
-        ProjectStatusMapping.is_open == True
-    ).all()
-    
-    if mappings:
-        return [m.status_name for m in mappings]
-    
-    return ['To Do', 'In Progress', 'Open', 'Backlog', 'К выполнению', 'В работе']
 
 
 def calculate_workload_balance_score(
@@ -128,8 +103,8 @@ def calculate_stability_score(
     cutoff_date = datetime.utcnow() - timedelta(days=period_days)
     
     # Получаем закрытые статусы
-    closed_statuses = _get_closed_statuses_for_project(db, project_key)
-    open_statuses = _get_open_statuses_for_project(db, project_key)
+    closed_statuses = ProjectStatusService.get_closed_statuses(db, project_key)
+    open_statuses = ProjectStatusService.get_open_statuses(db, project_key)
     
     # Всего задач за период
     total_issues = db.query(JiraIssue).filter(
@@ -163,7 +138,7 @@ def calculate_stability_score(
     ).count()
     
     # Среднее время жизни закрытых багов
-    closed_bugs = [b for b in all_bugs if b.closed_at and b.status in closed_statuses]
+    closed_bugs = [b for b in all_bugs if b.closed_at]
     bug_ages_days = []
     for bug in closed_bugs:
         if bug.closed_at and bug.created_at:
@@ -341,7 +316,7 @@ def get_project_health_for_card(
     health = calculate_health_score(db, project_key, period_days)
     
     # Получаем открытые статусы
-    open_statuses = _get_open_statuses_for_project(db, project_key)
+    open_statuses = ProjectStatusService.get_open_statuses(db, project_key)
     
     # Текущая загрузка (средний WI по команде)
     calculator = WorkloadIndexCalculator(db, project_key, mode='story_points')
@@ -433,4 +408,4 @@ def save_health_score(
         
         ts_db.commit()
         
-        logger.info(f"Saved Health Score {health_data['health_score']} for project {project_id}")
+        logger.info(f"Saved Health Score {health_data['health_score']} for project {project_id}") 

@@ -16,6 +16,8 @@ export interface GanttRecord {
   start?: string;
   end?: string;
   responsible?: string;
+  isOverdue?: boolean;
+  overdueSince?: string;
   children?: GanttRecord[];
 }
 
@@ -120,6 +122,12 @@ const generateGanttColumns = (
                       <span style={{ color: '#666' }}>Сроки:</span>{' '}
                       {taskStart.format('DD.MM')} - {taskEnd.format('DD.MM')}
                     </div>
+
+                    {record.isOverdue && record.overdueSince && (
+                      <div style={{ marginBottom: '4px', color: '#ff4d4f' }}>
+                        Просрочена с {dayjs(record.overdueSince).format('DD.MM.YYYY')}
+                      </div>
+                    )}
                     <div style={{ marginBottom: '4px' }}>
                       <span style={{ color: '#666' }}>Прогресс:</span>{' '}
                       {record.progress}%
@@ -132,7 +140,10 @@ const generateGanttColumns = (
                 }
               >
                 <div
-                  className={s.absoluteTaskBar}
+                  className={`
+                    ${s.absoluteTaskBar}
+                    ${record.isOverdue ? s.overdueTask : ''}
+                  `}
                   style={{
                     left: `${leftPercent}%`,
                     width: `${widthPercent}%`,

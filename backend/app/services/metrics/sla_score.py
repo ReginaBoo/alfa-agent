@@ -9,22 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.db.models import JiraIssue
 from app.db.models.normalized import IssueChangelog, ProjectStatusMapping
+from app.services.project_status_service import ProjectStatusService
 
 logger = logging.getLogger(__name__)
-
-
-def _get_closed_statuses_for_project(db: Session, project_key: str) -> list:
-    """Получает закрытые статусы для проекта из БД"""
-    mappings = db.query(ProjectStatusMapping).filter(
-        ProjectStatusMapping.project_key == project_key,
-        ProjectStatusMapping.is_closed == True
-    ).all()
-    
-    if mappings:
-        return [m.status_name for m in mappings]
-    
-    logger.warning(f"No closed status mappings for {project_key}, using defaults")
-    return ['Done', 'Closed', 'Resolved', 'Готово', 'Выполнено', 'Закрыто']
 
 
 def _get_closed_at_from_changelog(db: Session, issue_key: str, closed_statuses: list) -> Optional[datetime]:
@@ -66,7 +53,7 @@ def calculate_sla_score(
     cutoff_date = datetime.utcnow() - timedelta(days=period_days)
     
     # Получаем закрытые статусы для этого проекта
-    closed_statuses = _get_closed_statuses_for_project(db, project_key)
+    closed_statuses = ProjectStatusService.get_closed_statuses(db, project_key)
     
     # Базовый запрос — задачи с дедлайном
     query = db.query(JiraIssue).filter(

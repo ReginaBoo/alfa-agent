@@ -14,25 +14,9 @@ from app.services.project_service import get_project_id_by_key
 from app.db.timescale import timescale_engine
 from app.db.models.metrics import UserMetric
 from sqlalchemy.orm import Session as TimescaleSession
+from app.services.project_status_service import ProjectStatusService
 
 logger = logging.getLogger(__name__)
-
-
-def _get_closed_statuses_for_project(db: Session, project_key: str) -> list:
-    """
-    Получает закрытые статусы для конкретного проекта из БД.
-    Если статусы не синхронизированы — использует fallback.
-    """
-    mappings = db.query(ProjectStatusMapping).filter(
-        ProjectStatusMapping.project_key == project_key,
-        ProjectStatusMapping.is_closed == True
-    ).all()
-    
-    if mappings:
-        return [m.status_name for m in mappings]
-    
-    logger.warning(f"No closed status mappings for {project_key}, using defaults")
-    return ['Done', 'Closed', 'Resolved', 'Готово', 'Выполнено', 'Закрыто']
 
 
 def _get_date_of_closing(db: Session, issue_key: str, closed_statuses: list) -> Optional[datetime]:
@@ -136,7 +120,7 @@ def calculate_activity_score(
     cutoff_date = datetime.utcnow() - timedelta(days=period_days)
     
     # Получаем закрытые статусы для этого проекта
-    closed_statuses = _get_closed_statuses_for_project(db, project_key)
+    closed_statuses = ProjectStatusService.get_closed_statuses(db, project_key)
     
     # 1. Закрытые задачи (50 баллов максимум)
     # Используем changelog для определения даты закрытия

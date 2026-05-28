@@ -11,20 +11,36 @@ from app.db.models import JiraIssue
 from app.db.models.normalized import IssueChangelog, ProjectStatusMapping
 
 logger = logging.getLogger(__name__)
+from app.services.project_status_service import ProjectStatusService
 
+def normalize_status_name(status: str) -> str:
+    """
+    Нормализует названия статусов Jira.
+    """
 
-def _get_closed_statuses_for_project(db: Session, project_key: str) -> list:
-    """Получает закрытые статусы для проекта из БД"""
-    mappings = db.query(ProjectStatusMapping).filter(
-        ProjectStatusMapping.project_key == project_key,
-        ProjectStatusMapping.is_closed == True
-    ).all()
-    
-    if mappings:
-        return [m.status_name for m in mappings]
-    
-    logger.warning(f"No closed status mappings for {project_key}, using defaults")
-    return ['Done', 'Closed', 'Resolved', 'Готово', 'Выполнено', 'Закрыто']
+    if not status:
+        return "Unknown"
+
+    normalized = status.strip().lower()
+
+    mapping = {
+        "done": "Done",
+        "готово": "Done",
+        "closed": "Done",
+        "resolved": "Done",
+        "выполнено": "Done",
+        "закрыто": "Done",
+
+        "in progress": "In Progress",
+        "в работе": "In Progress",
+
+        "to do": "To Do",
+        "к выполнению": "To Do",
+
+        "backlog": "Backlog",
+    }
+
+    return mapping.get(status.lower(), status)
 
 
 def _get_closed_at_from_changelog(db: Session, issue_key: str, closed_statuses: list) -> Optional[datetime]:
@@ -89,7 +105,7 @@ def calculate_lead_time(
     cutoff_date = datetime.utcnow() - timedelta(days=period_days)
     
     # Получаем закрытые статусы для проекта
-    closed_statuses = _get_closed_statuses_for_project(db, project_key)
+    closed_statuses = ProjectStatusService.get_closed_statuses(db, project_key)
     
     # Получаем все задачи проекта за период
     query = db.query(JiraIssue).filter(
@@ -104,18 +120,38 @@ def calculate_lead_time(
     skipped_no_closed_date = 0
     skipped_not_closed = 0
     skipped_wrong_assignee = 0
-    
     for issue in issues:
+        print("ISSUE", issue.issue_key)
+        print("CURRENT STATUS", issue.status)
+
         # Определяем дату закрытия
         if issue.closed_at:
             closed_date = issue.closed_at
         else:
-            closed_date = _get_closed_at_from_changelog(db, issue.issue_key, closed_statuses)
-        
-        # Если задача ещё не закрыта — пропускаем
+            closed_date = _get_closed_at_from_changelog(
+                db,
+                issue.issue_key,
+                closed_statuses
+            )
+
+        # fallback
+        if not closed_date and issue.status in closed_statuses:
+            closed_date = issue.updated_at
+
         if not closed_date:
-            skipped_not_closed += 1
             continue
+
+        transitions = db.query(IssueChangelog).filter(
+            IssueChangelog.issue_key == issue.issue_key,
+            IssueChangelog.field_name == 'status',
+            IssueChangelog.changed_at <= closed_date,
+            IssueChangelog.changed_at >= issue.created_at
+        ).order_by(IssueChangelog.changed_at.asc()).all()
+
+        print("TRANSITIONS", [
+            (t.from_value, t.to_value, t.changed_at)
+            for t in transitions
+        ])
         
         # Проверяем, попадает ли закрытие в период
         if closed_date < cutoff_date:
@@ -199,74 +235,115 @@ def calculate_lead_time_by_status(
     """
     Рассчитывает Lead Time с разбивкой по статусам (время в каждом статусе).
     """
-    from app.db.models import IssueChangelog
-    
     cutoff_date = datetime.utcnow() - timedelta(days=period_days)
-    closed_statuses = _get_closed_statuses_for_project(db, project_key)
-    
-    # Получаем закрытые задачи
+    closed_statuses = ProjectStatusService.get_closed_statuses(db, project_key)
+
+    # Получаем задачи проекта
     query = db.query(JiraIssue).filter(
-        JiraIssue.project_key == project_key,
-        JiraIssue.created_at >= cutoff_date
+        JiraIssue.project_key == project_key
     )
-    
+
     if assignee_account_id:
-        query = query.filter(JiraIssue.assignee_account_id == assignee_account_id)
-    
+        query = query.filter(
+            JiraIssue.assignee_account_id == assignee_account_id
+        )
+
     issues = query.all()
-    
+
     status_durations = {}
-    
+
     for issue in issues:
+
+        print("ISSUE", issue.issue_key)
+        print("CURRENT STATUS", issue.status)
+
         # Определяем дату закрытия
         if issue.closed_at:
             closed_date = issue.closed_at
         else:
-            closed_date = _get_closed_at_from_changelog(db, issue.issue_key, closed_statuses)
-        
+            closed_date = _get_closed_at_from_changelog(
+                db,
+                issue.issue_key,
+                closed_statuses
+            )
+
+        # fallback
+        if not closed_date and issue.status in closed_statuses:
+            closed_date = issue.updated_at
+
+        # Если задача не закрыта — пропускаем
         if not closed_date:
             continue
-        
-        # Получаем все переходы статусов для задачи
+
+        # Если закрыта раньше периода — пропускаем
+        if closed_date < cutoff_date:
+            continue
+
+        # Получаем transitions
         transitions = db.query(IssueChangelog).filter(
             IssueChangelog.issue_key == issue.issue_key,
             IssueChangelog.field_name == 'status',
             IssueChangelog.changed_at <= closed_date,
             IssueChangelog.changed_at >= issue.created_at
         ).order_by(IssueChangelog.changed_at.asc()).all()
-        
-        # Вычисляем время в каждом статусе
+
+        print("TRANSITIONS", [
+            (t.from_value, t.to_value, t.changed_at)
+            for t in transitions
+        ])
+
+        # Начальная точка
         prev_date = issue.created_at
-        prev_status = None
-        
+
+        # Начальный статус
+        if transitions:
+            prev_status = normalize_status_name(
+                transitions[0].from_value or "Open"
+            )
+        else:
+            prev_status = normalize_status_name(
+                issue.status or "Open"
+            )
+
+        # Считаем время по статусам
         for transition in transitions:
             if prev_status:
-                duration = (transition.changed_at - prev_date).total_seconds() / 3600
-                if prev_status not in status_durations:
-                    status_durations[prev_status] = []
-                status_durations[prev_status].append(duration)
-            
-            prev_status = transition.to_value
+                duration = (
+                    transition.changed_at - prev_date
+                ).total_seconds() / 3600
+
+                status_durations.setdefault(prev_status, []).append(duration)
+
+            prev_status = normalize_status_name(
+                transition.to_value
+            )
             prev_date = transition.changed_at
-        
-        # Время в последнем статусе (до закрытия)
+
+        # Последний статус до закрытия
         if prev_status and closed_date > prev_date:
-            duration = (closed_date - prev_date).total_seconds() / 3600
-            if prev_status not in status_durations:
-                status_durations[prev_status] = []
-            status_durations[prev_status].append(duration)
-    
-    # Агрегируем результаты
+            duration = (
+                closed_date - prev_date
+            ).total_seconds() / 3600
+
+            status_durations.setdefault(prev_status, []).append(duration)
+
+    # Агрегация
     result = {}
+
     for status, durations in status_durations.items():
+        durations_sorted = sorted(durations)
+
         result[status] = {
             'avg_hours': round(sum(durations) / len(durations), 1),
             'avg_days': round(sum(durations) / len(durations) / 24, 1),
-            'median_hours': round(sorted(durations)[len(durations) // 2], 1),
+            'median_hours': round(
+                durations_sorted[len(durations_sorted) // 2],
+                1
+            ),
             'total_hours': round(sum(durations), 1),
             'count': len(durations)
         }
-    
+
     return result
 
 
@@ -283,3 +360,4 @@ def get_lead_time_status(avg_days: float) -> dict:
         return {'status': 'slow', 'status_text': 'Медленно', 'color': 'yellow'}
     else:
         return {'status': 'critical', 'status_text': 'Критично', 'color': 'red'}
+

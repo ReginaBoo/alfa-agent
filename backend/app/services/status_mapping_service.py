@@ -196,3 +196,15 @@ class StatusMappingService:
             return {"is_open": True, "is_in_progress": True, "is_closed": False}
         
         return {"is_open": True, "is_in_progress": False, "is_closed": False}
+    
+    @staticmethod
+    def ensure_project_statuses_exist(
+        db: Session,
+        project_key: str
+    ) -> bool:
+
+        exists = db.query(ProjectStatusMapping).filter(
+            ProjectStatusMapping.project_key == project_key
+        ).first()
+
+        return exists is not None
