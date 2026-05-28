@@ -1,5 +1,4 @@
-
-import axios from 'axios';
+import api from './client';  // 👈 Используем настроенный клиент
 
 import {
   ProjectActivityItem,
@@ -7,7 +6,11 @@ import {
   InsightItem,
   ProjectStatsItem,
   LoadChartItem,
-  ProjectItem, GanttProjectResponse, CycleTimeData, TeamWorkloadData, TeamFocusData// Импортируем тип проекта
+  ProjectItem,
+  GanttProjectResponse,
+  CycleTimeData,
+  TeamWorkloadData,
+  TeamFocusData
 } from '../types/dashboard';
 
 import {
@@ -15,11 +18,13 @@ import {
   mockInsightsData,
   mockProjectStats,
   mockLoadData,
-  mockProjectsData, mockGanttData, mockProjectInsightsData, mockProjectCycleTimeData, mockTeamWorkloadData, mockTeamFocusData// Импортируем мок проектов
+  mockProjectsData,
+  mockGanttData,
+  mockProjectInsightsData,
+  mockProjectCycleTimeData,
+  mockTeamWorkloadData,
+  mockTeamFocusData
 } from './mocks/mocks';
-
-
-const URL = 'http://localhost:8000';
 
 const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true';
 
@@ -32,7 +37,7 @@ export const dashboardApi = {
       });
     }
 
-    const response = await axios.get<ProjectItem[]>(`${URL}/api/projects`);
+    const response = await api.get<ProjectItem[]>('/projects');
     return response.data;
   },
 
@@ -43,7 +48,7 @@ export const dashboardApi = {
       });
     }
 
-    const response = await axios.get<ProjectActivityItem[]>(`${URL}/api/projects-activity`, {
+    const response = await api.get<ProjectActivityItem[]>('/projects-activity', {
       params: { period }
     });
 
@@ -55,7 +60,7 @@ export const dashboardApi = {
       return new Promise((resolve) => setTimeout(() => resolve(mockInsightsData), 500));
     }
 
-    const response = await axios.get<InsightItem[]>(`${URL}/api/ai-insights`);
+    const response = await api.get<InsightItem[]>('/ai-insights');
     return response.data;
   },
 
@@ -64,7 +69,7 @@ export const dashboardApi = {
       return new Promise((resolve) => setTimeout(() => resolve(mockProjectStats), 500));
     }
 
-    const response = await axios.get<ProjectStatsItem[]>(`${URL}/api/projects-stats`, {
+    const response = await api.get<ProjectStatsItem[]>('/projects-stats', {
       params: { period }
     });
     return response.data;
@@ -75,7 +80,7 @@ export const dashboardApi = {
       return new Promise((resolve) => setTimeout(() => resolve(mockLoadData), 500));
     }
 
-    const response = await axios.get<LoadChartItem[]>(`${URL}/api/teams-load`, {
+    const response = await api.get<LoadChartItem[]>('/teams-load', {
       params: { period }
     });
 
@@ -89,16 +94,17 @@ export const dashboardApi = {
       });
     }
 
-    const response = await axios.get<GanttProjectResponse>(`${URL}/api/projects/${projectId}/tasks`, {
+    const response = await api.get<GanttProjectResponse>(`/projects/${projectId}/tasks`, {
       params: { period },
     });
     return response.data;
   },
+
   getProjectAIInsights: async (projectId: string): Promise<InsightItem[]> => {
     if (USE_MOCKS) {
       return new Promise((resolve) => setTimeout(() => resolve(mockProjectInsightsData), 500));
     }
-    const response = await axios.get<InsightItem[]>(`${URL}/api/projects/${projectId}/ai-insights`);
+    const response = await api.get<InsightItem[]>(`/projects/${projectId}/ai-insights`);
     return response.data;
   },
 
@@ -107,19 +113,20 @@ export const dashboardApi = {
       return new Promise((resolve) => setTimeout(() => resolve(mockProjectCycleTimeData), 500));
     }
 
-    const response = await axios.get<CycleTimeData>(
-      `${URL}/api/projects/${projectId}/cycle-time`,
+    const response = await api.get<CycleTimeData>(
+      `/projects/${projectId}/cycle-time`,
       { params: { period } }
     );
     return response.data;
   },
+
   getProjectTeamWorkload: async (projectId: string, period: string): Promise<TeamWorkloadData> => {
     if (USE_MOCKS) {
       return new Promise((resolve) => setTimeout(() => resolve(mockTeamWorkloadData), 500));
     }
 
-    const response = await axios.get<TeamWorkloadData>(
-      `${URL}/api/projects/${projectId}/team-workload`,
+    const response = await api.get<TeamWorkloadData>(
+      `/projects/${projectId}/team-workload`,
       { params: { period } }
     );
     return response.data;
@@ -130,11 +137,133 @@ export const dashboardApi = {
       return new Promise((resolve) => setTimeout(() => resolve(mockTeamFocusData), 500));
     }
 
-    const response = await axios.get<TeamFocusData>(
-      `${URL}/api/projects/${projectId}/team-focus`,
+    const response = await api.get<TeamFocusData>(
+      `/projects/${projectId}/team-focus`,
       { params: { period } }
     );
     return response.data;
   },
-};
 
+  getMiniPanelInsights: async (): Promise<InsightItem[]> => {
+    if (USE_MOCKS) {
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          resolve([
+            {
+              id: 1,
+              type: 'error',
+              text: 'Проект «CRM»: просрочено 6 задач',
+              recommendation: 'Проверьте пайплайн деплоя'
+            },
+            {
+              id: 2,
+              type: 'warning',
+              text: 'Проект «Mobile»: Merge конфликт в ветке feature',
+              recommendation: 'Срочно разрешите конфликт'
+            }
+          ]);
+        }, 500);
+      });
+    }
+
+    const response = await api.get<InsightItem[]>('/mini-panel/insights');
+    return response.data;
+  },
+
+  // ============================================================
+  // Chat Bot API
+  // ============================================================
+
+  chatCompletion: async (
+    message: string,
+    sessionId?: string,
+    history?: { role: 'user' | 'assistant' | 'system'; content: string }[]
+  ): Promise<{
+    answer: string;
+    session_id: string;
+    metadata: {
+      sql_queries?: string[];
+      tool_calls?: string[];
+      error?: string;
+    };
+  }> => {
+    const response = await api.post('/chat/completion', {
+      message,
+      session_id: sessionId,
+      history: history || []
+    });
+    return response.data;
+  },
+
+  chatAiCompletion: async (
+    message: string,
+    sessionId?: string,
+    history?: { role: 'user' | 'assistant' | 'system'; content: string }[]
+  ): Promise<{
+    answer: string;
+    session_id: string;
+    metadata: {
+      sql_queries?: string[];
+      tool_calls?: string[];
+      error?: string;
+    };
+  }> => {
+    const response = await api.post('/chat/ai-completion', {
+      message,
+      session_id: sessionId,
+      history: history || []
+    });
+    return response.data;
+  },
+
+  executeSqlTool: async (
+    sql: string,
+    sessionId?: string
+  ): Promise<{
+    success: boolean;
+    data?: any[];
+    row_count: number;
+    error?: string;
+  }> => {
+    const response = await api.post('/chat/tools/execute-sql', {
+      sql,
+      session_id: sessionId
+    });
+    return response.data;
+  },
+
+  callTool: async (
+    toolName: 'execute_sql' | 'get_project_metrics' | 'get_user_workload',
+    params: Record<string, any>,
+    sessionId?: string
+  ): Promise<{
+    success: boolean;
+    tool_name: string;
+    data: any;
+    error?: string;
+  }> => {
+    const response = await api.post('/chat/tools/call', {
+      tool_name: toolName,
+      params,
+      session_id: sessionId
+    });
+    return response.data;
+  },
+
+  getChatHistory: async (sessionId: string): Promise<{
+    session_id: string;
+    messages: { role: string; content: string }[];
+  }> => {
+    const response = await api.get(`/chat/history/${sessionId}`);
+    return response.data;
+  },
+
+  getAllowedTables: async (): Promise<{
+    tables: string[];
+    description: string;
+  }> => {
+    const response = await api.get('/chat/allowed-tables');
+    return response.data;
+  },
+
+};

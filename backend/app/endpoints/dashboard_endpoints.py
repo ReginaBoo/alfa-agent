@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session as DbSession
 from sqlalchemy import func, and_
 from datetime import datetime, timedelta
 from typing import List, Optional
@@ -887,3 +888,21 @@ def get_project_cycle_time(
         "averageTimeText": average_time_text,
         "stages": stages
     }
+
+
+@router.get("/api/mini-panel/insights")
+@router.get("/mini-panel/insights")
+async def get_mini_panel_insights(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    AI-инсайты для Мини Панели.
+    """
+    # Создаём сервис инсайтов (без AI провайдера, если он не нужен)
+    insight_service = AIInsightService(db, ai_provider=None)
+    
+    # Генерируем инсайты для текущего пользователя
+    insights = await insight_service.build_insights(user_id=current_user.id)
+    
+    return insights

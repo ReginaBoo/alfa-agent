@@ -13,17 +13,63 @@ from app.endpoints import dashboard_endpoints
 from app.endpoints import confluence_endpoints
 from app.endpoints import job_status
 from app.endpoints import metrics_endpoints
+from app.endpoints import chat_endpoints
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from app.workers.queues import sync_jira_queue
 from app.workers.tasks import sync_jira_task
-
+from starlette.middleware.base import BaseHTTPMiddleware  
+from starlette.requests import Request  
 # Настройка логгирования
 logging.basicConfig(level=logging.INFO)
+
+
+# --- Подключение роутеров ---
+import logging
+from fastapi import FastAPI
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware  
+from starlette.requests import Request
+from starlette.responses import Response
+
+# ... остальные импорты
+
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Alpha Agent Backend")
 scheduler = BackgroundScheduler()
+
+# --- ПРИНУДИТЕЛЬНЫЙ CORS MIDDLEWARE (ДОЛЖЕН БЫТЬ ПЕРВЫМ) ---
+class ForceCorsMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        # Обрабатываем preflight (OPTIONS) запросы
+        if request.method == "OPTIONS":
+            response = Response()
+            response.headers["Access-Control-Allow-Origin"] = request.headers.get("origin", "*")
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, X-Session-Token"
+            return response
+        
+        response = await call_next(request)
+        
+        # Добавляем CORS заголовки к ответу
+        origin = request.headers.get("origin")
+        if origin:
+            response.headers["Access-Control-Allow-Origin"] = origin
+        else:
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, X-Session-Token"
+        
+        return response
+
+# Добавляем принудительный CORS middleware ПЕРВЫМ
+app.add_middleware(ForceCorsMiddleware)
 
 # --- Подключение роутеров ---
 app.include_router(auth_endpoints.router, prefix="/auth", tags=["Auth"])
@@ -33,106 +79,33 @@ app.include_router(dashboard_endpoints.router, tags=["Dashboard"])
 app.include_router(confluence_endpoints.router, prefix="/confluence", tags=["Confluence"])
 app.include_router(job_status.router, tags=["Job Status"])
 app.include_router(metrics_endpoints.router, prefix="/metrics", tags=["Metrics"])
-
-
-# --- Модифицируем on_startup ---
+app.include_router(chat_endpoints.router, tags=["Chat"])
 
 # GitHub роутеры
 app.include_router(github_endpoints.router, tags=["GitHub"])
 app.include_router(github_auth_endpoints.router, prefix="/github", tags=["GitHub"])
+
+# --- Стандартный CORS middleware (как запасной) ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# --- Startup / Shutdown ---
-@app.on_event("startup")
-def on_startup():
-    logger.info("Starting Alpha Agent Backend...")
 
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-            logger.info("Database connection successful")
-    except SQLAlchemyError as e:
-        logger.error(f"Database connection failed: {e}")
-
-    scheduler.add_job(
-        func=scheduled_jira_sync,
-        trigger=IntervalTrigger(hours=1),
-        id="scheduled_jira_sync",
-        replace_existing=True
-    )
-
-    scheduler.start()
-    logger.info("APScheduler started")
-
-
-@app.on_event("shutdown")
-def on_shutdown():
-    logger.info("Shutting down Alpha Agent Backend...")
-
-    scheduler.shutdown(wait=False)
-    engine.dispose()
-
-
-@app.get("/health")
-def health():
-    """Health check endpoint for monitoring"""
-    db_status = "unknown"
-    error = None
-    
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-            db_status = "connected"
-    except SQLAlchemyError as e:
-        db_status = "disconnected"
-        error = str(e)
-    
-    return {
-        "status": "ok" if db_status == "connected" else "degraded",
-        "database": db_status,
-        "error": error
-    }
-
-# --- Функция для запуска синхронизации по расписанию ---
-def scheduled_jira_sync():
-    """
-    Запускает фоновую синхронизацию всех проектов для всех пользователей.
-    Вызывается APScheduler раз в час.
-    """
-    from app.db.session import SessionLocal
-    from app.db.models import IntegrationToken
-    
-    logger.info("Scheduled Jira sync started")
-    
-    db = SessionLocal()
-    try:
-        # Получаем всех пользователей, у которых есть токены
-        tokens = db.query(IntegrationToken).filter(
-            IntegrationToken.provider == "jira"
-        ).distinct(IntegrationToken.user_id, IntegrationToken.instance_name).all()
+# --- Логирующий middleware ---
+class CORSLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        logger.info(f"📥 {request.method} {request.url}")
+        logger.info(f"   Origin: {request.headers.get('origin')}")
+        logger.info(f"   X-Session-Token: {request.headers.get('x-session-token')}")
+        logger.info(f"   All headers: {dict(request.headers)}")  # 👈 Добавь это
         
-        for token in tokens:
-            logger.info(f"Queuing sync for user {token.user_id}, instance {token.instance_name}")
-            
-            # Ставим задачу в очередь БЕЗ project_key = все проекты
-            sync_jira_queue.enqueue(
-                sync_jira_task,
-                args=(token.user_id, token.instance_name, None),  # None = все проекты
-                job_timeout="900s",  # 15 минут на все проекты
-                result_ttl=3600,
-                failure_ttl=3600
-            )
-        
-        logger.info(f"Scheduled sync queued for {len(tokens)} users")
-        
-    except Exception as e:
-        logger.error(f"Scheduled sync failed: {e}")
-    finally:
-        db.close()
+        response = await call_next(request)
+        logger.info(f"📤 Response: {response.status_code}")
+        return response
 
-    logger.info("Database connections closed")
+app.add_middleware(CORSLoggingMiddleware)
+
+# ... остальной код (startup, shutdown, health, scheduled_jira_sync)

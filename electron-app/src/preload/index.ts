@@ -1,29 +1,25 @@
-import { contextBridge, shell } from 'electron'
+import { contextBridge, shell, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 
-// Custom APIs for renderer
-const api = {}
-
-
-
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', {
       ...electronAPI,
-      shell: {
-        openExternal: (url: string) => shell.openExternal(url)
+      openExternal: (url: string) => shell.openExternal(url),
+      // Получить токен из cookie
+      getSessionToken: async () => {
+        return await ipcRenderer.invoke('get-session-token');
+      },
+      // Запустить авторизацию
+      startLogin: async () => {
+        return await ipcRenderer.invoke('start-login');
+      },
+      // Слушать успешную авторизацию
+      onAuthSuccess: (callback: (token: string) => void) => {
+        ipcRenderer.on('auth-success', (_event, token) => callback(token));
       }
     })
-    contextBridge.exposeInMainWorld('api', api)
   } catch (error) {
     console.error(error)
   }
-} else {
-  // @ts-ignore
-  window.electron = { ...electronAPI, shell }
-  // @ts-ignore
-  window.api = api
 }

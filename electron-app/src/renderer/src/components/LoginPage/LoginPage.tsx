@@ -1,80 +1,49 @@
-import { Button } from 'antd'
-import {
-  GoogleOutlined,
-  AppleFilled,
-  WindowsOutlined,
-  SlackOutlined,
-} from '@ant-design/icons'
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Button, Card, Typography, message } from 'antd';
+import api from '../../api/client';
 
-import s from './LoginPage.module.css'
-import atlassianIcon from './atlassian.svg'
-
-const AtlassianLogo = () => (
-  <div className={s.logoContainer}>
-    <img
-      src={atlassianIcon}
-      alt="Atlassian"
-      className={s.logoIcon}
-    />
-
-    <span className={s.logoText}>ATLASSIAN</span>
-  </div>
-)
+const { Title } = Typography;
 
 export const LoginPage = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+
+    console.log('🔐 [LoginPage] URL params:', window.location.search);
+    console.log('🔐 [LoginPage] Token from URL:', token);
+
+    if (token) {
+      console.log('💾 Saving token to localStorage...');
+      localStorage.setItem('session_token', token);
+
+      console.log('🔧 Setting token in API headers...');
+      api.defaults.headers.common['X-Session-Token'] = token;
+
+      console.log('✅ Token saved, redirecting to /dashboard');
+      message.success('Авторизация успешна!');
+
+      // Очищаем URL от токена и перенаправляем
+      navigate('/dashboard', { replace: true });
+    } else {
+      console.log('❌ No token in URL');
+    }
+  }, [navigate]);
+
   const handleLogin = () => {
-    window.location.href = '/api/auth/login'
-  }
+    window.location.href = 'http://localhost:8000/auth/login';
+  };
 
   return (
-    <div className={s.pageWrapper}>
-      <div className={s.loginCard}>
-        <AtlassianLogo />
-
-        <h2 className={s.loginTitle}>Войдите</h2>
-
-        <Button
-          type="primary"
-          block
-          className={s.continueBtn}
-          onClick={handleLogin}
-        >
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <Card style={{ maxWidth: 400 }}>
+        <Title level={3}>Вход в систему</Title>
+        <Button type="primary" onClick={handleLogin}>
           Войти через Atlassian
         </Button>
-
-        <p className={s.orLabel}>Или продолжите с</p>
-
-        <div className={s.socialButtons}>
-          <Button
-            block
-            icon={
-              <GoogleOutlined style={{ color: '#EA4335' }} />
-            }
-          >
-            Google
-          </Button>
-
-          <Button
-            block
-            icon={
-              <WindowsOutlined style={{ color: '#00A4EF' }} />
-            }
-          >
-            Microsoft
-          </Button>
-
-          <Button block icon={<AppleFilled />}>
-            Apple
-          </Button>
-
-          <Button
-            block
-            icon={<SlackOutlined style={{ color: '#4A154B' }} />}
-          >
-            Slack
-          </Button>
-        </div>
-      </div>
+      </Card>
     </div>
-  )
-}
+  );
+};

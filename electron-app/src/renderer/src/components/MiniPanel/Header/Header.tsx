@@ -10,7 +10,8 @@ import {
   AppstoreOutlined,
 } from '@ant-design/icons';
 
-let URL = 'http://localhost:5173/dashboard'
+const BACKEND_URL = 'http://localhost:5173/dashboard';
+
 interface HeaderProps {
   onTabChange: (key: string) => void;
 }
@@ -34,22 +35,28 @@ export const Header = ({ onTabChange }: HeaderProps) => {
       label: 'Метрики',
       icon: <AppstoreOutlined />,
       onClick: () => {
-        if ((window as any).electron) {
-          (window as any).electron.shell.openExternal(URL);
+        const token = localStorage.getItem('session_token');
+        const url = token
+          ? `http://localhost:5173/login?token=${encodeURIComponent(token)}`
+          : 'http://localhost:5173/login';
+
+        if ((window as any).electron?.openExternal) {
+          (window as any).electron.openExternal(url);
         } else {
-          window.open(URL, '_blank');
+          window.open(url, '_blank');
         }
       }
     },
   ];
 
   const handleMinimize = () => {
-    (window as any).electron?.ipcRenderer.send('window-minimize');
+    (window as any).electron?.ipcRenderer?.send('window-minimize');
   };
 
   const handleClose = () => {
-    (window as any).electron?.ipcRenderer.send('window-close');
+    (window as any).electron?.ipcRenderer?.send('window-close');
   };
+
   return (
     <header className={s.customHeader}>
       <div className="no-drag">
@@ -78,6 +85,6 @@ export const Header = ({ onTabChange }: HeaderProps) => {
           />
         </Space>
       </div>
-    </header >
+    </header>
   );
 };

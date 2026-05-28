@@ -10,3 +10,13 @@ class BaseAIProvider(ABC):
         projects_data: List[Dict]
     ) -> List[Dict]:
         pass
+
+    async def chat_completions(
+        self,
+        messages: List[Dict]
+    ) -> str:
+        """
+        Базовая реализация chat completions (может быть переопределена в подклассах)
+        """
+        raise NotImplementedError("chat_completions not implemented")
+

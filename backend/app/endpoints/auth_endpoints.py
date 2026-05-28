@@ -4,6 +4,8 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session as DbSession
 from datetime import datetime, timedelta
 import secrets
+import logging
+
 
 from app.auth.models import AtlassianResource
 from app.db.models import Session as SessionModel, User
@@ -15,7 +17,7 @@ from app.services.token_service import save_tokens_for_working_sites
 from app.core.dependencies import get_current_user
 
 router = APIRouter()
-
+logger = logging.getLogger(__name__)
 
 @router.get("/login")
 def login():
@@ -149,9 +151,14 @@ async def callback(request: Request, db: DbSession = Depends(get_db)):
 
 @router.get("/me")
 async def get_current_user_info(
+    request: Request,
     current_user: User = Depends(get_current_user)
 ):
     """Возвращает информацию о текущем пользователе"""
+    # Логируем полученную cookie
+    session_token = request.cookies.get("session_token")
+    logger.info(f"GET /me - session_token from cookie: {session_token}")
+    
     return {
         "success": True,
         "user": {
@@ -180,3 +187,32 @@ async def logout(
     
     response.delete_cookie("session_token")
     return {"success": True, "message": "Logged out"}
+
+
+@router.get("/electron-token")
+async def get_electron_token(
+    request: Request,
+    db: DbSession = Depends(get_db)
+):
+    """Возвращает session_token для Electron (из cookie или заголовка)"""
+    # Пробуем получить токен из cookie
+    session_token = request.cookies.get("session_token")
+    
+    # Если нет, пробуем из заголовка
+    if not session_token:
+        session_token = request.headers.get("X-Session-Token")
+    
+    if not session_token:
+        return JSONResponse({"error": "No session token"}, status_code=401)
+    
+    # Проверяем валидность токена
+    session = db.query(SessionModel).filter(
+        SessionModel.session_token == session_token,
+        SessionModel.expires_at > datetime.utcnow()
+    ).first()
+    
+    if not session:
+        return JSONResponse({"error": "Invalid session"}, status_code=401)
+    
+    return {"session_token": session_token}
+
