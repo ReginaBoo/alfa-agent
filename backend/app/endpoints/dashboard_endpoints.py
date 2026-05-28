@@ -938,10 +938,10 @@ def clear_cache(
     }
 
 
-@router.get("/api/projects/{project_key}/cycle-time")
-@router.get("/projects/{project_key}/cycle-time")
+@router.get("/api/projects/{project_id}/cycle-time")
+@router.get("/projects/{project_id}/cycle-time")
 def get_project_cycle_time(
-    project_key: str,
+    project_id: str,
     period: str = Query("all", pattern="^(all|last week)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -954,7 +954,36 @@ def get_project_cycle_time(
         calculate_lead_time,
         calculate_lead_time_by_status
     )
+    from app.db.models.core import Project, UserProject
+    import re
 
+    project = db.query(Project).filter(
+        Project.key == project_id
+    ).first()
+
+    if not project and re.match(r'^\d+$', project_id):
+        project = db.query(Project).filter(
+            Project.id == int(project_id)
+        ).first()
+
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail="Project not found"
+        )
+
+    user_project = db.query(UserProject).filter(
+        UserProject.project_id == project.id,
+        UserProject.user_id == current_user.id
+    ).first()
+
+    if not user_project:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied"
+        )
+
+    project_key = project.jira_project_key or project.key
     # period -> days
     period_days = 3650 if period == "all" else 7
 
@@ -994,7 +1023,7 @@ def get_project_cycle_time(
         }
 
         # Эвристика для bottleneck - НЕ показываем warning для Done/Closed/Resolved
-        is_final_status = status_name in ["Done", "Closed", "Resolved", "Готово"]
+        is_final_status = status_name == "Done" or status_name == "Closed" or status_name == "Resolved"
         if status_hours >= 72 and not is_final_status:
             stage["warning"] = True
             stage["tooltip"] = (
@@ -1007,7 +1036,7 @@ def get_project_cycle_time(
     # Самые долгие этапы — первыми (но Done/Closed всегда в конце)
     def sort_key(stage):
         # Стадии с Done/Closed/Resolved всегда в конце
-        if stage["label"] in ["Done", "Closed", "Resolved", "Готово"]:
+        if stage["label"] in ["Done", "Closed", "Resolved"]:
             return (1, stage["hours"])  # Группа 1 (в конце), сортировка по времени
         return (0, -stage["hours"])  # Группа 0 (в начале), обратная сортировка (от большего)
     
@@ -1019,10 +1048,10 @@ def get_project_cycle_time(
     }
 
 
-@router.get("/api/projects/{project_key}/team-workload")
-@router.get("/projects/{project_key}/team-workload")
+@router.get("/api/projects/{project_id}/team-workload")
+@router.get("/projects/{project_id}/team-workload")
 def get_project_team_workload(
-    project_key: str,
+    project_id: int,
     period: str = Query("all", pattern="^(all|last week)$"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -1042,7 +1071,7 @@ def get_project_team_workload(
         .join(UserProject, UserProject.project_id == Project.id)
         .filter(
             UserProject.user_id == current_user.id,
-            Project.key == project_key
+            Project.id == project_id
         )
         .first()
     )
@@ -1052,6 +1081,8 @@ def get_project_team_workload(
             status_code=404,
             detail="Project not found"
         )
+
+    project_key = project.key
 
     # Период
     weeks = 1 if period == "last week" else 4
@@ -1067,7 +1098,6 @@ def get_project_team_workload(
     members = workload_data.get("members", [])
     balance = workload_data.get("balance", 0)
 
-    # Формируем recommendationText
     recommendation_text = "Нагрузка распределена равномерно."
 
     if members:
@@ -1081,10 +1111,15 @@ def get_project_team_workload(
         overloaded = sorted_members[0]
         underloaded = sorted_members[-1]
 
-        overloaded_name = overloaded.get(
-            "assignee_name") or overloaded["assignee_account_id"]
-        underloaded_name = underloaded.get(
-            "assignee_name") or underloaded["assignee_account_id"]
+        overloaded_name = (
+            overloaded.get("assignee_name")
+            or overloaded["assignee_account_id"]
+        )
+
+        underloaded_name = (
+            underloaded.get("assignee_name")
+            or underloaded["assignee_account_id"]
+        )
 
         overloaded_wi = overloaded["workload_index"]
         underloaded_wi = underloaded["workload_index"]
@@ -1101,23 +1136,23 @@ def get_project_team_workload(
 
         elif balance > 0.2:
             recommendation_text = (
-                f"Есть небольшие отклонения в распределении нагрузки "
-                f"(дисбаланс: {balance})."
+                f"Есть небольшие отклонения в распределении "
+                f"нагрузки (дисбаланс: {balance})."
             )
 
-    # Формируем members для фронта
     response_members = []
 
     for idx, member in enumerate(members, start=1):
 
         response_members.append({
             "id": str(idx),
-            "name": member.get("assignee_name")
-            or member["assignee_account_id"],
+            "name": (
+                member.get("assignee_name")
+                or member["assignee_account_id"]
+            ),
             "workloadIndex": member["workload_index"]
         })
 
-    # Ответ
     return {
         "calculationType": "story_points",
         "teamWorkloadBalance": balance,

@@ -183,13 +183,15 @@ class WorkloadIndexCalculator:
         if weeks > 0 and total_weight > 0:
             velocity = total_weight / weeks
         else:
-            # Минимальная скорость: 1 SP в неделю или 1 задача в неделю
-            if self.mode == 'story_points':
-                velocity = 1.0
-            elif self.mode == 'hours':
-                velocity = 8.0  # 8 часов в неделю минимум
-            else:
-                velocity = 1.0  # 1 задача в неделю
+            velocity = 0
+
+        # Минимальный realistic velocity
+        if self.mode == 'story_points':
+            velocity = max(velocity, 5.0)
+        elif self.mode == 'hours':
+            velocity = max(velocity, 20.0)
+        else:
+            velocity = max(velocity, 3.0)
         
         logger.info(f"Velocity for {assignee_account_id} over {weeks} weeks: {velocity} ({self.mode})")
         return velocity
