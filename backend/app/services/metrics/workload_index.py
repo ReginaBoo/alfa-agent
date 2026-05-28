@@ -330,13 +330,24 @@ class WorkloadIndexCalculator:
         
         results = []
         wi_values = []
-        
+
         for (assignee_id,) in assignees:
             wi = self.calculate_for_user(assignee_id, weeks)
+            issue_with_name = self.db.query(JiraIssue).filter(
+                JiraIssue.assignee_account_id == assignee_id,
+                JiraIssue.assignee_name.isnot(None)
+            ).first()
+
+            assignee_name = (
+                issue_with_name.assignee_name
+                if issue_with_name
+                else assignee_id
+            )
             if wi is not None:
                 status_info = get_workload_status(wi)
                 results.append({
                     'assignee_account_id': assignee_id,
+                    'assignee_name': assignee_name,
                     'workload_index': wi,
                     'status': status_info['status'],
                     'status_text': status_info['status_text'],

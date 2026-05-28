@@ -131,3 +131,7 @@
   padding-left: 20px !important;
 }
 
+.overdueTask {
+  border: 2px solid #ff4d4f;
+  background: rgba(255, 77, 79, 0.2);
+}

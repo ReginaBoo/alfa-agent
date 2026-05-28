@@ -34,7 +34,7 @@
 
 .item {
   display: grid;
-  grid-template-columns: 80px 1fr 45px;
+  grid-template-columns: 140px minmax(0, 1fr) 45px;
   align-items: center;
   gap: 16px;
 }
@@ -43,10 +43,17 @@
   font-weight: 600;
   color: #262626;
   font-size: 15px;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  min-width: 0;
 }
 
 .progressWrapper {
   width: 100%;
+  min-width: 0;
 }
 
 .percent {
