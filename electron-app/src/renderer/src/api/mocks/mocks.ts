@@ -101,8 +101,17 @@ export const mockLoadData: LoadChartItem[] = [
 ];
 
 export const mockProjectsData = [
-  { id: '1', name: 'Проект Арака' },
-  { id: '2', name: 'Проект 2' }
+  { id: '1', name: 'Проект 1' },
+  { id: '2', name: 'Проект 2' },
+  { id: '3', name: 'Проект 3' },
+  { id: '4', name: 'Проект 3' },
+  { id: '5', name: 'Проект 4' },
+  { id: '6', name: 'Проект 5' },
+  { id: '7', name: 'Проект 6' },
+  { id: '8', name: 'Проект 7' },
+  { id: '9', name: 'Проект 8' },
+  { id: '10', name: 'Проект 9' },
+
 ];
 
 export const mockGanttData: GanttProjectResponse = {
