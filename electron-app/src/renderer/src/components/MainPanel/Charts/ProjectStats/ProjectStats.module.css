@@ -95,3 +95,51 @@
   color: #bfbfbf;
   margin-top: 4px;
 }
+
+.carousel {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  padding: 0 30px;
+  /* Добавляем внутренние отступы по бокам, чтобы стрелки не налезали на карточки */
+}
+
+/* Общие стили для обеих стрелок */
+.carousel :global(.slick-prev),
+.carousel :global(.slick-next) {
+  font-size: 20px;
+  /* Размер стрелки */
+  color: #003a8c !important;
+  /* Цвет стрелки (под ваш темно-синий брендбук) */
+  z-index: 10;
+  /* Чтобы стрелки были поверх карточек */
+  width: 16px;
+  height: 16px;
+  transition: all 0.3s ease;
+}
+
+/* Стили при наведении */
+.carousel :global(.slick-prev:hover),
+.carousel :global(.slick-next:hover) {
+  color: #3460DC !important;
+  /* Цвет при наведении */
+  scale: 1.1;
+}
+
+/* Позиционирование левой стрелки */
+.carousel :global(.slick-prev) {
+  left: 0px;
+}
+
+/* Позиционирование правой стрелки */
+.carousel :global(.slick-next) {
+  right: 0px;
+}
+
+/* Изменяем стандартные псевдоэлементы slick-карусели, если они используют шрифтовые иконки */
+.carousel :global(.slick-prev::before),
+.carousel :global(.slick-next::before) {
+  color: inherit;
+  /* наследуем цвет, заданный выше */
+  font-size: 24px;
+}

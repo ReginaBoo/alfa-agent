@@ -78,6 +78,36 @@ export const mockProjectStats: ProjectStatsItem[] = [
   {
     id: 4,
     name: 'Проект 4',
+    status: 'warning',
+    stats: { workload: 60, reviewTime: '2ч', bugs: 0, prCount: 1, commits: '15↑', sla: 99 }
+  },
+  {
+    id: 5,
+    name: 'Проект 5',
+    status: 'success',
+    stats: { workload: 60, reviewTime: '2ч', bugs: 0, prCount: 1, commits: '15↑', sla: 99 }
+  },
+  {
+    id: 6,
+    name: 'Проект 6',
+    status: 'warning',
+    stats: { workload: 60, reviewTime: '2ч', bugs: 0, prCount: 1, commits: '15↑', sla: 99 }
+  },
+  {
+    id: 7,
+    name: 'Проект 7',
+    status: 'warning',
+    stats: { workload: 60, reviewTime: '2ч', bugs: 0, prCount: 1, commits: '15↑', sla: 99 }
+  },
+  {
+    id: 8,
+    name: 'Проект 8',
+    status: 'success',
+    stats: { workload: 60, reviewTime: '2ч', bugs: 0, prCount: 1, commits: '15↑', sla: 99 }
+  },
+  {
+    id: 9,
+    name: 'Проект 9',
     status: 'success',
     stats: { workload: 60, reviewTime: '2ч', bugs: 0, prCount: 1, commits: '15↑', sla: 99 }
   },
@@ -101,8 +131,15 @@ export const mockLoadData: LoadChartItem[] = [
 ];
 
 export const mockProjectsData = [
-  { id: '1', name: 'Проект Арака' },
-  { id: '2', name: 'Проект 2' }
+  { id: '1', name: 'Проект 1' },
+  { id: '2', name: 'Проект 2' },
+  { id: '3', name: 'Проект 3' },
+  { id: '4', name: 'Проект 4' },
+  { id: '5', name: 'Проект 5' },
+  { id: '6', name: 'Проект 6' },
+  { id: '7', name: 'Проект 7' },
+  { id: '8', name: 'Проект 8' },
+  { id: '9', name: 'Проект 9' },
 ];
 
 export const mockGanttData: GanttProjectResponse = {

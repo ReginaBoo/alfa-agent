@@ -94,7 +94,8 @@
 .statsSection {
   display: flex;
   flex-direction: column;
-  width: 100%;
+  flex: 1;
+  min-height: 0;
 }
 
 .statsSection :global(.ant-empty) {
