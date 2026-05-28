@@ -5,16 +5,29 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Добавляем токен из localStorage в каждый запрос
+// Функция для установки токена
+export const setAuthToken = (token: string | null) => {
+  if (token) {
+    api.defaults.headers.common['X-Session-Token'] = token;
+    localStorage.setItem('session_token', token);
+    console.log('✅ Auth token set in API headers');
+  } else {
+    delete api.defaults.headers.common['X-Session-Token'];
+    localStorage.removeItem('session_token');
+    console.log('❌ Auth token removed from API headers');
+  }
+};
+
+// Инициализация при загрузке
 const token = localStorage.getItem('session_token');
 if (token) {
-  api.defaults.headers.common['X-Session-Token'] = token;
+  setAuthToken(token);
 }
 
 // Перехватчик для логирования
 api.interceptors.request.use(config => {
   console.log(`📤 [API] ${config.method?.toUpperCase()} ${config.url}`);
-  console.log(`   Headers:`, config.headers);
+  console.log(`   X-Session-Token:`, config.headers['X-Session-Token'] || 'NOT SET');
   return config;
 });
 

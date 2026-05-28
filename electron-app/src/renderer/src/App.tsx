@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { Spin, Typography } from 'antd';
+import { setAuthToken } from './api/client';
 
 // Меняем тип пропсов для ElectronAuthChecker, теперь children — это функция
 interface ElectronAuthCheckerProps {
@@ -48,7 +49,7 @@ function ElectronAuthChecker({ children }: ElectronAuthCheckerProps) {
     if (window.electron?.getSessionToken) {
       const token = await window.electron.getSessionToken();
       if (token) {
-        localStorage.setItem('session_token', token);
+        setAuthToken(token);
         return true;
       }
     }
@@ -66,7 +67,7 @@ function ElectronAuthChecker({ children }: ElectronAuthCheckerProps) {
   useEffect(() => {
     if (window.electron?.onAuthSuccess) {
       window.electron.onAuthSuccess(async (token: string) => {
-        localStorage.setItem('session_token', token);
+        setAuthToken(token);
         await checkAuth();
       });
     }
@@ -87,7 +88,7 @@ function ElectronAuthChecker({ children }: ElectronAuthCheckerProps) {
   }
 
   /* ЗДЕСЬ ИЗМЕНЕНИЕ: Мы больше не блокируем рендер карточкой.
-    Мы всегда рендерим внутренности MiniPanel, передавая туда состояние авторизации 
+    Мы всегда рендерим внутренности MiniPanel, передавая туда состояние авторизации
   */
   return <>{children({ authorized, handleLogin, isLoggingIn })}</>;
 }
@@ -115,7 +116,7 @@ function App() {
   return (
     <div>
       {isElectron ? (
-        /* ЗДЕСЬ ИЗМЕНЕНИЕ: Получаем пропсы из чекера 
+        /* ЗДЕСЬ ИЗМЕНЕНИЕ: Получаем пропсы из чекера
           и прокидываем их развернутым объектом в MiniPanel
         */
         <ElectronAuthChecker>

@@ -194,7 +194,7 @@ const fixedColumns = [
     title: 'Задача',
     dataIndex: 'task',
     key: 'task',
-    width: 250, // Увеличил с 160 до 250 для имени исполнителя
+    width: 180,
     fixed: 'left' as const,
     ellipsis: true,
     render: (text: string, record: GanttRecord) => (

@@ -29,117 +29,22 @@ from sqlalchemy import text
 # ============================================================
 
 PROJECTS_CONFIG = {
-    "HEALTH": {
-        "name": "Веб-Платформа",
-        "description": "Разработка основной веб-платформы",
-        "category": "Development",
-        "team": ["Алексей Иванов", "Елена Петрова", "Михаил Сидоров", "Ольга Волкова", "Максим Васильев"],
-        "qa": ["Павел Соколов", "Наталья Лебедева"],
-        "issue_count": 50,
-        "pr_count": 15,
-        "profile": "healthy",
-        "avg_cycle_time_days": 5,
-        "sla_target": 0.95,
-        "bug_ratio": 0.2,
-        "workflow": ["To Do", "In Progress", "Code Review", "Testing", "Done"]
-    },
-    "CRUNCH": {
-        "name": "Мобильное Приложение",
-        "description": "Разработка мобильного приложения под давлением",
-        "category": "Mobile",
-        "team": ["Максим Васильев", "Ирина Морозова", "Андрей Соколов"],
-        "qa": ["Мария Виноградова"],
-        "issue_count": 60,
-        "pr_count": 8,
-        "profile": "overloaded",
-        "avg_cycle_time_days": 3,
-        "sla_target": 0.40,
-        "bug_ratio": 0.5,
-        "workflow": ["To Do", "In Progress", "Done"]
-    },
-    "BUGS": {
-        "name": "Техподдержка",
-        "description": "Поддержка и исправление багов",
-        "category": "Support",
-        "team": ["Алексей Иванов", "Елена Петрова", "Михаил Сидоров", "Екатерина Белова"],
-        "qa": ["Павел Соколов", "Наталья Лебедева", "Мария Виноградова"],
-        "issue_count": 50,
-        "pr_count": 10,
-        "profile": "buggy",
-        "avg_cycle_time_days": 4,
-        "sla_target": 0.55,
-        "bug_ratio": 0.7,
-        "workflow": ["New", "In Progress", "Resolved", "Closed"]
-    },
-    "KANBAN": {
-        "name": "Операционные Задачи",
-        "description": "Текущая операционная деятельность",
-        "category": "Operations",
-        "team": ["Ольга Волкова", "Максим Васильев", "Ирина Морозова", "Андрей Соколов"],
-        "qa": ["Павел Соколов"],
-        "issue_count": 40,
-        "pr_count": 5,
-        "profile": "kanban",
-        "avg_cycle_time_days": 6,
-        "sla_target": 0.85,
-        "bug_ratio": 0.3,
-        "workflow": ["Backlog", "Selected", "In Progress", "Review", "Done"]
-    },
+    # === LOW WORKLOAD (underloaded, success) ===
     "IDLE": {
         "name": "Документация",
-        "description": "Техническая документация и R&D",
+        "description": "Поддержка документации",
         "category": "Documentation",
-        "team": ["Сергей Новиков", "Татьяна Кузьмина"],
+        "team": ["Ирина Морозова", "Ольга Волкова"],
         "qa": [],
         "issue_count": 20,
-        "pr_count": 3,
-        "profile": "underloaded",
-        "avg_cycle_time_days": 10,
-        "sla_target": 1.0,
-        "bug_ratio": 0.1,
-        "workflow": ["To Do", "In Progress", "Done"]
-    },
-    "EMAL": {
-        "name": "(Example) Mobile App Launch",
-        "description": "Запуск мобильного приложения",
-        "category": "Mobile",
-        "team": ["Алексей Иванов", "Елена Петрова"],
-        "qa": ["Павел Соколов"],
-        "issue_count": 30,
-        "pr_count": 8,
-        "profile": "healthy",
-        "avg_cycle_time_days": 6,
-        "sla_target": 0.90,
-        "bug_ratio": 0.25,
-        "workflow": ["To Do", "In Progress", "Done"]
-    },
-    "IMBAL": {
-        "name": "API-Сервис",
-        "description": "Разработка API для интеграций",
-        "category": "Backend",
-        "team": ["Михаил Сидоров", "Ольга Волкова"],
-        "qa": ["Наталья Лебедева"],
-        "issue_count": 35,
-        "pr_count": 10,
-        "profile": "imbalanced",
+        "pr_count": 2,
+        "profile": "low_activity",
         "avg_cycle_time_days": 7,
-        "sla_target": 0.70,
-        "bug_ratio": 0.3,
-        "workflow": ["To Do", "In Progress", "Code Review", "Done"]
-    },
-    "KAN": {
-        "name": "My Software Team",
-        "description": "Разработка программного обеспечения",
-        "category": "Development",
-        "team": ["Алексей Иванов", "Максим Васильев", "Елена Петрова"],
-        "qa": ["Павел Соколов", "Мария Виноградова"],
-        "issue_count": 25,
-        "pr_count": 6,
-        "profile": "healthy",
-        "avg_cycle_time_days": 5,
-        "sla_target": 0.88,
-        "bug_ratio": 0.2,
-        "workflow": ["Backlog", "In Progress", "Review", "Done"]
+        "sla_target": 0.92,
+        "bug_ratio": 0.05,
+        "workflow": ["Аналитика", "Код", "Внедрение"],
+        "open_ratio": 0.30,
+        "closed_recent_ratio": 0.70
     },
     "NEWPROJ": {
         "name": "Исследование",
@@ -147,13 +52,157 @@ PROJECTS_CONFIG = {
         "category": "Research",
         "team": ["Татьяна Кузьмина", "Сергей Новиков"],
         "qa": [],
-        "issue_count": 12,
-        "pr_count": 2,
+        "issue_count": 10,
+        "pr_count": 1,
         "profile": "new",
-        "avg_cycle_time_days": 14,
-        "sla_target": None,
-        "bug_ratio": 0.1,
-        "workflow": ["To Do", "In Progress", "Done"]
+        "avg_cycle_time_days": 10,
+        "sla_target": 0.95,
+        "bug_ratio": 0.05,
+        "workflow": ["Аналитика", "Код", "Внедрение"],
+        "open_ratio": 0.30,
+        "closed_recent_ratio": 0.80
+    },
+    
+    # === MEDIUM-LOW WORKLOAD (optimal, success) ===
+    "HEALTH": {
+        "name": "Веб-Платформа",
+        "description": "Разработка основной веб-платформы",
+        "category": "Development",
+        "team": ["Алексей Иванов", "Елена Петрова", "Михаил Сидоров", "Ольга Волкова", "Максим Васильев"],
+        "qa": ["Павел Соколов", "Наталья Лебедева"],
+        "issue_count": 45,
+        "pr_count": 12,
+        "profile": "healthy",
+        "avg_cycle_time_days": 5,
+        "sla_target": 0.95,
+        "bug_ratio": 0.15,
+        "workflow": ["Аналитика", "Код", "Ожидание ревью", "Тестирование", "Бизнес-тестирование", "Внедрение"],
+        "open_ratio": 0.40,
+        "closed_recent_ratio": 0.60
+    },
+    "KAN": {
+        "name": "My Software Team",
+        "description": "Разработка программного обеспечения",
+        "category": "Development",
+        "team": ["Алексей Иванов", "Максим Васильев", "Елена Петрова"],
+        "qa": ["Павел Соколов", "Мария Виноградова"],
+        "issue_count": 30,
+        "pr_count": 8,
+        "profile": "healthy",
+        "avg_cycle_time_days": 5,
+        "sla_target": 0.88,
+        "bug_ratio": 0.15,
+        "workflow": ["Аналитика", "Код", "Ожидание ревью", "Тестирование", "Внедрение"],
+        "open_ratio": 0.40,
+        "closed_recent_ratio": 0.60
+    },
+    "IMBAL": {
+        "name": "API-Сервис",
+        "description": "Разработка API для интеграций",
+        "category": "Backend",
+        "team": ["Михаил Сидоров", "Ольга Волкова", "Андрей Соколов"],
+        "qa": ["Наталья Лебедева"],
+        "issue_count": 55,
+        "pr_count": 12,
+        "profile": "imbalanced",
+        "avg_cycle_time_days": 7,
+        "sla_target": 0.75,
+        "bug_ratio": 0.25,
+        "workflow": ["Аналитика", "Код", "Ожидание ревью", "Тестирование", "Бизнес-тестирование", "Внедрение"],
+        "open_ratio": 0.50,
+        "closed_recent_ratio": 0.50
+    },
+    "KANBAN": {
+        "name": "Операционные Задачи",
+        "description": "Текущая операционная деятельность",
+        "category": "Operations",
+        "team": ["Ольга Волкова", "Максим Васильев", "Ирина Морозова", "Андрей Соколов", "Екатерина Белова"],
+        "qa": ["Павел Соколов"],
+        "issue_count": 50,
+        "pr_count": 6,
+        "profile": "kanban",
+        "avg_cycle_time_days": 6,
+        "sla_target": 0.80,
+        "bug_ratio": 0.20,
+        "workflow": ["Аналитика", "Код", "Ожидание ревью", "Тестирование", "Бизнес-тестирование", "Внедрение"],
+        "open_ratio": 0.50,
+        "closed_recent_ratio": 0.50
+    },
+    
+    # === HIGH WORKLOAD (overloaded, error) ===
+    "CRUNCH": {
+        "name": "Мобильное Приложение",
+        "description": "Разработка мобильного приложения под давлением",
+        "category": "Mobile",
+        "team": ["Максим Васильев", "Ирина Морозова", "Андрей Соколов"],
+        "qa": ["Мария Виноградова"],
+        "issue_count": 50,
+        "pr_count": 8,
+        "profile": "overloaded",
+        "avg_cycle_time_days": 3,
+        "sla_target": 0.70,
+        "bug_ratio": 0.35,
+        "workflow": ["Аналитика", "Код", "Ожидание ревью", "Тестирование", "Внедрение"],
+        "open_ratio": 0.55,
+        "closed_recent_ratio": 0.45
+    },
+    "BUGS": {
+        "name": "Техподдержка",
+        "description": "Поддержка и исправление багов",
+        "category": "Support",
+        "team": ["Алексей Иванов", "Елена Петрова", "Михаил Сидоров", "Екатерина Белова"],
+        "qa": ["Павел Соколов", "Наталья Лебедева", "Мария Виноградова"],
+        "issue_count": 45,
+        "pr_count": 10,
+        "profile": "buggy",
+        "avg_cycle_time_days": 4,
+        "sla_target": 0.75,
+        "bug_ratio": 0.45,
+        "workflow": ["Аналитика", "Код", "Ожидание ревью", "Тестирование", "Внедрение"],
+        "open_ratio": 0.60,
+        "closed_recent_ratio": 0.40
+    },
+    "EMAL": {
+        "name": "(Example) Mobile App Launch",
+        "description": "Запуск мобильного приложения",
+        "category": "Mobile",
+        "team": ["Алексей Иванов", "Елена Петрова", "Михаил Сидоров"],
+        "qa": ["Павел Соколов"],
+        "issue_count": 55,
+        "pr_count": 10,
+        "profile": "critical",
+        "avg_cycle_time_days": 8,
+        "sla_target": 0.60,
+        "bug_ratio": 0.40,
+        "workflow": ["Аналитика", "Код", "Ожидание ревью", "Тестирование", "Бизнес-тестирование", "Внедрение"],
+        "open_ratio": 0.60,
+        "closed_recent_ratio": 0.40
+    },
+    
+    # === PROJECT WITH FULL CYCLE (for cycle time visualization) ===
+    "FULLCYCLE": {
+        "name": "Корпоративный Портал",
+        "description": "Разработка корпоративного портала с полным циклом",
+        "category": "Enterprise",
+        "team": ["Алексей Иванов", "Елена Петрова", "Михаил Сидоров", "Ольга Волкова", "Максим Васильев", "Ирина Морозова"],
+        "qa": ["Павел Соколов", "Наталья Лебедева", "Мария Виноградова"],
+        "issue_count": 40,
+        "pr_count": 15,
+        "profile": "fullcycle",
+        "avg_cycle_time_days": 6,
+        "sla_target": 0.85,
+        "bug_ratio": 0.20,
+        "workflow": ["Аналитика", "Код", "Ожидание ревью", "Тестирование", "Бизнес-тестирование", "Внедрение"],
+        "open_ratio": 0.60,
+        "closed_recent_ratio": 0.40,
+        "cycle_weights": {
+            "Аналитика": 0.15,
+            "Код": 0.35,
+            "Ожидание ревью": 0.15,
+            "Тестирование": 0.15,
+            "Бизнес-тестирование": 0.15,
+            "Внедрение": 0.05
+        }
     }
 }
 
@@ -161,13 +210,43 @@ PROJECTS_CONFIG = {
 # ГЕНЕРАЦИЯ ДАННЫХ
 # ============================================================
 
-def get_project_id(db, project_key):
-    """Получает ID проекта по его ключу"""
+def get_or_create_project(db, project_key, project_name, jira_project_key):
+    """Получает или создаёт проект в core.projects"""
     result = db.execute(
         text("SELECT id FROM core.projects WHERE key = :key"),
         {"key": project_key}
     ).fetchone()
-    return result[0] if result else None
+    
+    if result:
+        return result[0]
+    
+    # Создаём проект
+    result = db.execute(text("""
+        INSERT INTO core.projects (key, name, jira_project_key, is_active, created_at, updated_at)
+        VALUES (:key, :name, :jira_project_key, true, NOW(), NOW())
+        RETURNING id
+    """), {
+        "key": project_key,
+        "name": project_name,
+        "jira_project_key": jira_project_key
+    })
+    db.commit()
+    return result.fetchone()[0]
+
+
+def ensure_user_project_link(db, project_id, user_id=1):
+    """Создаёт связь пользователя с проектом если её нет"""
+    result = db.execute(text("""
+        SELECT id FROM core.user_projects 
+        WHERE project_id = :project_id AND user_id = :user_id
+    """), {"project_id": project_id, "user_id": user_id}).fetchone()
+    
+    if not result:
+        db.execute(text("""
+            INSERT INTO core.user_projects (user_id, project_id, role, created_at)
+            VALUES (:user_id, :project_id, 'member', NOW())
+        """), {"user_id": user_id, "project_id": project_id})
+        db.commit()
 
 
 def get_user_account_id(username):
@@ -179,14 +258,16 @@ def get_user_account_id(username):
     return f"{hash_val:08d}-{hash_val >> 16:04x}-{hash_val >> 32:04x}-8000-{hash_val >> 48:012x}"
 
 
-def generate_changelog(issue_key, created_at, closed_at, workflow):
-    """Генерирует историю переходов статусов"""
+def generate_changelog(issue_key, created_at, closed_at, workflow, config=None):
+    """Генерирует историю переходов статусов с реалистичным временем"""
     changelog = []
     
     if not closed_at:
         # Задача не закрыта - только начальные переходы
         current_time = created_at
-        for i, status in enumerate(workflow[:2]):  # Только первые 2 статуса
+        max_statuses = min(2, len(workflow))
+        for i in range(max_statuses):
+            status = workflow[i]
             changelog.append({
                 "issue_key": issue_key,
                 "field_name": "status",
@@ -199,23 +280,73 @@ def generate_changelog(issue_key, created_at, closed_at, workflow):
     else:
         # Задача закрыта - полный цикл
         current_time = created_at
-        for status in workflow:
-            changelog.append({
-                "issue_key": issue_key,
-                "field_name": "status",
-                "from_value": workflow[workflow.index(status) - 1] if workflow.index(status) > 0 else None,
-                "to_value": status,
-                "changed_at": current_time,
-                "author_account_id": get_user_account_id(random.choice(["Алексей Иванов", "Елена Петрова"]))
-            })
-            if status != workflow[-1]:
-                current_time += timedelta(hours=random.randint(4, 48))
+        total_cycle_hours = (closed_at - created_at).total_seconds() / 3600
+        
+        # Done/Closed/Внедрение - БЫСТРЫЕ (1-3 часа), остальное распределяем
+        done_status = workflow[-1]
+        active_statuses = workflow[:-1]
+        
+        # Время на активные этапы = общее время - 1-3 часа на Done
+        done_hours = random.uniform(1, 3)
+        active_time = total_cycle_hours - done_hours
+        
+        if active_time < 0:
+            active_time = total_cycle_hours * 0.8
+            done_hours = total_cycle_hours * 0.2
+        
+        # Если есть веса для этапов (для FULLCYCLE)
+        if config and "cycle_weights" in config:
+            weights = config["cycle_weights"]
+            # Пересчитываем веса без последнего статуса
+            active_weights = {k: v for k, v in weights.items() if k in active_statuses}
+            total_active_weight = sum(active_weights.values())
+            
+            for i, status in enumerate(workflow):
+                changelog.append({
+                    "issue_key": issue_key,
+                    "field_name": "status",
+                    "from_value": workflow[i-1] if i > 0 else None,
+                    "to_value": status,
+                    "changed_at": current_time,
+                    "author_account_id": get_user_account_id(random.choice(["Алексей Иванов", "Елена Петрова"]))
+                })
+                
+                if status == done_status:
+                    # Done - быстро (1-3 часа)
+                    current_time += timedelta(hours=done_hours)
+                elif status in active_weights:
+                    # Активные этапы - по весам
+                    weight = active_weights[status] / total_active_weight
+                    stage_hours = active_time * weight
+                    stage_hours = stage_hours * random.uniform(0.7, 1.3)
+                    current_time += timedelta(hours=stage_hours)
+        else:
+            # Обычные проекты - равномерное распределение
+            hours_per_active = active_time / len(active_statuses) if active_statuses else active_time
+            
+            for i, status in enumerate(workflow):
+                changelog.append({
+                    "issue_key": issue_key,
+                    "field_name": "status",
+                    "from_value": workflow[i-1] if i > 0 else None,
+                    "to_value": status,
+                    "changed_at": current_time,
+                    "author_account_id": get_user_account_id(random.choice(["Алексей Иванов", "Елена Петрова"]))
+                })
+                
+                if status == done_status:
+                    # Done - быстро
+                    current_time += timedelta(hours=done_hours)
+                elif status != workflow[-1]:
+                    # Активные этапы
+                    stage_hours = hours_per_active * random.uniform(0.7, 1.3)
+                    current_time += timedelta(hours=stage_hours)
     
     return changelog
 
 
 def generate_issue_data(project_key, config, issue_num, project_id, now, is_subtask=False, parent_id=None):
-    """Генерирует данные для одной задачи"""
+    """Генерирует данные для одной задачи с контролируемой загрузкой"""
     
     # Тип задачи
     if is_subtask:
@@ -234,75 +365,111 @@ def generate_issue_data(project_key, config, issue_num, project_id, now, is_subt
     # Приоритет
     priority = random.choice(["Low", "Medium", "High", "High", "Critical"])
     
-    # Статус (распределение по воркфлоу)
+    # Статус с учётом профиля загрузки
     workflow = config["workflow"]
-    # РЕАЛИСТИЧНОЕ РАСПРЕДЕЛЕНИЕ ДЛЯ WORKLOAD 40-120%:
-    # - 15% открытых (To Do, In Progress) - создают нагрузку
-    # - 10% в работе (Code Review, Testing)
-    # - 75% закрытых (Done, Closed, Resolved) - показывают высокую velocity
+    open_ratio = config.get("open_ratio", 0.35)
+    closed_recent_ratio = config.get("closed_recent_ratio", 0.65)
     
     status_rand = random.random()
-    if status_rand < 0.15:
-        # Открытые задачи (первые 2 статуса workflow)
-        status_idx = random.choice([0, 1] if len(workflow) >= 2 else [0])
-    elif status_rand < 0.25:
-        # В процессе (средние статусы)
-        if len(workflow) >= 4:
-            status_idx = random.choice([2, 3])
-        elif len(workflow) >= 3:
-            status_idx = 1
+    
+    if status_rand < open_ratio:
+        # Открытые задачи (создают нагрузку)
+        # Распределяем между начальными статусами
+        if len(workflow) >= 3:
+            status_idx = random.choice([0, 1, 2])
+        elif len(workflow) >= 2:
+            status_idx = random.choice([0, 1])
         else:
             status_idx = 0
+        status = workflow[status_idx]
+        is_closed = False
     else:
-        # Закрытые задачи (последний статус) - ПОВЫСИЛИ до 75%
-        status_idx = len(workflow) - 1
+        # Закрытые задачи (не создают нагрузку)
+        status = workflow[-1]
+        is_closed = True
     
-    status = workflow[status_idx]
-    
-    # Назначенный пользователь - распределяем неравномерно!
+    # Назначенный пользователь
     all_team = config["team"] + config.get("qa", [])
     
-    # Для реалистичности: не всем назначаем задачи равномерно
-    # Некоторые получают больше, некоторые меньше
-    if random.random() < 0.3:
-        # 30% случаев - задача не назначена
+    if random.random() < 0.15:
+        # 15% задач не назначены
         assignee = None
-    elif random.random() < 0.2 and len(all_team) > 1:
-        # 20% случаев - назначаем "любимчика" (кто уже имеет много задач)
-        # Для простоты - просто выбираем из первых 2 человек
-        assignee = random.choice(all_team[:2])
     else:
         assignee = random.choice(all_team)
     
     # Даты (реалистичные)
-    created_days_ago = random.randint(30, 90)  # Задачи созданы 30-90 дней назад
-    created_at = now - timedelta(days=created_days_ago)
+    # Закрытые задачи - созданы недавно (чтобы попали в velocity за 2 недели)
+    # Открытые задачи - могут быть старыми
+    if is_closed:
+        # Закрытая задача - создана 3-20 дней назад
+        created_days_ago = random.randint(3, 20)
+        created_at = now - timedelta(days=created_days_ago)
+    else:
+        # Открытая задача - может быть старой
+        created_days_ago = random.randint(10, 90)
+        created_at = now - timedelta(days=created_days_ago)
     
-    # Если задача не закрыта, updated_at = сейчас
-    if status not in ["Done", "Closed", "Resolved", "Готово"]:
+    if not is_closed:
+        # Открытая задача
         updated_at = now
         closed_at = None
-    else:
-        # Закрытая задача - закрыта в последние 14 дней (для высокой velocity!)
-        # 80% закрытых задач закрыты за последние 14 дней
-        if random.random() < 0.8:
-            closed_days_ago = random.randint(1, 14)
-            closed_at = now - timedelta(days=closed_days_ago)
+        # Для открытых задач - due_date в будущем или просрочена
+        if random.random() < 0.3:
+            # 30% просрочены
+            due_date = now - timedelta(days=random.randint(1, 14))
         else:
-            # 20% закрыты раньше (для истории)
-            closed_days_ago = random.randint(15, 60)
-            closed_at = now - timedelta(days=closed_days_ago)
+            due_date = now + timedelta(days=random.randint(7, 30))
+    else:
+        # Закрытая задача
+        # Распределяем по времени закрытия
+        if random.random() < closed_recent_ratio:
+            # Недавно закрытые (влияют на velocity) - ВСЕГДА в 2-недельном периоде
+            closed_days_ago = random.randint(1, 5)
+        else:
+            # Закрытые раньше - но в 4-недельном периоде
+            closed_days_ago = random.randint(8, 18)
         
-        # Cycle time = 3-10 дней
-        cycle_time_days = random.randint(3, 10)
+        closed_at = now - timedelta(days=closed_days_ago)
+        
+        # Cycle time зависит от профиля
+        avg_cycle = config.get("avg_cycle_time_days", 5)
+        cycle_variation = random.uniform(0.5, 1.5)
+        cycle_time_days = max(1, int(avg_cycle * cycle_variation))
+        
         created_at = closed_at - timedelta(days=cycle_time_days)
-        updated_at = closed_at
+        updated_at = closed_at  # ВАЖНО: для velocity calculation
+        due_date = created_at + timedelta(days=random.randint(7, 30))
     
-    # Оценка (story points) - только для родительских задач
-    story_points = random.choice([1, 2, 3, 5, 8, 13]) if issue_type != "Bug" and not is_subtask else None
+    # Story points - важно для workload calculation!
+    # Открытые задачи - МАЛЕНЬКИЕ story points (меньше нагрузка)
+    # Закрытые задачи - БОЛЬШИЕ story points (высокая velocity)
+    if is_closed:
+        # Закрытые задачи - большие story points = высокая velocity
+        if issue_type == "Bug":
+            story_points = random.choice([8, 13, 21])
+        elif issue_type == "Story":
+            story_points = random.choice([13, 21, 34])
+        else:
+            story_points = random.choice([8, 13, 21])
+    else:
+        # Открытые задачи - очень маленькие story points
+        if issue_type == "Bug":
+            story_points = random.choice([1, 2, 3])
+        elif issue_type == "Story":
+            story_points = random.choice([2, 3, 5])
+        else:
+            story_points = random.choice([2, 3, 5])
     
-    # Время в работе
-    time_spent = random.randint(2, 24) if random.random() > 0.3 else None
+    # Время в работе (для тайм-трекинга)
+    if is_closed:
+        time_spent = random.randint(4, 40)
+        remaining_estimate = 0  # Закрытые задачи - нет оставшегося времени
+    else:
+        time_spent = random.randint(1, 16)
+        remaining_estimate = random.randint(2, 24)  # Оставшееся время для открытых
+    
+    # Оригинальная оценка (для расчёта прогресса)
+    original_estimate = time_spent + remaining_estimate if remaining_estimate else time_spent * 2
     
     # Описание
     summaries = {
@@ -336,7 +503,7 @@ def generate_issue_data(project_key, config, issue_num, project_id, now, is_subt
     
     summary = random.choice(summaries[issue_type])
     
-    # Jira key (генерируем ПОСЛЕДОВАТЕЛЬНО для уникальности)
+    # Jira key
     issue_key = f"{project_key}-{issue_num}"
     
     return {
@@ -350,10 +517,12 @@ def generate_issue_data(project_key, config, issue_num, project_id, now, is_subt
         "assignee": assignee,
         "story_points": story_points,
         "time_spent": time_spent,
+        "remaining_estimate": remaining_estimate,
+        "original_estimate": original_estimate,
         "created_at": created_at,
         "updated_at": updated_at,
         "closed_at": closed_at,
-        "due_date": created_at + timedelta(days=random.randint(7, 30)) if random.random() > 0.5 else None,
+        "due_date": due_date,
         "parent_issue_id": parent_id
     }
 
@@ -369,7 +538,7 @@ def main():
     
     try:
         # ============================================================
-        # 1. ОЧИСТКА СТАРЫХ ДАННЫХ
+        # 1. ОЧИСТКА СТАРЫХ ДАННЫХ И КЭША
         # ============================================================
         print("\n🗑️ Очистка старых данных...")
         db.execute(text("DELETE FROM normalized.project_status_mappings"))
@@ -382,6 +551,15 @@ def main():
         db.execute(text("DELETE FROM normalized.confluence_pages"))
         db.commit()
         print("   ✅ Удалено")
+        
+        # Очищаем кэш
+        print("\n🗑️ Очистка кэша...")
+        try:
+            from app.services.cache_service import cache_service
+            cache_service.clear()
+            print("   ✅ Кэш очищен")
+        except Exception as e:
+            print(f"   ⚠️ Не удалось очистить кэш: {e}")
         
         # Добавим ещё раз для уверенности (в случае если были дубли)
         print("   🔄 Дополнительная очистка Jira задач...")
@@ -398,56 +576,75 @@ def main():
         
         status_mappings = {
             "HEALTH": [
-                {"status": "To Do", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "In Progress", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Code Review", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Testing", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Done", "is_open": False, "is_in_progress": False, "is_closed": True},
+                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
+                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Бизнес-тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
             ],
             "CRUNCH": [
-                {"status": "To Do", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "In Progress", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Done", "is_open": False, "is_in_progress": False, "is_closed": True},
+                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
+                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
             ],
             "BUGS": [
-                {"status": "New", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "In Progress", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Resolved", "is_open": False, "is_in_progress": False, "is_closed": True},
-                {"status": "Closed", "is_open": False, "is_in_progress": False, "is_closed": True},
+                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
+                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
             ],
             "KANBAN": [
-                {"status": "Backlog", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "Selected", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "In Progress", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Review", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Done", "is_open": False, "is_in_progress": False, "is_closed": True},
+                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
+                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Бизнес-тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
             ],
             "IDLE": [
-                {"status": "To Do", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "In Progress", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Done", "is_open": False, "is_in_progress": False, "is_closed": True},
+                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
+                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
             ],
             "EMAL": [
-                {"status": "To Do", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "In Progress", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Done", "is_open": False, "is_in_progress": False, "is_closed": True},
+                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
+                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Бизнес-тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
             ],
             "IMBAL": [
-                {"status": "To Do", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "In Progress", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Code Review", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Done", "is_open": False, "is_in_progress": False, "is_closed": True},
+                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
+                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Бизнес-тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
             ],
             "KAN": [
-                {"status": "Backlog", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "In Progress", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Review", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Done", "is_open": False, "is_in_progress": False, "is_closed": True},
+                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
+                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
             ],
             "NEWPROJ": [
-                {"status": "To Do", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "In Progress", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Done", "is_open": False, "is_in_progress": False, "is_closed": True},
+                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
+                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
+            ],
+            "FULLCYCLE": [
+                {"status": "Аналитика", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Бизнес-тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
             ],
         }
         
@@ -488,10 +685,13 @@ def main():
         issue_id = 1000
         
         for project_key, config in PROJECTS_CONFIG.items():
-            project_id = get_project_id(db, project_key)
+            project_id = get_or_create_project(db, project_key, config["name"], project_key)
             if not project_id:
-                print(f"   ⚠️ Проект {project_key} не найден, пропускаем")
+                print(f"   ⚠️ Не удалось создать проект {project_key}, пропускаем")
                 continue
+            
+            # Создаём связь с пользователем
+            ensure_user_project_link(db, project_id)
             
             print(f"   📁 {project_key}: {config['issue_count']} задач")
             
@@ -534,7 +734,8 @@ def main():
                         issue["issue_key"],
                         issue["created_at"],
                         issue["closed_at"],
-                        config["workflow"]
+                        config["workflow"],
+                        config=config
                     )
                     all_changelogs.extend(changelog)
                 
@@ -553,12 +754,14 @@ def main():
                         id, issue_key, project_key, summary,
                         issue_type, status, priority, assignee_account_id,
                         assignee_name, story_points, time_spent,
+                        remaining_estimate, original_estimate,
                         created_at, updated_at, closed_at, due_date,
                         parent_issue_id, last_synced_at, is_deleted
                     ) VALUES (
                         :id, :issue_key, :project_key, :summary,
                         :issue_type, :status, :priority, :assignee_account_id,
                         :assignee_name, :story_points, :time_spent,
+                        :remaining_estimate, :original_estimate,
                         :created_at, :updated_at, :closed_at, :due_date,
                         :parent_issue_id, :last_synced, :is_deleted
                     )
@@ -574,6 +777,8 @@ def main():
                     "assignee_name": issue["assignee"] if issue["assignee"] else None,
                     "story_points": issue["story_points"],
                     "time_spent": issue["time_spent"],
+                    "remaining_estimate": issue.get("remaining_estimate"),
+                    "original_estimate": issue.get("original_estimate"),
                     "created_at": issue["created_at"],
                     "updated_at": issue["updated_at"],
                     "closed_at": issue["closed_at"],
@@ -627,7 +832,7 @@ def main():
         
         page_id = 1
         for project_key, config in PROJECTS_CONFIG.items():
-            project_id = get_project_id(db, project_key)
+            project_id = get_or_create_project(db, project_key, config["name"], project_key)
             if not project_id:
                 continue
             

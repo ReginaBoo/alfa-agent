@@ -43,6 +43,55 @@ PROJECTS_CONFIG = {
         "authors": ["maxim.vasiliev", "mikhail.sidorov"],
         "reviewers": ["elena.petrova", "olga.volkova"],
         "jira_prefix": "BUGS"
+    },
+    "IMBAL": {
+        "repo": "company/api-service",
+        "pr_count": 12,
+        "authors": ["mikhail.sidorov", "olga.volkova"],
+        "reviewers": ["natalia.lebedeva", "alexey.ivanov"],
+        "jira_prefix": "IMBAL"
+    },
+    "KANBAN": {
+        "repo": "company/ops-tasks",
+        "pr_count": 6,
+        "authors": ["olga.volkova", "maxim.vasiliev"],
+        "reviewers": ["pavel.sokolov", "andrey.sokolov"],
+        "jira_prefix": "KANBAN"
+    },
+    "IDLE": {
+        "repo": "company/docs",
+        "pr_count": 3,
+        "authors": ["sergey.novikov", "tatyana.kuzmina"],
+        "reviewers": [],
+        "jira_prefix": "IDLE"
+    },
+    "KAN": {
+        "repo": "company/software-team",
+        "pr_count": 8,
+        "authors": ["alexey.ivanov", "maxim.vasiliev"],
+        "reviewers": ["pavel.sokolov", "maria.vinogradova"],
+        "jira_prefix": "KAN"
+    },
+    "EMAL": {
+        "repo": "company/mobile-launch",
+        "pr_count": 10,
+        "authors": ["alexey.ivanov", "elena.petrova"],
+        "reviewers": ["pavel.sokolov", "mikhail.sidorov"],
+        "jira_prefix": "EMAL"
+    },
+    "NEWPROJ": {
+        "repo": "company/research",
+        "pr_count": 2,
+        "authors": ["tatyana.kuzmina", "sergey.novikov"],
+        "reviewers": [],
+        "jira_prefix": "NEWPROJ"
+    },
+    "FULLCYCLE": {
+        "repo": "company/enterprise-portal",
+        "pr_count": 15,
+        "authors": ["alexey.ivanov", "elena.petrova", "mikhail.sidorov", "olga.volkova"],
+        "reviewers": ["pavel.sokolov", "natalia.lebedeva", "maria.vinogradova"],
+        "jira_prefix": "FULLCYCLE"
     }
 }
 

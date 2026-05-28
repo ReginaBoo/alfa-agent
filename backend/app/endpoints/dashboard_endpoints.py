@@ -951,7 +951,7 @@ def get_project_cycle_time(
     Данные для блока Cycle Time на Dashboard.
     """
 
-    from app.services.metrics.lead_time import (
+    from app.services.metrics.lead_time_new import (
         calculate_lead_time,
         calculate_lead_time_by_status
     )
@@ -995,8 +995,8 @@ def get_project_cycle_time(
         period_days=period_days
     )
 
-    # Разбивка по статусам
-    statuses = calculate_lead_time_by_status(
+    # Разбивка по стандартным этапам
+    stages_data = calculate_lead_time_by_status(
         db=db,
         project_key=project_key,
         period_days=period_days
@@ -1012,34 +1012,54 @@ def get_project_cycle_time(
     else:
         average_time_text = f"{hours} ч."
 
-    stages = []
+    # Фиксированный порядок этапов
+    STAGE_ORDER = [
+        "Аналитика",
+        "Код",
+        "Ожидание ревью",
+        "Тестирование",
+        "Бизнес-тестирование",
+        "Внедрение"
+    ]
 
-    for idx, (status_name, data) in enumerate(statuses.items(), start=1):
-        status_hours = round(data.get("avg_hours", 0), 1)
+    stages = []
+    idx = 1
+
+    for stage_name in STAGE_ORDER:
+        # Получаем данные для этапа (если есть)
+        data = stages_data.get(stage_name)
+        
+        if data:
+            status_hours = round(data.get("avg_hours", 0), 1)
+        else:
+            status_hours = 0
 
         stage = {
             "id": str(idx),
-            "label": status_name,
+            "label": stage_name,
             "hours": status_hours,
         }
 
-        # Эвристика для bottleneck - НЕ показываем warning для Done/Closed/Resolved
-        is_final_status = status_name == "Done" or status_name == "Closed" or status_name == "Resolved"
-        if status_hours >= 72 and not is_final_status:
+        # Warning для этапов >72ч, кроме Внедрения
+        if status_hours >= 72 and stage_name != "Внедрение":
             stage["warning"] = True
             stage["tooltip"] = (
                 f"Этот этап занимает в среднем "
                 f"{round(status_hours / 24, 1)} дн."
             )
 
-        stages.append(stage)
+        # Добавляем только этапы с ненулевым временем (кроме Внедрения, его всегда показываем если есть)
+        if status_hours > 0 or stage_name == "Внедрение":
+            stages.append(stage)
+            idx += 1
 
-    # Самые долгие этапы — первыми (но Done/Closed всегда в конце)
+    # Сортируем: сначала по порядку STAGE_ORDER, Внедрение в конце
     def sort_key(stage):
-        # Стадии с Done/Closed/Resolved всегда в конце
-        if stage["label"] in ["Done", "Closed", "Resolved"]:
-            return (1, stage["hours"])  # Группа 1 (в конце), сортировка по времени
-        return (0, -stage["hours"])  # Группа 0 (в начале), обратная сортировка (от большего)
+        order_idx = STAGE_ORDER.index(stage["label"]) if stage["label"] in STAGE_ORDER else 99
+        # Внедрение всегда в конце
+        if stage["label"] == "Внедрение":
+            return (1, 0)
+        return (0, order_idx)
     
     stages.sort(key=sort_key)
 

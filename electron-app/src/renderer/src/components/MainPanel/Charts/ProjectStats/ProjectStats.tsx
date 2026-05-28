@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Row, Col, Card, Typography, Empty } from 'antd';
 import { InfoCircleOutlined, FlagFilled, ArrowRightOutlined } from '@ant-design/icons';
 import { ProjectStatsItem } from '../../../../types/dashboard';
@@ -23,6 +24,7 @@ const getStatusConfig = (status: ProjectStatsItem['status']) => {
 };
 
 export const ProjectStats = ({ data }: ProjectStatsProps) => {
+  const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState(0);
   const [displayedPage, setDisplayedPage] = useState(0); // Which data is currently rendered
   const [isAnimating, setIsAnimating] = useState(false);
@@ -68,6 +70,12 @@ export const ProjectStats = ({ data }: ProjectStatsProps) => {
     }
   };
 
+  const handleCardClick = (projectId: number | string | undefined) => {
+    if (projectId) {
+      navigate(`/project/${projectId}`);
+    }
+  };
+
   return (
     <div className={s.carouselContainer}>
       <Row
@@ -92,6 +100,7 @@ export const ProjectStats = ({ data }: ProjectStatsProps) => {
               <Card
                 className={s.projectCard}
                 style={{ borderTop: `4px solid ${color}`, width: '100%' }}
+                onClick={() => handleCardClick(p.project_id || p.id)}
               >
                 <div className={s.cardHeader}>
                   <Title level={5} className={s.projectTitle}>
