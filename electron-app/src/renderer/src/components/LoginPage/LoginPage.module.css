@@ -5,6 +5,7 @@
   min-height: 100vh;
   background-color: #f4f5f7;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  padding: 16px;
 }
 
 .loginCard {
@@ -12,54 +13,39 @@
   padding: 40px 32px;
   width: 100%;
   max-width: 400px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
-  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.03), 0 2px 6px rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
   text-align: center;
+  border: 1px solid #eef0f2;
 }
 
 .logoContainer {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  margin-bottom: 24px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .logoText {
   color: #0052CC;
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 800;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
 }
 
 .logoIcon {
-  width: 24px;
+  display: flex;
+  align-items: center;
   color: #0052CC;
 }
 
 .loginTitle {
-  color: #44546F;
-  font-size: 16px;
-  font-weight: 600;
-  margin-bottom: 24px;
-}
-
-.mainInput {
-  height: 40px;
-  border-radius: 3px;
-}
-
-.continueBtn {
-  height: 40px;
-  background-color: #0052CC;
-  font-weight: 600;
-  border-radius: 3px;
-}
-
-.orLabel {
-  color: #6B778C;
-  font-size: 12px;
-  margin: 16px 0;
+  color: #172B4D !important;
+  font-size: 20px !important;
+  font-weight: 600 !important;
+  margin-top: 8px !important;
+  margin-bottom: 8px !important;
 }
 
 .socialButtons {
@@ -69,50 +55,39 @@
   margin-bottom: 24px;
 }
 
-.socialButtons :global(.ant-btn) {
-  height: 40px;
-  font-weight: 600;
-  color: #44546F;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* Стилизация кнопки Ant Design через переопределение */
+.continueBtn {
+  height: 44px !important;
+  background-color: #0052CC !important;
+  font-weight: 600 !important;
+  border-radius: 4px !important;
+  font-size: 14px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px;
+  transition: background-color 0.2s ease !important;
 }
 
-.footerLinks {
-  font-size: 14px;
-  margin-bottom: 16px;
-}
-
-.footerLinks a {
-  color: #0052CC;
-}
-
-.dot {
-  margin: 0 8px;
-  color: #6B778C;
+.continueBtn:hover {
+  background-color: #0065FF !important;
 }
 
 .bottomBrand {
-  margin-top: 16px;
+  margin-top: 32px;
+  border-top: 1px solid #f1f2f4;
+  padding-top: 16px;
 }
 
 .brandSmall {
   color: #44546F;
   font-weight: 700;
-  font-size: 14px;
-  margin-bottom: 8px;
+  font-size: 12px;
+  margin-bottom: 4px;
+  letter-spacing: 2px;
 }
 
 .oneAccount {
   color: #6B778C;
-  font-size: 12px;
-  margin-bottom: 8px;
-}
-
-.legal {
-  font-size: 12px;
-}
-
-.legal a {
-  color: #6B778C;
+  font-size: 11px;
 }
