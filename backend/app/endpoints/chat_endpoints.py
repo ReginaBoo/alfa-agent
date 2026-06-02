@@ -15,7 +15,7 @@ from app.db.session import get_db
 from app.core.dependencies import get_current_user
 from app.db.models import User
 from app.services.ai.chat_service import ChatService, ChatToolService, ALLOWED_TABLES, FORBIDDEN_KEYWORDS
-from app.services.ai.providers.openrouter_provider import OpenRouterProvider
+from app.services.ai.providers.alphabank_provider import AlphaBankProvider
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -79,11 +79,12 @@ class ChatSessionResponse(BaseModel):
 # Хелперы
 # ============================================================
 
-def _get_ai_provider() -> OpenRouterProvider:
+def _get_ai_provider() -> AlphaBankProvider:
     """Создаёт экземпляр AI провайдера"""
-    return OpenRouterProvider(
-        api_key=settings.OPENROUTER_API_KEY,
-        model=settings.OPENROUTER_MODEL
+    return AlphaBankProvider(
+        api_key=settings.ALPHABANK_API_KEY,
+        model=settings.ALPHABANK_MODEL,
+        api_url=settings.ALPHABANK_API_URL
     )
 
 

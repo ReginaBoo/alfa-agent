@@ -14,7 +14,7 @@ from app.db.models import JiraIssue, UserProject, Project
 from app.db.models.normalized import GithubPullRequest, GithubCommit, GithubIssue
 from app.core.dependencies import get_current_user
 from app.db.models import User
-from app.services.ai.providers.openrouter_provider import OpenRouterProvider
+from app.services.ai.providers.alphabank_provider import AlphaBankProvider
 from app.services.ai.insight_service import AIInsightService
 from app.core.config import settings
 from app.services.cache_service import cache_service
@@ -535,9 +535,10 @@ async def get_ai_insights(
         return cached_insights
 
     # Генерируем заново с фильтрацией по проектам пользователя
-    provider = OpenRouterProvider(
-        api_key=settings.OPENROUTER_API_KEY,
-        model=settings.OPENROUTER_MODEL
+    provider = AlphaBankProvider(
+        api_key=settings.ALPHABANK_API_KEY,
+        model=settings.ALPHABANK_MODEL,
+        api_url=settings.ALPHABANK_API_URL
     )
 
     service = AIInsightService(db, provider)
@@ -904,9 +905,10 @@ async def get_project_ai_insights(
         return cached_insights
 
     # Генерируем инсайты для конкретного проекта
-    provider = OpenRouterProvider(
-        api_key=settings.OPENROUTER_API_KEY,
-        model=settings.OPENROUTER_MODEL
+    provider = AlphaBankProvider(
+        api_key=settings.ALPHABANK_API_KEY,
+        model=settings.ALPHABANK_MODEL,
+        api_url=settings.ALPHABANK_API_URL
     )
 
     service = AIInsightService(db, provider)

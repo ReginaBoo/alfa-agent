@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import datetime
 
-from app.services.ai.providers.openrouter_provider import OpenRouterProvider
+from app.services.ai.providers.alphabank_provider import AlphaBankProvider
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ FORBIDDEN_KEYWORDS = [
 class ChatService:
     """Сервис для обработки чат-запросов с AI"""
     
-    def __init__(self, db: Session, ai_provider: OpenRouterProvider):
+    def __init__(self, db: Session, ai_provider: AlphaBankProvider):
         self.db = db
         self.ai_provider = ai_provider
         self.session_id: Optional[str] = None
