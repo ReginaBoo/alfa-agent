@@ -3,9 +3,9 @@ import asyncio
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
-from app.db.models import AtlassianToken
+from app.db.models import IntegrationToken
 from app.services.token_refresh_service import TokenRefreshService
-
+from app.tasks.jira_scheduler import schedule_jira_sync
 
 async def refresh_expiring_tokens():
     """Фоновая задача: обновляет токены, которые истекают в ближайший час"""
@@ -15,8 +15,8 @@ async def refresh_expiring_tokens():
             # Находим токены, которые истекут в ближайший час
             expiring_soon = datetime.utcnow() + timedelta(hours=1)
             
-            tokens = db.query(AtlassianToken).filter(
-                AtlassianToken.expires_at <= expiring_soon
+            tokens = db.query(IntegrationToken).filter(
+                IntegrationToken.expires_at <= expiring_soon
             ).all()
             
             # Группируем по user_id
@@ -38,9 +38,3 @@ async def refresh_expiring_tokens():
         
         # Ждем 30 минут перед следующей проверкой
         await asyncio.sleep(1800)
-
-
-# В main.py запускаем фоновую задачу
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(refresh_expiring_tokens())

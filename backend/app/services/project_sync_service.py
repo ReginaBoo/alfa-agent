@@ -38,7 +38,7 @@ def _make_jira_request_with_refresh(
         )
         
         if response.status_code == 401 and attempt == 0:
-            logger.info(f"Token expired, refreshing for user {user_id}")
+            logger.error(f"Token expired, refreshing for user {user_id}")
             TokenRefreshService.update_user_tokens(db, user_id)
             
             # Обновляем токен в БД
@@ -93,7 +93,10 @@ def sync_projects_from_jira(
     response.raise_for_status()
     
     jira_projects = response.json()
-    
+    logger.error(
+        f"Projects from Jira API: "
+        f"{[p['key'] for p in jira_projects]}"
+    )
     created_count = 0
     updated_count = 0
     linked_count = 0  # НОВЫЙ счетчик для созданных связей
@@ -140,7 +143,7 @@ def sync_projects_from_jira(
             )
             db.add(user_project)
             created_count += 1
-            logger.info(f"Created new project {project_key} with link to user {user_id}")
+            logger.error(f"Created new project {project_key} with link to user {user_id}")
             
         elif not existing_link:
             # СЛУЧАЙ 2: Проект есть, но связи с пользователем нет - добавляем связь
@@ -160,7 +163,7 @@ def sync_projects_from_jira(
             existing_project.description = project_data['description']
             existing_project.is_active = project_data['is_active']
             updated_count += 1
-            logger.info(f"Added missing link for user {user_id} to existing project {project_key}")
+            logger.error(f"Added missing link for user {user_id} to existing project {project_key}")
             
         else:
             # СЛУЧАЙ 3: Проект есть и связь есть - просто обновляем
@@ -175,7 +178,7 @@ def sync_projects_from_jira(
     
     # ========== КОММИТИМ ПРОЕКТЫ ДО СТАТУСОВ ==========
     db.commit()
-    logger.info(f"Projects saved: {created_count} created, {updated_count} updated, {linked_count} links added")
+    logger.error(f"Projects saved: {created_count} created, {updated_count} updated, {linked_count} links added")
     
     # ========== 2. СИНХРОНИЗИРУЕМ СТАТУСЫ ==========
     if sync_statuses:
@@ -186,19 +189,28 @@ def sync_projects_from_jira(
             UserProject.user_id == user_id
         ).all()
         
-        project_keys_to_sync = [p[0] for p in user_project_keys]
+        project_keys_to_sync = [
+            p["key"]
+            for p in jira_projects
+        ]
         
         if project_keys_to_sync:
             # Удаляем старые статусы для этих проектов
             deleted_count = db.query(ProjectStatusMapping).filter(
                 ProjectStatusMapping.project_key.in_(project_keys_to_sync)
             ).delete(synchronize_session=False)
-            logger.info(f"Deleted {deleted_count} old status mappings")
+            logger.error(f"Deleted {deleted_count} old status mappings")
             
             # Синхронизируем статусы для каждого проекта
             for project_key in project_keys_to_sync:
                 try:
                     statuses_url = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3/project/{project_key}/statuses"
+                    logger.error(
+                        f"Project statuses request: "
+                        f"project={project_key}, "
+                        f"instance={instance_name}, "
+                        f"cloud_id={cloud_id}"
+                    )
                     statuses_response = _make_jira_request_with_refresh(statuses_url, token, db, user_id)
                     
                     if statuses_response.status_code == 200:
@@ -246,7 +258,7 @@ def sync_projects_from_jira(
                                     is_open = True
                                     is_in_progress = False
                                     is_closed = False
-                                logger.info(f"Status '{status_name}' (category='{category_key}') classified by name heuristic")
+                                logger.error(f"Status '{status_name}' (category='{category_key}') classified by name heuristic")
                             else:
                                 # Неизвестная категория
                                 logger.warning(f"Unknown category '{category_key}' for status '{status_name}', using open status as fallback")
@@ -268,9 +280,12 @@ def sync_projects_from_jira(
                             statuses_synced += 1
                         
                         db.commit()
-                        logger.info(f"Synced {len(unique_statuses)} statuses for {project_key}")
+                        logger.error(f"Synced {len(unique_statuses)} statuses for {project_key}")
                     else:
-                        logger.error(f"Failed to get statuses for {project_key}: {statuses_response.status_code}")
+                        logger.error(
+                            f"Failed to get statuses for {project_key}: "
+                            f"{statuses_response.status_code} {statuses_response.text}"
+                        )
                 except Exception as e:
                     logger.error(f"Failed to sync statuses for {project_key}: {e}")
                     db.rollback()
@@ -278,7 +293,7 @@ def sync_projects_from_jira(
             
             db.commit()
     
-    logger.info(f"Sync completed: projects created={created_count}, updated={updated_count}, "
+    logger.error(f"Sync completed: projects created={created_count}, updated={updated_count}, "
                 f"links added={linked_count}, statuses synced={statuses_synced}")
     
     return {
@@ -358,7 +373,7 @@ def refresh_all_project_statuses(
     for project in projects:
         try:
             statuses_url = f"https://api.atlassian.com/ex/jira/{cloud_id}/rest/api/3/project/{project.key}/statuses"
-            
+            statuses_response = _make_jira_request_with_refresh(statuses_url, token, db, user_id)
             response = _make_jira_request_with_refresh(statuses_url, token, db, user_id)
             
             if response.status_code == 200:
@@ -407,9 +422,12 @@ def refresh_all_project_statuses(
                     statuses_updated += 1
                 
                 db.commit()
-                logger.info(f"Refreshed statuses for {project.key}")
+                logger.error(f"Refreshed statuses for {project.key}")
             else:
-                logger.error(f"Failed to get statuses for {project.key}: {response.status_code}")
+                logger.error(
+                    f"Failed to get statuses for {project.key}: "
+                    f"{statuses_response.status_code} {statuses_response.text}"
+                )
         except Exception as e:
             logger.error(f"Failed to refresh statuses for {project.key}: {e}")
             db.rollback()

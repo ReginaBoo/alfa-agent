@@ -48,8 +48,10 @@ class Settings(BaseSettings):
     ALPHABANK_MODEL: str = "openai/gpt-oss-120b"
 
     ALPHABANK_API_URL: str = (
-        "https://ai-api.pincode-infra.ru/v1/chat/completions"
-)
+            "https://ai-api.pincode-infra.ru/v1/chat/completions"
+    )
+
+    JIRA_SYNC_EXCLUDED_USERS: str = ""
 
     @property
     def DATABASE_URL(self) -> str:

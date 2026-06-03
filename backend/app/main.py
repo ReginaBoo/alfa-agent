@@ -20,9 +20,11 @@ from app.workers.queues import sync_jira_queue
 from app.workers.tasks import sync_jira_task
 from starlette.middleware.base import BaseHTTPMiddleware  
 from starlette.requests import Request  
+from app.tasks.refresh_tokens import refresh_expiring_tokens
+from app.tasks.jira_scheduler import schedule_jira_sync
 # Настройка логгирования
 logging.basicConfig(level=logging.INFO)
-
+import asyncio
 
 # --- Подключение роутеров ---
 import logging
@@ -109,3 +111,9 @@ class CORSLoggingMiddleware(BaseHTTPMiddleware):
 app.add_middleware(CORSLoggingMiddleware)
 
 # ... остальной код (startup, shutdown, health, scheduled_jira_sync)
+@app.on_event("startup")
+async def startup_event():
+
+    asyncio.create_task(refresh_expiring_tokens())
+
+    asyncio.create_task(schedule_jira_sync())
