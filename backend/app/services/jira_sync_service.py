@@ -99,10 +99,10 @@ class JiraSyncService:
         ).all()
         
         if mappings:
-            return [m.status_name for m in mappings]
+            return [m.status_name.strip().lower() for m in mappings]
         
         # Fallback
-        return ['Done', 'Closed', 'Resolved', 'Готово', 'Выполнено', 'Закрыто']
+        return ['done', 'closed', 'resolved', 'готово', 'выполнено', 'закрыто']
 
 
 
@@ -325,25 +325,46 @@ class JiraSyncService:
                 status_name = status.get("name") if status else None
                 status_category = status.get("statusCategory", {}).get("name") if status else None
                 
-                # ========== ОПРЕДЕЛЯЕМ closed_at ==========
+                                # ========== ОПРЕДЕЛЯЕМ closed_at ==========
                 closed_at = None
                 
-                # Если текущий статус закрытый
-                if status_name and status_name in closed_statuses:
-                    closed_at = self._get_closed_at_from_changelog(
-                        issue_key=issue_key,
-                        closed_statuses=closed_statuses
-                    )
-                else:
-                    # Ищем в changelog первый переход в закрытый статус
-                    closing_event = self.db.query(IssueChangelog).filter(
-                        IssueChangelog.issue_key == issue_key,
-                        IssueChangelog.field_name == 'status',
-                        IssueChangelog.to_value.in_(closed_statuses)
-                    ).order_by(IssueChangelog.changed_at.asc()).first()
-                    
-                    if closing_event:
-                        closed_at = closing_event.changed_at
+                # 1. Сначала пробуем resolutiondate (самый точный)
+                resolution_date = fields.get('resolutiondate')
+                if resolution_date:
+                    try:
+                        closed_at = datetime.fromisoformat(resolution_date.replace('Z', '+00:00'))
+                    except Exception as e:
+                        logger.warning(f"Failed to parse resolutiondate for {issue_key}: {e}")
+                
+                # 2. Если нет resolutiondate, ищем в changelog
+                if not closed_at:
+                    # Если текущий статус закрытый
+                    if status_name and status_name.lower() in closed_statuses:
+                        closed_at = self._get_closed_at_from_changelog(
+                            issue_key=issue_key,
+                            closed_statuses=closed_statuses
+                        )
+                    else:
+                        # Ищем в changelog первый переход в закрытый статус
+                        closing_event = self.db.query(IssueChangelog).filter(
+                            IssueChangelog.issue_key == issue_key,
+                            IssueChangelog.field_name == 'status',
+                            IssueChangelog.to_value.in_(closed_statuses)
+                        ).order_by(IssueChangelog.changed_at.asc()).first()
+                        
+                        if closing_event:
+                            closed_at = closing_event.changed_at
+                
+                # 3. Fallback: используем updated_at (только если задача закрыта)
+                if not closed_at and status_name and status_name.lower() in closed_statuses:
+                    updated = fields.get('updated')
+                    if updated:
+                        try:
+                            closed_at = datetime.fromisoformat(updated.replace('Z', '+00:00'))
+                            logger.info(f"Using updated_at as fallback for {issue_key}: {closed_at}")
+                        except Exception as e:
+                            logger.warning(f"Failed to parse updated_at for {issue_key}: {e}")
+                # ==========================================
                 # ==========================================
                 
                 # 4. Проверяем, существует ли уже нормализованная задача

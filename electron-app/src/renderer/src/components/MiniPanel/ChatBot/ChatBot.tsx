@@ -22,7 +22,6 @@ export const ChatBot = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string>(() => {
-    // Восстанавливаем сессию из localStorage
     const saved = localStorage.getItem('chat_session_id');
     if (saved) return saved;
     const newId = crypto.randomUUID();
@@ -32,14 +31,12 @@ export const ChatBot = () => {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Автопрокрутка вниз при новом сообщении
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // Сохраняем историю в localStorage
   useEffect(() => {
     const historyData = messages.map(msg => ({
       role: msg.role,
@@ -48,7 +45,6 @@ export const ChatBot = () => {
     localStorage.setItem('chat_history', JSON.stringify(historyData));
   }, [messages]);
 
-  // Загружаем историю при монтировании
   useEffect(() => {
     const savedHistory = localStorage.getItem('chat_history');
     if (savedHistory) {
@@ -73,6 +69,27 @@ export const ChatBot = () => {
     }));
   };
 
+  // Рендеринг HTML сообщений
+  const renderMessageText = (text: string, role: 'user' | 'assistant') => {
+    if (role === 'user') {
+      return text;
+    }
+
+    // Для AI сообщений преобразуем переносы строк в <br/>
+    let formattedText = text;
+    formattedText = formattedText.replace(/\n/g, '<br/>');
+
+    return (
+      <div
+        dangerouslySetInnerHTML={{ __html: formattedText }}
+        style={{
+          whiteSpace: 'normal',
+          lineHeight: 1.6,
+        }}
+      />
+    );
+  };
+
   const handleSend = async () => {
     if (!inputValue.trim() || isLoading) return;
 
@@ -80,19 +97,16 @@ export const ChatBot = () => {
     setInputValue('');
     setError(null);
 
-    // Добавляем сообщение пользователя
     setMessages((prev) => [...prev, { role: 'user', text: userMessage }]);
     setIsLoading(true);
 
     try {
-      // Вызываем API с улучшенным режимом (AI сам решает какие запросы выполнить)
       const response = await dashboardApi.chatAiCompletion(
         userMessage,
         sessionId,
         buildHistory()
       );
 
-      // Добавляем ответ AI
       setMessages((prev) => [
         ...prev,
         {
@@ -105,7 +119,6 @@ export const ChatBot = () => {
       console.error('Chat error:', err);
       setError(err.response?.data?.detail || 'Ошибка при отправке сообщения');
 
-      // Добавляем сообщение об ошибке
       setMessages((prev) => [
         ...prev,
         {
@@ -128,7 +141,6 @@ export const ChatBot = () => {
 
   return (
     <div className={s.chatContainer}>
-      {/* Заголовок с кнопкой очистки */}
       <div className={s.chatHeader}>
         <span>Чат с AI</span>
         <Button size="small" onClick={handleClearHistory}>
@@ -136,19 +148,17 @@ export const ChatBot = () => {
         </Button>
       </div>
 
-      {/* Область сообщений */}
       <div className={s.messageList} ref={scrollRef}>
         {messages.map((msg, index) => (
           <div key={index} className={s.messageItem}>
             <Space align="start" className={msg.role === 'user' ? s.reverseRow : ''}>
               <div className={`${s.bubble} ${msg.role === 'assistant' ? s.aiBubble : s.userBubble}`}>
-                {msg.text}
+                {renderMessageText(msg.text, msg.role)}
               </div>
             </Space>
           </div>
         ))}
 
-        {/* Индикатор загрузки */}
         {isLoading && (
           <div className={`${s.messageItem} ${s.aiItem}`}>
             <Space align="start">
@@ -160,7 +170,6 @@ export const ChatBot = () => {
           </div>
         )}
 
-        {/* Ошибка */}
         {error && (
           <div className={`${s.messageItem} ${s.aiItem}`}>
             <Alert
@@ -175,7 +184,6 @@ export const ChatBot = () => {
         )}
       </div>
 
-      {/* Поле ввода */}
       <div className={s.inputContainer}>
         <Space.Compact className={s.inputGroup} style={{ width: '100%' }}>
           <Input

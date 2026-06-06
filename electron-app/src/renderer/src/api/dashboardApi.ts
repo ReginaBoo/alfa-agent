@@ -108,15 +108,33 @@ export const dashboardApi = {
     return response.data;
   },
 
-  getProjectCycleTime: async (projectId: string, period: string): Promise<CycleTimeData> => {
+  getProjectCycleTime: async (
+    projectId: string,
+    period: string
+  ): Promise<{
+    averageTimeText: string;
+    stages: CycleTimeData['stages'];      // по этапам (Аналитика, Код...)
+    statuses: CycleTimeData['stages'];    // по статусам (Backlog, In Progress...)
+  }> => {
     if (USE_MOCKS) {
-      return new Promise((resolve) => setTimeout(() => resolve(mockProjectCycleTimeData), 500));
+      return new Promise((resolve) => setTimeout(() => resolve({
+        averageTimeText: "9 дн. 1 ч.",
+        stages: mockProjectCycleTimeData.stages,
+        statuses: [
+          { id: "1", label: "In Progress", hours: 98.3, warning: true, tooltip: "..." },
+          { id: "2", label: "Backlog", hours: 152.4, warning: true, tooltip: "..." },
+          { id: "3", label: "Done", hours: 195 }
+        ]
+      }), 500));
     }
 
-    const response = await api.get<CycleTimeData>(
-      `/projects/${projectId}/cycle-time`,
-      { params: { period } }
-    );
+    const response = await api.get<{
+      averageTimeText: string;
+      stages: CycleTimeData['stages'];
+      statuses: CycleTimeData['stages'];
+    }>(`/projects/${projectId}/cycle-time`, {
+      params: { period }
+    });
     return response.data;
   },
 

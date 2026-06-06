@@ -83,8 +83,9 @@ export interface CycleStage {
 }
 
 export interface CycleTimeData {
-  stages: CycleStage[];
   averageTimeText: string;
+  stages: CycleStage[];
+  statuses: CycleStage[];
 }
 
 //Загрузка команды

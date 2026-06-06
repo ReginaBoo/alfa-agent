@@ -1,4 +1,6 @@
 import { Row, Col, Space } from 'antd';
+import { useState } from 'react';
+import { useParams } from 'react-router-dom';
 
 import s from './ProjectDashboard.module.css';
 import { AIInsights } from '../../Charts/AIInsights/AIInsights';
@@ -8,12 +10,7 @@ import { TeamWorkloadList } from '../../Charts/TeamWorkloadList/TeamWorkloadList
 import { TeamFocusChart } from '../../Charts/TeamFocusChart/TeamFocusChart';
 import { DownloadReportBtn, MetricsSelect, PeriodSelect, DashboardLoader, DashboardEmpty, MetricInfoTooltip, MetricTypeBadge } from '../../../shared/DashboardControls';
 import { DashboardPeriod, DashboardMetric } from '../../../../types/dashboard';
-import { useState } from 'react';
 import { useProjectTasks, useProjectAIInsights, useProjectCycleTime, useProjectTeamWorkload, useProjectTeamFocus } from '../../../../hooks/useProjectData';
-import { useParams } from 'react-router-dom';
-
-
-
 
 export const ProjectDashboard = () => {
   const [timePeriod, setTimePeriod] = useState<DashboardPeriod>('all');
@@ -22,15 +19,43 @@ export const ProjectDashboard = () => {
     'activity',
     'codeCount',
   ]);
+
   const { id } = useParams<{ id: string }>();
   const { data: aiInsights = [], isLoading: isAiInsightsLoading } = useProjectAIInsights(id || '');
   const { data: workloadData, isLoading: isWorkloadLoading } = useProjectTeamWorkload(id || '', timePeriod);
   const { data: cycleTimeData, isLoading: isCycleTimeLoading } = useProjectCycleTime(id || '', timePeriod);
   const { data: focusData, isLoading: isFocusLoading } = useProjectTeamFocus(id || '', timePeriod);
   const { data: projectData, isLoading } = useProjectTasks(id || '', timePeriod);
+
   const handleDownloadReport = () => {
     console.log('Скачивание отчета за период:', timePeriod);
   };
+
+  // 🔥 УМНОЕ ОПРЕДЕЛЕНИЕ: что показывать
+  const getDisplayData = () => {
+    if (!cycleTimeData) return { data: null, view: null };
+
+    const stages = cycleTimeData.stages || [];
+    const statuses = cycleTimeData.statuses || [];
+
+    // Если есть хотя бы 2 этапа (Внедрение + ещё какой-то)
+    const hasValidStages = stages.length >= 2;
+
+    if (hasValidStages) {
+      return { data: stages, view: 'stages' };
+    }
+
+    // Если нет этапов, пробуем статусы
+    if (statuses.length > 0) {
+      return { data: statuses, view: 'statuses' };
+    }
+
+    // Нет данных
+    return { data: null, view: null };
+  };
+
+  const displayData = getDisplayData();
+  const hasCycleData = displayData.data && displayData.data.length > 0;
 
   return (
     <div className={s.wrapper}>
@@ -61,7 +86,8 @@ export const ProjectDashboard = () => {
             {isAiInsightsLoading ? (
               <DashboardLoader minHeight="200px" tip='Загружаем выводы' />
             ) : (
-              <AIInsights variant="compact" data={aiInsights} />)}
+              <AIInsights variant="compact" data={aiInsights} />
+            )}
           </div>
         </Col>
 
@@ -75,22 +101,24 @@ export const ProjectDashboard = () => {
                 )}
               </div>
             </div>
+
             {isCycleTimeLoading ? (
               <DashboardLoader minHeight="200px" tip="Загружаем время цикла..." />
-            ) : !cycleTimeData || cycleTimeData.stages.length === 0 ? (
+            ) : !hasCycleData ? (
               <DashboardEmpty description="Нет данных по времени цикла за этот период" minHeight="200px" />
             ) : (
               <>
                 <div className={s.avgTime}>
                   Среднее время — {cycleTimeData.averageTimeText}
                 </div>
-                <CycleTimeChart stages={cycleTimeData.stages} />
+                <CycleTimeChart stages={displayData.data} />
               </>
             )}
           </div>
         </Col>
       </Row>
 
+      {/* Остальной код без изменений */}
       <Row gutter={[20, 20]}>
         <Col span={18}>
           <div className={s.gantSection}>
@@ -111,11 +139,10 @@ export const ProjectDashboard = () => {
                 data={projectData?.tasks || []}
                 viewRange={projectData?.viewRange || { start: '2026-03-01', end: '2026-03-31' }}
               />
-
             )}
-
           </div>
         </Col>
+
         <Col span={6}>
           <Row gutter={[16, 16]}>
             <div className={s.workloadStats}>
@@ -144,6 +171,7 @@ export const ProjectDashboard = () => {
                 />
               )}
             </div>
+
             <div className={s.focusStats}>
               <div className={s.titles}>
                 <div className={s.title}>
@@ -161,9 +189,9 @@ export const ProjectDashboard = () => {
                 <TeamFocusChart categories={focusData.categories} />
               )}
             </div>
-          </Row >
+          </Row>
         </Col>
-      </Row >
-    </div >
+      </Row>
+    </div>
   );
 };

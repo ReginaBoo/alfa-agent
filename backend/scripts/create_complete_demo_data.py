@@ -346,7 +346,7 @@ def generate_changelog(issue_key, created_at, closed_at, workflow, config=None):
 
 
 def generate_issue_data(project_key, config, issue_num, project_id, now, is_subtask=False, parent_id=None):
-    """Генерирует данные для одной задачи с контролируемой загрузкой"""
+    """Генерирует данные для одной задачи с правильным распределением по времени"""
     
     # Тип задачи
     if is_subtask:
@@ -362,19 +362,14 @@ def generate_issue_data(project_key, config, issue_num, project_id, now, is_subt
         issue_type = "Task"
         prefix = "Task"
     
-    # Приоритет
     priority = random.choice(["Low", "Medium", "High", "High", "Critical"])
-    
-    # Статус с учётом профиля загрузки
     workflow = config["workflow"]
     open_ratio = config.get("open_ratio", 0.35)
-    closed_recent_ratio = config.get("closed_recent_ratio", 0.65)
     
     status_rand = random.random()
     
     if status_rand < open_ratio:
-        # Открытые задачи (создают нагрузку)
-        # Распределяем между начальными статусами
+        # Открытые задачи — текущие
         if len(workflow) >= 3:
             status_idx = random.choice([0, 1, 2])
         elif len(workflow) >= 2:
@@ -384,75 +379,68 @@ def generate_issue_data(project_key, config, issue_num, project_id, now, is_subt
         status = workflow[status_idx]
         is_closed = False
     else:
-        # Закрытые задачи (не создают нагрузку)
+        # Закрытые задачи
         status = workflow[-1]
         is_closed = True
     
-    # Назначенный пользователь
     all_team = config["team"] + config.get("qa", [])
+    assignee = random.choice(all_team) if random.random() < 0.85 else None
     
-    if random.random() < 0.15:
-        # 15% задач не назначены
-        assignee = None
-    else:
-        assignee = random.choice(all_team)
+    # ============================================================
+    # 🔥 НОВОЕ РАСПРЕДЕЛЕНИЕ ДАТ
+    # ============================================================
     
-    # Даты (реалистичные)
-    # Закрытые задачи - созданы недавно (чтобы попали в velocity за 2 недели)
-    # Открытые задачи - могут быть старыми
     if is_closed:
-        # Закрытая задача - создана 3-20 дней назад
-        created_days_ago = random.randint(3, 20)
-        created_at = now - timedelta(days=created_days_ago)
-    else:
-        # Открытая задача - может быть старой
-        created_days_ago = random.randint(10, 90)
-        created_at = now - timedelta(days=created_days_ago)
-    
-    if not is_closed:
-        # Открытая задача
-        updated_at = now
-        closed_at = None
-        # Для открытых задач - due_date в будущем или просрочена
-        if random.random() < 0.3:
-            # 30% просрочены
-            due_date = now - timedelta(days=random.randint(1, 14))
+        # Закрытые задачи:
+        # 40% — за последние 7 дней (для last week)
+        # 35% — за 8-30 дней (для истории)
+        # 25% — за 31-90 дней (для velocity)
+        rand_type = random.random()
+        
+        if rand_type < 0.6:
+            # Последние 7 дней
+            closed_days_ago = random.randint(1, 7)
+        elif rand_type < 0.9:
+            # 8-30 дней назад
+            closed_days_ago = random.randint(8, 30)
         else:
-            due_date = now + timedelta(days=random.randint(7, 30))
-    else:
-        # Закрытая задача
-        # Распределяем по времени закрытия
-        if random.random() < closed_recent_ratio:
-            # Недавно закрытые (влияют на velocity) - ВСЕГДА в 2-недельном периоде
-            closed_days_ago = random.randint(1, 5)
-        else:
-            # Закрытые раньше - но в 4-недельном периоде
-            closed_days_ago = random.randint(8, 18)
+            # 31-90 дней назад
+            closed_days_ago = random.randint(31, 90)
         
         closed_at = now - timedelta(days=closed_days_ago)
         
-        # Cycle time зависит от профиля
+        # Cycle time
         avg_cycle = config.get("avg_cycle_time_days", 5)
         cycle_variation = random.uniform(0.5, 1.5)
         cycle_time_days = max(1, int(avg_cycle * cycle_variation))
         
         created_at = closed_at - timedelta(days=cycle_time_days)
-        updated_at = closed_at  # ВАЖНО: для velocity calculation
+        updated_at = closed_at
         due_date = created_at + timedelta(days=random.randint(7, 30))
-    
-    # Story points - важно для workload calculation!
-    # Открытые задачи - МАЛЕНЬКИЕ story points (меньше нагрузка)
-    # Закрытые задачи - БОЛЬШИЕ story points (высокая velocity)
-    if is_closed:
-        # Закрытые задачи - большие story points = высокая velocity
-        if issue_type == "Bug":
-            story_points = random.choice([8, 13, 21])
-        elif issue_type == "Story":
-            story_points = random.choice([13, 21, 34])
-        else:
-            story_points = random.choice([8, 13, 21])
     else:
-        # Открытые задачи - очень маленькие story points
+        # Открытые задачи — все созданы в последние 30 дней
+        created_days_ago = random.randint(1, 30)
+        created_at = now - timedelta(days=created_days_ago)
+        updated_at = now
+        closed_at = None
+        
+        # Due date: 30% просрочены, 70% в будущем
+        if random.random() < 0.3:
+            due_date = now - timedelta(days=random.randint(1, 14))
+        else:
+            due_date = now + timedelta(days=random.randint(7, 30))
+    
+    # Story points
+    if is_closed:
+        # Закрытые задачи — большие SP
+        if issue_type == "Bug":
+            story_points = random.choice([5, 8, 13])
+        elif issue_type == "Story":
+            story_points = random.choice([8, 13, 21])
+        else:
+            story_points = random.choice([5, 8, 13])
+    else:
+        # Открытые задачи — маленькие SP
         if issue_type == "Bug":
             story_points = random.choice([1, 2, 3])
         elif issue_type == "Story":
@@ -460,50 +448,37 @@ def generate_issue_data(project_key, config, issue_num, project_id, now, is_subt
         else:
             story_points = random.choice([2, 3, 5])
     
-    # Время в работе (для тайм-трекинга)
+    # Время в работе
     if is_closed:
         time_spent = random.randint(4, 40)
-        remaining_estimate = 0  # Закрытые задачи - нет оставшегося времени
+        remaining_estimate = 0
     else:
         time_spent = random.randint(1, 16)
-        remaining_estimate = random.randint(2, 24)  # Оставшееся время для открытых
+        remaining_estimate = random.randint(2, 24)
     
-    # Оригинальная оценка (для расчёта прогресса)
     original_estimate = time_spent + remaining_estimate if remaining_estimate else time_spent * 2
     
     # Описание
     summaries = {
         "Bug": [
             f"[{prefix}-{issue_num}] Критическая ошибка в модуле аутентификации",
-            f"[{prefix}-{issue_num}] Исправление утечки памяти в background workers",
-            f"[{prefix}-{issue_num}] Исправление проблемы с кэшированием",
-            f"[{prefix}-{issue_num}] Ошибка валидации данных в API",
-            f"[{prefix}-{issue_num}] Проблемы с производительностью базы данных"
+            f"[{prefix}-{issue_num}] Исправление утечки памяти",
         ],
         "Story": [
-            f"[{prefix}-{issue_num}] Добавить новую функцию экспорта данных",
-            f"[{prefix}-{issue_num}] Реализовать темную тему интерфейса",
-            f"[{prefix}-{issue_num}] Улучшить UX мобильного приложения",
-            f"[{prefix}-{issue_num}] Интеграция с внешними сервисами"
+            f"[{prefix}-{issue_num}] Новая функция экспорта",
+            f"[{prefix}-{issue_num}] Улучшение UX",
         ],
         "Task": [
             f"[Этап {issue_num}] Разработка модуля",
-            f"[Этап {issue_num}] Тестирование функционала",
-            f"[Этап {issue_num}] Документирование API",
-            f"[Этап {issue_num}] Настройка инфраструктуры"
+            f"[Этап {issue_num}] Тестирование",
         ],
         "Sub-task": [
-            f"[{prefix}-{issue_num}] Сбор требований и ТЗ",
-            f"[{prefix}-{issue_num}] Проектирование базы данных",
-            f"[{prefix}-{issue_num}] Написание unit тестов",
-            f"[{prefix}-{issue_num}] Код-ревью",
-            f"[{prefix}-{issue_num}] Деплой на staging"
+            f"[{prefix}-{issue_num}] Сбор требований",
+            f"[{prefix}-{issue_num}] Проектирование",
         ]
     }
     
     summary = random.choice(summaries[issue_type])
-    
-    # Jira key
     issue_key = f"{project_key}-{issue_num}"
     
     return {
@@ -870,6 +845,39 @@ def main():
                 page_id += 1
         
         db.commit()
+
+
+                # ============================================================
+        # 4.5. ОБНОВЛЕНИЕ АКТИВНОСТИ ПРОЕКТОВ
+        # ============================================================
+        print("\n📅 Обновление активности проектов...")
+        
+        for project_key, config in PROJECTS_CONFIG.items():
+            # Получаем задачи проекта
+            issues = db.execute(text("""
+                SELECT id FROM normalized.jira_issues 
+                WHERE project_key = :project_key AND is_deleted = false
+                LIMIT 30
+            """), {"project_key": project_key}).fetchall()
+            
+            for issue in issues:
+                # Добавляем 3-5 случайных обновлений в последние 60 дней
+                num_updates = random.randint(3, 6)
+                for _ in range(num_updates):
+                    days_ago = random.randint(1, 60)
+                    update_date = datetime.now() - timedelta(days=days_ago)
+                    
+                    # Обновляем updated_at, если новая дата больше
+                    db.execute(text("""
+                        UPDATE normalized.jira_issues 
+                        SET updated_at = GREATEST(updated_at, :update_date)
+                        WHERE id = :issue_id
+                    """), {"issue_id": issue[0], "update_date": update_date})
+            
+            print(f"   ✅ {project_key}: добавлена активность")
+        
+        db.commit()
+        print("   ✅ Активность проектов обновлена")
         
         # ============================================================
         # 5. СТАТИСТИКА
@@ -882,7 +890,7 @@ def main():
             SELECT 
                 p.key,
                 COUNT(DISTINCT ji.id) as issues,
-                COUNT(DISTINCT CASE WHEN ji.status IN ('Done', 'Closed', 'Resolved', 'Готово') THEN ji.id END) as closed,
+                COUNT(DISTINCT CASE WHEN ji.status IN ('Внедрение', 'Done', 'Closed', 'Resolved', 'Готово') THEN ji.id END) as closed,
                 COUNT(DISTINCT pr.id) as prs,
                 COUNT(DISTINCT c.id) as commits
             FROM core.projects p

@@ -84,10 +84,11 @@ def _get_closed_at_from_changelog(db: Session, issue_key: str, closed_statuses: 
     Определяет дату закрытия задачи по changelog.
     Ищет первый переход в закрытый статус.
     """
+    from sqlalchemy import func
     closing_event = db.query(IssueChangelog).filter(
         IssueChangelog.issue_key == issue_key,
         IssueChangelog.field_name == 'status',
-        IssueChangelog.to_value.in_(closed_statuses)
+        func.lower(IssueChangelog.to_value).in_(closed_statuses)
     ).order_by(IssueChangelog.changed_at.asc()).first()
     
     if closing_event:
@@ -144,7 +145,7 @@ def calculate_lead_time(
         else:
             closed_date = _get_closed_at_from_changelog(db, issue.issue_key, closed_statuses)
 
-        if not closed_date and issue.status in closed_statuses:
+        if not closed_date and issue.status.lower() in closed_statuses:
             closed_date = issue.updated_at
 
         if not closed_date:

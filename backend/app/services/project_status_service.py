@@ -19,7 +19,7 @@ class ProjectStatusService:
             ProjectStatusMapping.is_closed == True
         ).all()
 
-        return [m.status_name for m in mappings]
+        return [m.status_name.strip().lower() for m in mappings]
 
     @staticmethod
     def get_open_statuses(

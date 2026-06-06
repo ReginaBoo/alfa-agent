@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 from app.endpoints import auth_endpoints, jira_endpoints, github_endpoints, github_auth_endpoints
 from app.db.base import Base
@@ -42,6 +43,41 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Alpha Agent Backend")
 scheduler = BackgroundScheduler()
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    
+    openapi_schema = get_openapi(
+        title="Alpha Agent API",
+        version="1.0.0",
+        description="API для Alpha Agent",
+        routes=app.routes,
+    )
+    
+    # Добавляем поддержку аутентификации через заголовок
+    openapi_schema["components"]["securitySchemes"] = {
+        "SessionToken": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-Session-Token",
+            "description": "Вставьте session_token из URL или cookie"
+        },
+        "CookieAuth": {
+            "type": "apiKey",
+            "in": "cookie",
+            "name": "session_token",
+            "description": "Или используйте cookie"
+        }
+    }
+    
+    # Применяем ко всем эндпоинтам
+    openapi_schema["security"] = [{"SessionToken": []}, {"CookieAuth": []}]
+    
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
 
 # --- ПРИНУДИТЕЛЬНЫЙ CORS MIDDLEWARE (ДОЛЖЕН БЫТЬ ПЕРВЫМ) ---
 class ForceCorsMiddleware(BaseHTTPMiddleware):

@@ -1,5 +1,3 @@
-# app/services/status_mapping_service.py
-
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -20,37 +18,38 @@ class StatusMappingService:
     async def sync_project_statuses(
         db: Session,
         project_key: str,
-        cloud_id: str,  # ← добавить cloud_id
+        cloud_id: str,
         jira_client: JiraClient,
         synced_by_account_id: str = None
     ) -> List[ProjectStatusMapping]:
         """
         Синхронизирует статусы проекта из Jira API.
-        Использует дедупликацию и upsert для избежания конфликтов.
+        Сохраняет ОРИГИНАЛЬНЫЕ названия статусов (как они приходят из Jira).
         """
         try:
-            # 1. Получаем данные из Jira API через _request
+            # 1. Получаем данные из Jira API
             url = f"/rest/api/3/project/{project_key}/statuses"
             statuses_data = await jira_client._request(
                 cloud_id=cloud_id,
                 endpoint=url,
                 method="GET",
-                user_id=None  # или нужный user_id
+                user_id=None
             )
             
             if not statuses_data:
                 logger.warning(f"No statuses data for project {project_key}")
                 return []
             
-            # 2. ДЕДУПЛИКАЦИЯ: Собираем уникальные статусы
+            # 2. Собираем уникальные статусы с оригинальными названиями
             unique_statuses = {}
             for issue_type_data in statuses_data:
                 for status in issue_type_data.get("statuses", []):
-                    status_name = status.get("name")
+                    status_name = status.get("name")  # Оригинальное название из Jira
                     if status_name not in unique_statuses:
                         unique_statuses[status_name] = status
 
             logger.info(f"Found {len(unique_statuses)} unique statuses for project {project_key}")
+            logger.info(f"Status names: {list(unique_statuses.keys())}")
 
             # 3. Подготавливаем данные для массовой вставки/обновления
             mappings_to_upsert = []
@@ -65,7 +64,7 @@ class StatusMappingService:
                 
                 mappings_to_upsert.append({
                     "project_key": project_key,
-                    "status_name": status_name,
+                    "status_name": status_name,  # ← Оригинальное название!
                     "is_open": is_open,
                     "is_in_progress": is_in_progress,
                     "is_closed": is_closed,
@@ -74,11 +73,10 @@ class StatusMappingService:
                     "synced_by_account_id": synced_by_account_id,
                 })
 
-            # 4. UPSERT: Вставка или обновление (решает проблему дубликатов)
+            # 4. UPSERT: Вставка или обновление
             if mappings_to_upsert:
                 stmt = insert(ProjectStatusMapping).values(mappings_to_upsert)
                 
-                # Что делать при конфликте (уникальность project_key, status_name)
                 update_dict = {
                     "is_open": stmt.excluded.is_open,
                     "is_in_progress": stmt.excluded.is_in_progress,
@@ -96,7 +94,7 @@ class StatusMappingService:
                 db.commit()
                 logger.info(f"Upserted {len(mappings_to_upsert)} statuses for project {project_key}")
 
-                # Возвращаем обновленные/созданные объекты
+                # Возвращаем обновлённые объекты
                 saved_mappings = db.query(ProjectStatusMapping).filter(
                     ProjectStatusMapping.project_key == project_key,
                     ProjectStatusMapping.status_name.in_([m["status_name"] for m in mappings_to_upsert])
@@ -110,7 +108,7 @@ class StatusMappingService:
             db.rollback()
             raise
 
-    # Остальные методы (get_status_role, get_open_statuses_for_project и т.д.) остаются без изменений
+    # Остальные методы остаются без изменений
     @staticmethod
     def get_status_role(
         db: Session,
@@ -202,9 +200,7 @@ class StatusMappingService:
         db: Session,
         project_key: str
     ) -> bool:
-
         exists = db.query(ProjectStatusMapping).filter(
             ProjectStatusMapping.project_key == project_key
         ).first()
-
         return exists is not None

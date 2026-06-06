@@ -271,7 +271,7 @@ def get_projects_stats(
         if not jira_issues:
             continue
 
-        # ---------------------------
+                # ---------------------------
         # WORKLOAD
         # ---------------------------
         assignees = db.query(
@@ -282,24 +282,59 @@ def get_projects_stats(
         ).distinct().all()
 
         workload_values = []
+        
+        # Получаем дату создания проекта
+        project_created_at = project_obj.created_at if project_obj else datetime.utcnow()
+        
         for (assignee_id,) in assignees:
+            if period == "last week":
+                # Для last week - всегда 1 неделя
+                weeks_count = 1
+            else:
+                # Для all - рассчитываем количество недель с момента создания проекта
+                days_since_start = (datetime.utcnow() - project_created_at).days
+                weeks_count = max(2, min(days_since_start / 7, 52))  # от 2 до 52 недель
+            
             wi = calculate_workload_index(
                 db=db,
                 assignee_account_id=assignee_id,
                 project_key=project_key,
-                weeks=1 if period == "last week" else 2
+                weeks=int(weeks_count)
             )
-            if wi:
+            if wi and wi > 0:
                 workload_values.append(wi)
 
-        avg_workload = 0
         if workload_values:
-            avg_workload = round(
-                sum(workload_values) / len(workload_values),
-                2
-            )
+            avg_workload = round(sum(workload_values) / len(workload_values), 2)
+        else:
+            # Fallback: расчёт на уровне проекта
+            if period == "last week":
+                weeks_count = 1
+                cutoff = datetime.utcnow() - timedelta(days=7)
+            else:
+                # Для all - считаем с момента создания проекта
+                cutoff = project_created_at
+            
+            open_sp = db.query(func.sum(JiraIssue.story_points)).filter(
+                JiraIssue.project_key == project_key,
+                JiraIssue.status != 'Внедрение'
+            ).scalar() or 0
+            
+            closed_sp = db.query(func.sum(JiraIssue.story_points)).filter(
+                JiraIssue.project_key == project_key,
+                JiraIssue.status == 'Внедрение',
+                JiraIssue.closed_at >= cutoff
+            ).scalar() or 0
+            
+            if closed_sp > 0:
+                if period == "last week":
+                    avg_workload = open_sp / (closed_sp / weeks_count)
+                else:
+                    # Для all - используем всю историю
+                    avg_workload = open_sp / (closed_sp / weeks_count) if weeks_count > 0 else open_sp
+            else:
+                avg_workload = 0
 
-        # Отображаем в процентах для UI (0.85 -> 85%)
         avg_workload_percent = round(avg_workload * 100)
 
         # ---------------------------
@@ -424,7 +459,7 @@ def get_teams_load(
             detail=f"period must be one of {allowed_periods}"
         )
 
-    weeks = 1 if period == "last week" else 2
+    weeks = 1 if period == "last week" else 6
 
     # Получаем проекты пользователя
     projects = (
@@ -717,7 +752,9 @@ def get_project_tasks(
             "done",
             "closed",
             "resolved",
-            "готово"
+            "готово",
+            "внедрение",
+            "выполнено"
         ]
 
         # END DATE
@@ -755,17 +792,8 @@ def get_project_tasks(
         # DURATION
         duration_hours = 8
 
-        # 1. Есть реальные worklogs Jira
-        if task.time_spent and task.time_spent > 0:
-
-            # Jira хранит секунды
-            duration_hours = max(
-                1,
-                round(task.time_spent / 3600)
-            )
-
-        # 2. Считаем по датам
-        elif (
+        # 1. Считаем по датам (end_date − start_date)
+        if (
             task.created_at
             and end_date
             and end_date >= task.created_at
@@ -776,6 +804,15 @@ def get_project_tasks(
             duration_hours = max(
                 1,
                 ceil(delta.total_seconds() / 3600)
+            )
+
+        # 2. Есть реальные worklogs Jira
+        elif task.time_spent and task.time_spent > 0:
+
+            # Jira хранит секунды
+            duration_hours = max(
+                1,
+                round(task.time_spent / 3600)
             )
 
         # 3. Кривые даты
@@ -796,7 +833,9 @@ def get_project_tasks(
             "done",
             "closed",
             "resolved",
-            "готово"
+            "готово",
+            "внедрение",
+            "выполнено"
         ]:
             progress = 100
 
@@ -825,11 +864,18 @@ def get_project_tasks(
         else:
             progress = 10
 
+        # Форматируем длительность: <24ч — в часах, иначе — в днях
+        if duration_hours < 24:
+            duration_str = f"{duration_hours}ч"
+        else:
+            duration_days = max(1, round(duration_hours / 24))
+            duration_str = f"{duration_days}д"
+
         task_data = {
             "id": str(task.id),
             "issueKey": task.issue_key,
             "task": f"{task.issue_key}: {task.summary}" if task.summary else f"Задача {task.issue_key}",
-            "duration": f"{duration_hours}ч",
+            "duration": duration_str,
             "progress": progress,
             "responsible": task.assignee_name or "Не назначен",
             "start": (task.created_at or now).strftime("%Y-%m-%d"),
@@ -949,125 +995,101 @@ def get_project_cycle_time(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Данные для блока Cycle Time на Dashboard.
-    """
-
     from app.services.metrics.lead_time_new import (
-        calculate_lead_time,
-        calculate_lead_time_by_status
+        calculate_lead_time as calculate_lead_time_stages,
+        calculate_lead_time_by_status as calculate_lead_time_by_status_stages
+    )
+    from app.services.metrics.lead_time import (
+        calculate_lead_time as calculate_lead_time_statuses,
+        calculate_lead_time_by_status as calculate_lead_time_by_status_statuses
     )
     from app.db.models.core import Project, UserProject
     import re
 
-    project = db.query(Project).filter(
-        Project.key == project_id
-    ).first()
-
-    if not project and re.match(r'^\d+$', project_id):
-        project = db.query(Project).filter(
-            Project.id == int(project_id)
-        ).first()
-
-    if not project:
-        raise HTTPException(
-            status_code=404,
-            detail="Project not found"
-        )
-
+    # Получаем проект
+    db_project = db.query(Project).filter(Project.key == project_id).first()
+    
+    if not db_project and re.match(r'^\d+$', project_id):
+        db_project = db.query(Project).filter(Project.id == int(project_id)).first()
+    
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Проверяем доступ
     user_project = db.query(UserProject).filter(
-        UserProject.project_id == project.id,
+        UserProject.project_id == db_project.id,
         UserProject.user_id == current_user.id
     ).first()
-
+    
     if not user_project:
-        raise HTTPException(
-            status_code=403,
-            detail="Access denied"
-        )
-
-    project_key = project.jira_project_key or project.key
-    # period -> days
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    project_key = db_project.jira_project_key or db_project.key
     period_days = 3650 if period == "all" else 7
-
-    # Общий lead time
-    lead_time = calculate_lead_time(
-        db=db,
-        project_key=project_key,
-        period_days=period_days
+    
+    # Версия 1: stages (стандартные этапы)
+    lead_time_stages = calculate_lead_time_stages(
+        db=db, project_key=project_key, period_days=period_days
     )
-
-    # Разбивка по стандартным этапам
-    stages_data = calculate_lead_time_by_status(
-        db=db,
-        project_key=project_key,
-        period_days=period_days
+    stages_data = calculate_lead_time_by_status_stages(
+        db=db, project_key=project_key, period_days=period_days
     )
-
-    avg_hours = lead_time.get("avg_hours", 0)
-
+    
+    avg_hours = lead_time_stages.get("avg_hours", 0)
     days = int(avg_hours // 24)
     hours = int(avg_hours % 24)
-
-    if days > 0:
-        average_time_text = f"{days} дн. {hours} ч."
-    else:
-        average_time_text = f"{hours} ч."
-
-    # Фиксированный порядок этапов
-    STAGE_ORDER = [
-        "Аналитика",
-        "Код",
-        "Ожидание ревью",
-        "Тестирование",
-        "Бизнес-тестирование",
-        "Внедрение"
-    ]
-
+    average_time_text = f"{days} дн. {hours} ч." if days > 0 else f"{hours} ч."
+    
+    STAGE_ORDER = ["Аналитика", "Код", "Ожидание ревью", "Тестирование", "Бизнес-тестирование", "Внедрение"]
     stages = []
     idx = 1
-
+    
     for stage_name in STAGE_ORDER:
-        # Получаем данные для этапа (если есть)
         data = stages_data.get(stage_name)
+        status_hours = round(data.get("avg_hours", 0), 1) if data else 0
         
-        if data:
-            status_hours = round(data.get("avg_hours", 0), 1)
-        else:
-            status_hours = 0
-
-        stage = {
-            "id": str(idx),
-            "label": stage_name,
-            "hours": status_hours,
-        }
-
-        # Warning для этапов >72ч, кроме Внедрения
+        stage = {"id": str(idx), "label": stage_name, "hours": status_hours}
         if status_hours >= 72 and stage_name != "Внедрение":
             stage["warning"] = True
-            stage["tooltip"] = (
-                f"Этот этап занимает в среднем "
-                f"{round(status_hours / 24, 1)} дн."
-            )
-
-        # Добавляем только этапы с ненулевым временем (кроме Внедрения, его всегда показываем если есть)
+            stage["tooltip"] = f"Этот этап занимает в среднем {round(status_hours / 24, 1)} дн."
+        
         if status_hours > 0 or stage_name == "Внедрение":
             stages.append(stage)
             idx += 1
-
-    # Сортируем: сначала по порядку STAGE_ORDER, Внедрение в конце
-    def sort_key(stage):
-        order_idx = STAGE_ORDER.index(stage["label"]) if stage["label"] in STAGE_ORDER else 99
-        # Внедрение всегда в конце
-        if stage["label"] == "Внедрение":
-            return (1, 0)
-        return (0, order_idx)
     
-    stages.sort(key=sort_key)
-
+    # Версия 2: statuses (оригинальные статусы)
+    statuses_data = calculate_lead_time_by_status_statuses(
+        db=db, project_key=project_key, period_days=period_days
+    )
+    
+    statuses = []
+    idx = 1
+    
+    for status_name, data in statuses_data.items():
+        status_hours = round(data.get("avg_hours", 0), 1)
+        
+        stage = {"id": str(idx), "label": status_name, "hours": status_hours}
+        
+        is_final = status_name in ["Done", "Closed", "Resolved"]
+        if status_hours >= 72 and not is_final:
+            stage["warning"] = True
+            stage["tooltip"] = f"Этот этап занимает в среднем {round(status_hours / 24, 1)} дн."
+        
+        statuses.append(stage)
+        idx += 1
+    
+    # Сортировка статусов
+    def sort_key(stage):
+        if stage["label"] in ["Done", "Closed", "Resolved"]:
+            return (1, stage["hours"])
+        return (0, -stage["hours"])
+    
+    statuses.sort(key=sort_key)
+    
     return {
         "averageTimeText": average_time_text,
-        "stages": stages
+        "stages": stages,
+        "statuses": statuses
     }
 
 @router.get("/api/mini-panel/insights")
@@ -1118,7 +1140,7 @@ def get_project_team_workload(
         )
 
     project_key = project.key
-    weeks = 1 if period == "last week" else 4
+    weeks = 1 if period == "last week" else 6
     workload_data = get_project_workload_detail(
         db=db,
         project_key=project_key,
