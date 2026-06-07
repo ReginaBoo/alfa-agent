@@ -109,7 +109,7 @@ export const ProjectDashboard = () => {
             ) : (
               <>
                 <div className={s.avgTime}>
-                  Среднее время — {cycleTimeData.averageTimeText}
+                  Среднее время — {cycleTimeData?.averageTimeText}
                 </div>
                 <CycleTimeChart stages={displayData.data} />
               </>

@@ -4,42 +4,63 @@ import s from './TasksGanttChart.module.css';
 import isBetween from 'dayjs/plugin/isBetween';
 import isoWeek from 'dayjs/plugin/isoWeek';
 import dayjs from 'dayjs';
+import { GanttRecord, ViewRange } from '../../../../types/dashboard';
 
 dayjs.extend(isBetween);
 dayjs.extend(isoWeek);
 
-export interface GanttRecord {
-  id: string;
-  task: string;
-  duration: string;
-  progress: number;
-  start?: string;
-  end?: string;
-  responsible?: string;
-  isOverdue?: boolean;
-  overdueSince?: string;
-  children?: GanttRecord[];
-}
-
 interface TasksGanttChartProps {
   data: GanttRecord[];
-  viewRange: {
-    start: string;
-    end: string;
-  };
+  viewRange: ViewRange;
 }
 
 const COLUMN_WIDTH = 85;
 
-// Утилита генерации мягкого пастельного цвета по имени (Хеширование строки)
-const generateColorByName = (name: string): string => {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  // Распределяем оттенки по кругу HSL, сохраняя приятную насыщенность и яркость
-  const hue = Math.abs(hash % 360);
-  return `hsl(${hue}, 75%, 60%)`;
+const DISTINCT_COLORS = [
+  '#1890ff', // Ярко-синий
+  '#13c2c2', // Бирюзовый
+  '#fa8c16', // Оранжевый
+  '#722ed1', // Фиолетовый
+  '#eb2f96', // Насыщенный розовый
+  '#faad14', // Песочно-желтый
+  '#2f54eb', // Индиго
+  '#fa541c', // Кирпично-красный
+  '#a0d911', // Салатовый
+  '#135200', // Темно-зеленый
+  '#00474f', // Глубокий сине-зеленый
+  '#b37feb', // Светло-пурпурный
+];
+
+// Дефолтный цвет для неназначенных задач
+const UNASSIGNED_COLOR = '#8c8c8c'; // Спокойный серый (идеально для "Не назначен")
+
+const generateColorMap = (records: GanttRecord[]): Record<string, string> => {
+  const colors: Record<string, string> = {
+    'default': '#1890ff',
+    'Не назначен': UNASSIGNED_COLOR
+  };
+
+  // Собираем ТОЛЬКО уникальных реальных сотрудников
+  const uniqueNames = new Set<string>();
+
+  const extractResponsibles = (dataList: GanttRecord[]) => {
+    dataList.forEach(item => {
+      if (item.responsible && item.responsible !== 'Не назначен') {
+        uniqueNames.add(item.responsible);
+      }
+      if (item.children) extractResponsibles(item.children);
+    });
+  };
+
+  extractResponsibles(records);
+
+  // Распределяем контрастные цвета из палитры
+  Array.from(uniqueNames).forEach((name, index) => {
+    const colorIndex = index % DISTINCT_COLORS.length;
+    colors[name] = DISTINCT_COLORS[colorIndex];
+  });
+
+  return colors;
 };
 
 const generateGanttColumns = (
@@ -47,11 +68,13 @@ const generateGanttColumns = (
   endDate: string,
   colorMap: Record<string, string>
 ) => {
-  let currentWeekStart = dayjs(startDate).startOf('isoWeek');
-  const endLimit = dayjs(endDate);
+  const timelineStart = dayjs(startDate).startOf('isoWeek');
+  const timelineEnd = dayjs(endDate);
+
+  let currentWeekStart = timelineStart;
   const columns: any[] = [];
 
-  while (currentWeekStart.isBefore(endLimit)) {
+  while (currentWeekStart.isBefore(timelineEnd)) {
     const sDate = currentWeekStart;
     const eDate = sDate.add(6, 'day');
 
@@ -61,12 +84,10 @@ const generateGanttColumns = (
     let monthColumn = columns.find(col => col.title === monthTitle);
 
     if (!monthColumn) {
-      monthColumn = {
-        title: monthTitle,
-        children: [],
-      };
+      monthColumn = { title: monthTitle, children: [] };
       columns.push(monthColumn);
     }
+
     const weekOfYear = sDate.isoWeek();
 
     monthColumn.children.push({
@@ -77,108 +98,68 @@ const generateGanttColumns = (
         </div>
       ),
       width: COLUMN_WIDTH,
-      onCell: () => ({
-        className: s.timelineCell
-      }),
+      onCell: () => ({ className: s.timelineCell }),
       render: (_: any, record: GanttRecord) => {
         if (record.children || !record.start || !record.end) return null;
 
         const taskStart = dayjs(record.start);
         const taskEnd = dayjs(record.end);
 
-        const isTaskInWeek = !(taskEnd.isBefore(sDate, 'day') || taskStart.isAfter(eDate, 'day'));
+        if (taskEnd.isBefore(timelineStart, 'day') || taskStart.isAfter(timelineEnd, 'day')) {
+          return null;
+        }
 
-        if (isTaskInWeek) {
-          const startInWeek = taskStart.isBefore(sDate, 'day') ? sDate : taskStart;
-          const endInWeek = taskEnd.isAfter(eDate, 'day') ? eDate : taskEnd;
+        const visibleStart = taskStart.isBefore(timelineStart, 'day') ? timelineStart : taskStart;
+        const visibleEnd = taskEnd.isAfter(timelineEnd, 'day') ? timelineEnd : taskEnd;
 
-          const daysActiveInWeek = endInWeek.diff(startInWeek, 'day') + 1;
-          const offsetDays = startInWeek.diff(sDate, 'day');
+        const isStartColumn = visibleStart.isBetween(sDate, eDate, 'day', '[]');
+
+        if (isStartColumn) {
+          const offsetDays = visibleStart.diff(sDate, 'day');
+          const totalVisibleDays = visibleEnd.diff(visibleStart, 'day') + 1;
 
           const leftPercent = (offsetDays / 7) * 100;
-          const widthPercent = (daysActiveInWeek / 7) * 100;
+          const widthPercent = (totalVisibleDays / 7) * 100;
 
-          const isActualStart = taskStart.isBetween(sDate, eDate, 'day', '[]');
-          const isActualEnd = taskEnd.isBetween(sDate, eDate, 'day', '[]');
+          const isCutLeft = taskStart.isBefore(timelineStart, 'day');
+          const isCutRight = taskEnd.isAfter(timelineEnd, 'day');
 
-          // Показываем имя ТОЛЬКО в первой неделе задачи (когда taskStart попадает в эту неделю)
-          const isFirstWeekOfTask = taskStart.isSame(sDate, 'day') || taskStart.isAfter(sDate, 'day');
-          const showResponsibleName = isFirstWeekOfTask && widthPercent >= 15 && record.responsible && record.responsible !== 'Не назначен';
-
-          const responsibleName = record.responsible || 'default';
-          const barColor = colorMap[responsibleName];
+          const responsibleName = record.responsible || 'Не назначен';
+          const barColor = colorMap[responsibleName] || colorMap['default'];
 
           return (
             <div className={s.anchorCell}>
               <Tooltip
                 title={
-                  <div style={{ padding: '8px', minWidth: '200px' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '8px', fontSize: 14 }}>{record.task}</div>
-                    <div style={{ marginBottom: '4px' }}>
-                      <span style={{ color: '#666' }}>Исполнитель:</span>{' '}
-                      <b>{record.responsible || 'Не назначен'}</b>
-                    </div>
-                    <div style={{ marginBottom: '4px' }}>
-                      <span style={{ color: '#666' }}>Сроки:</span>{' '}
-                      {taskStart.format('DD.MM')} - {taskEnd.format('DD.MM')}
-                    </div>
-
+                  <div style={{ padding: '4px', minWidth: '180px' }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>{record.task}</div>
+                    <div><span style={{ color: '#aaa' }}>Исполнитель:</span> {responsibleName}</div>
+                    <div><span style={{ color: '#aaa' }}>Сроки:</span> {taskStart.format('DD.MM')} - {taskEnd.format('DD.MM')}</div>
                     {record.isOverdue && record.overdueSince && (
-                      <div style={{ marginBottom: '4px', color: '#ff4d4f' }}>
-                        Просрочена с {dayjs(record.overdueSince).format('DD.MM.YYYY')}
-                      </div>
+                      <div style={{ color: '#ff4d4f' }}>Просрочена с {dayjs(record.overdueSince).format('DD.MM.YYYY')}</div>
                     )}
-                    <div style={{ marginBottom: '4px' }}>
-                      <span style={{ color: '#666' }}>Прогресс:</span>{' '}
-                      {record.progress}%
-                    </div>
-                    <div>
-                      <span style={{ color: '#666' }}>Длительность:</span>{' '}
-                      {record.duration}
-                    </div>
+                    <div><span style={{ color: '#aaa' }}>Прогресс:</span> {record.progress}%</div>
                   </div>
                 }
               >
                 <div
-                  className={`
-                    ${s.absoluteTaskBar}
-                    ${record.isOverdue ? s.overdueTask : ''}
-                  `}
+                  className={`${s.absoluteTaskBar} ${record.isOverdue ? s.overdueTask : ''}`}
                   style={{
                     left: `${leftPercent}%`,
                     width: `${widthPercent}%`,
                     backgroundColor: barColor,
-                    borderRadius: `
-                      ${isActualStart ? '6px' : '0px'}
-                      ${isActualEnd ? '6px' : '0px'}
-                      ${isActualEnd ? '6px' : '0px'}
-                      ${isActualStart ? '6px' : '0px'}
-                    `,
+                    borderRadius: `${isCutLeft ? '0' : '4px'} ${isCutRight ? '0' : '4px'} ${isCutRight ? '0' : '4px'} ${isCutLeft ? '0' : '4px'}`
                   }}
                 >
-                  {/* Показываем имя только в первой неделе задачи */}
-                  {showResponsibleName && (
-                    <span style={{
-                      fontSize: 10,
-                      color: 'white',
-                      fontWeight: 500,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      padding: '0 4px',
-                      display: 'block',
-                      textAlign: 'center',
-                      lineHeight: '20px',
-                      textShadow: '0 1px 2px rgba(0,0,0,0.3)'
-                    }}>
-                      {record.responsible}
-                    </span>
-                  )}
+                  <span className={s.barText}>
+                    {responsibleName !== 'Не назначен' ? responsibleName : ''}
+                  </span>
                 </div>
               </Tooltip>
             </div>
           );
         }
+
         return null;
       },
     });
@@ -194,41 +175,18 @@ const fixedColumns = [
     title: 'Задача',
     dataIndex: 'task',
     key: 'task',
-    width: 160, // Можно уменьшить со 180 до 150-160, если нужно ещё компактнее
+    width: 160,
     fixed: 'left' as const,
     ellipsis: true,
     render: (text: string, record: GanttRecord) => (
-      // Добавляем width: '100%' и overflow: 'hidden' на общую обертку
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%', overflow: 'hidden' }}>
-        <Tooltip
-          title={text}
-          placement="topRight"
-          mouseEnterDelay={0.3}
-        >
-          {/* Сжимаем сам текст задачи */}
-          <span style={{
-            cursor: 'pointer',
-            fontWeight: 500,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            display: 'block'
-          }}>
+        <Tooltip title={text} placement="topRight" mouseEnterDelay={0.3}>
+          <span style={{ cursor: 'pointer', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
             {text}
           </span>
         </Tooltip>
-
-        {/* Сжимаем текст исполнителя, если он слишком длинный */}
         {record.responsible && record.responsible !== 'Не назначен' && (
-          <span style={{
-            fontSize: 11,
-            color: '#666',
-            fontWeight: 400,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            display: 'block'
-          }}>
+          <span style={{ fontSize: 11, color: '#666', fontWeight: 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
             {record.responsible}
           </span>
         )}
@@ -239,7 +197,7 @@ const fixedColumns = [
     title: 'Длительность',
     dataIndex: 'duration',
     key: 'duration',
-    width: 80, // Уменьшаем со 110 до 80 (для "8ч", "3д" этого более чем достаточно)
+    width: 80,
     fixed: 'left' as const,
     ellipsis: true,
     render: (text: string) => <span title={text}>{text}</span>
@@ -247,31 +205,23 @@ const fixedColumns = [
   {
     title: 'Готовность',
     dataIndex: 'progress',
-    width: 90, // Слегка уменьшаем со 100 до 90
+    width: 90,
     render: (p: number) => <Progress percent={p} size="small" />,
     fixed: 'left' as const
-  },
+  }
 ];
 
 export const TasksGanttChart: React.FC<TasksGanttChartProps> = ({ data, viewRange }) => {
-  // Динамически собираем карту цветов для всех уникальных исполнителей из пришедших данных
+
+  // Карта цветов сотрудников
   const autoResponsibleColors = useMemo(() => {
-    const colors: Record<string, string> = { default: '#1890ff' };
-
-    const extractResponsibles = (records: GanttRecord[]) => {
-      records.forEach(item => {
-        if (item.responsible && !colors[item.responsible]) {
-          colors[item.responsible] = generateColorByName(item.responsible);
-        }
-        if (item.children) {
-          extractResponsibles(item.children);
-        }
-      });
-    };
-
-    extractResponsibles(data);
-    return colors;
+    return generateColorMap(data);
   }, [data]);
+
+  // Вытаскиваем список сотрудников для отображения в легенде (исключая системный дефолт)
+  const legendItems = useMemo(() => {
+    return Object.keys(autoResponsibleColors).filter(name => name !== 'default');
+  }, [autoResponsibleColors]);
 
   const dynamicColumns = useMemo(() => {
     return generateGanttColumns(viewRange.start, viewRange.end, autoResponsibleColors);
@@ -281,6 +231,24 @@ export const TasksGanttChart: React.FC<TasksGanttChartProps> = ({ data, viewRang
 
   return (
     <div className={s.ganttCard}>
+      {/* Секция Легенды */}
+      {legendItems.length > 0 && (
+        <div className={s.legendWrapper}>
+          <span className={s.legendTitle}>Исполнители:</span>
+          <div className={s.legendContainer}>
+            {legendItems.map(name => (
+              <div key={name} className={s.legendItem}>
+                <span
+                  className={s.legendColorBadge}
+                  style={{ backgroundColor: autoResponsibleColors[name] }}
+                />
+                <span className={s.legendName}>{name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className={s.ganttContainer}>
         <Table
           className={s.ganttTable}
@@ -290,10 +258,7 @@ export const TasksGanttChart: React.FC<TasksGanttChartProps> = ({ data, viewRang
           dataSource={data}
           pagination={false}
           bordered
-          scroll={{
-            x: 'max-content',
-            y: 380
-          }}
+          scroll={{ x: 'max-content', y: 380 }}
         />
       </div>
     </div>

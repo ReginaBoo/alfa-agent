@@ -53,26 +53,30 @@ export interface ProjectItem {
 }
 
 //Гант
-export interface GanttProjectResponse {
-  viewRange: {
-    start: string;
-    end: string;
-  };
-  tasks: GanttRecord[];
+export interface ViewRange {
+  start: string;
+  end: string;
 }
 
 export interface GanttRecord {
   id: string;
-  task: string;
-  duration: string;
-  progress: number;
-  start?: string;
-  end?: string;
-  responsible?: string;
-  issueKey?: string; // Добавим ключ задачи (например, "HEALTH-123")
-  children?: GanttRecord[];
+  issueKey: string;      // Ключ задачи в Jira (например, "DEV-81")
+  task: string;          // Название задачи
+  duration: string;      // Длительность строкой (например, "6д", "8ч")
+  progress: number;      // Прогресс выполнения в % (0-100)
+  responsible: string;   // Имя исполнителя или "Не назначен"
+  start: string;         // Дата начала (Обязательная для корректного Ганта)
+  end: string;           // Дата окончания (Обязательная для корректного Ганта)
+  isOverdue: boolean;    // Флаг: просрочена ли задача
+  overdueSince: string | null; // Дата, с которой капает просрочка (или null)
+  status: 'Готово' | 'Backlog' | 'В работе' | string; // Статус задачи с бэка
+  children?: GanttRecord[]; // Подзадачи (если есть иерархия)
 }
 
+export interface GanttProjectResponse {
+  viewRange: ViewRange;
+  tasks: GanttRecord[];
+}
 //Время цикла
 export interface CycleStage {
   id: string;

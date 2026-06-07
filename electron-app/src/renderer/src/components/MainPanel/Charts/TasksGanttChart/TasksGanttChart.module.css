@@ -3,6 +3,10 @@
   border-radius: 8px;
 }
 
+.ganttContainer {
+  position: relative;
+}
+
 .header {
   display: flex;
   justify-content: space-between;
@@ -32,50 +36,39 @@
   z-index: 220 !important;
 }
 
-.ganttTable :global(.ant-table-cell-fix-left) {
-  z-index: 15 !important;
-  background-color: #fff !important;
-  /* Важно, чтобы под ними не просвечивал уезжающий таймлайн */
-}
-
-/* Красивые отступы для обычных текстовых фиксированных колонок слева (Задача, Длительность, Готовность) */
+/* Красивые отступы для обычных ячеек */
 .ganttTable :global(.ant-table-cell) {
   text-align: left !important;
   padding: 12px 16px !important;
 }
 
+/* Гарантируем, что фиксированные левые колонки перекроют уезжающие вбок плашки при скролле */
+.ganttTable :global(.ant-table-cell-fix-left) {
+  z-index: 30 !important;
+  /* Значение должно быть выше, чем z-index у .absoluteTaskBar */
+  background-color: #fff !important;
+  max-width: 180px;
+}
+
 .ganttTable :global(.ant-table-tbody > tr > td:first-child) {
   font-size: 11px;
-  /* white-space: nowrap;  <-- УДАЛЯЕМ ИЛИ КОММЕНТИРУЕМ */
-
-  /* ДОБАВЛЯЕМ СЛЕДУЮЩИЕ СТРОКИ: */
   max-width: 180px;
-  /* Должно совпадать с width из конфигурации колонки */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.ganttTable :global(.ant-table-cell-fix-left) {
-  z-index: 15 !important;
-  background-color: #fff !important;
-  max-width: 180px;
-  /* Ограничиваем максимальную ширину */
-}
-
-/* Обнуление отступов исключительно для колонок таймлайна (где есть класс .timelineCell) */
+/* Колонки таймлайна: убираем паддинги и РАЗРЕШАЕМ плашке вылезать за границы одной ячейки */
 .ganttTable :global(.ant-table-cell).timelineCell {
   padding: 0 !important;
   margin: 0 !important;
   text-align: center !important;
-  height: 40px;
-
-  /* ИСПРАВЛЕНИЕ: overflow-x: hidden прячет кусок плашки,
-     который пытается залезть под фиксированную колонку при скролле */
-  overflow: hidden !important;
+  height: 44px;
+  overflow: visible !important;
+  /* Убран старый overflow: hidden */
 }
 
-/* Обертка-контейнер */
+/* Опорный контейнер в стартовой ячейке */
 .anchorCell {
   position: relative;
   width: 100%;
@@ -84,26 +77,40 @@
   display: block;
 }
 
-/* Стилизация плашки на всю ширину */
+/* Единая цельная плашка, растягивающаяся на всю длину задачи */
 .absoluteTaskBar {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  height: 28px;
-  z-index: 2;
+  height: 26px;
+  z-index: 10;
+  /* Ниже, чем левые фиксированные колонки (30) */
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 11px;
-  cursor: pointer;
-  transition: filter 0.2s;
+  justify-content: flex-start;
+  /* Прижимаем текст к левому началу плашки */
   padding: 0 8px;
   box-sizing: border-box;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  transition: filter 0.2s;
 
-  /* КРИТИЧЕСКИ ВАЖНО ДЛЯ КУПИРОВАНИЯ ТЕКСТА ВНУТРИ ПЛАШКИ: */
+  /* Текст внутри плашки теперь будет идеально обрезаться троеточием строго у правого края всей длинной плашки */
+  overflow: hidden;
+}
+
+.absoluteTaskBar:hover {
+  filter: brightness(0.92);
+}
+
+.barText {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
   white-space: nowrap;
+  overflow: hidden;
   text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .weekHeader {
@@ -118,10 +125,6 @@
 
 .weekDates {
   color: #8c8c8c;
-}
-
-.ganttContainer {
-  position: relative;
 }
 
 /* Аккуратное выделение подзадач */
@@ -145,7 +148,55 @@
   padding-left: 20px !important;
 }
 
+/* Стилизация просроченной задачи */
 .overdueTask {
   border: 2px solid #ff4d4f;
   background: rgba(255, 77, 79, 0.2);
+}
+
+.legendWrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+  background-color: #fafafa;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+}
+
+.legendTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  white-space: nowrap;
+}
+
+.legendContainer {
+  display: flex;
+  flex-wrap: wrap;
+  /* Позволяет легенде красиво переноситься на несколько строк */
+  gap: 16px;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legendColorBadge {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  /* Делает маркер круглым */
+  display: inline-block;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+}
+
+.legendName {
+  font-size: 12px;
+  color: #262626;
+  font-weight: 400;
 }

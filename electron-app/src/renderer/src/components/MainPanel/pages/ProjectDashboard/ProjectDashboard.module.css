@@ -173,7 +173,7 @@
   padding: 20px;
   border-radius: 8px;
   background-color: #ffffff;
-  height: 555px;
+  max-height: 600px;
 }
 
 .gantSection :global(.ant-empty) {
