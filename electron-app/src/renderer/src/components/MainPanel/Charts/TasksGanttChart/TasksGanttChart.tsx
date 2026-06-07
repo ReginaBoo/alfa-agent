@@ -194,21 +194,41 @@ const fixedColumns = [
     title: 'Задача',
     dataIndex: 'task',
     key: 'task',
-    width: 180,
+    width: 160, // Можно уменьшить со 180 до 150-160, если нужно ещё компактнее
     fixed: 'left' as const,
     ellipsis: true,
     render: (text: string, record: GanttRecord) => (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      // Добавляем width: '100%' и overflow: 'hidden' на общую обертку
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%', overflow: 'hidden' }}>
         <Tooltip
           title={text}
           placement="topRight"
           mouseEnterDelay={0.3}
         >
-          <span style={{ cursor: 'pointer', fontWeight: 500 }}>{text}</span>
+          {/* Сжимаем сам текст задачи */}
+          <span style={{
+            cursor: 'pointer',
+            fontWeight: 500,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: 'block'
+          }}>
+            {text}
+          </span>
         </Tooltip>
-        {/* Показываем исполнителя прямо в колонке */}
+
+        {/* Сжимаем текст исполнителя, если он слишком длинный */}
         {record.responsible && record.responsible !== 'Не назначен' && (
-          <span style={{ fontSize: 11, color: '#666', fontWeight: 400 }}>
+          <span style={{
+            fontSize: 11,
+            color: '#666',
+            fontWeight: 400,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: 'block'
+          }}>
             {record.responsible}
           </span>
         )}
@@ -219,7 +239,7 @@ const fixedColumns = [
     title: 'Длительность',
     dataIndex: 'duration',
     key: 'duration',
-    width: 110,
+    width: 80, // Уменьшаем со 110 до 80 (для "8ч", "3д" этого более чем достаточно)
     fixed: 'left' as const,
     ellipsis: true,
     render: (text: string) => <span title={text}>{text}</span>
@@ -227,7 +247,7 @@ const fixedColumns = [
   {
     title: 'Готовность',
     dataIndex: 'progress',
-    width: 100,
+    width: 90, // Слегка уменьшаем со 100 до 90
     render: (p: number) => <Progress percent={p} size="small" />,
     fixed: 'left' as const
   },

@@ -46,7 +46,21 @@
 
 .ganttTable :global(.ant-table-tbody > tr > td:first-child) {
   font-size: 11px;
+  /* white-space: nowrap;  <-- УДАЛЯЕМ ИЛИ КОММЕНТИРУЕМ */
+
+  /* ДОБАВЛЯЕМ СЛЕДУЮЩИЕ СТРОКИ: */
+  max-width: 180px;
+  /* Должно совпадать с width из конфигурации колонки */
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ganttTable :global(.ant-table-cell-fix-left) {
+  z-index: 15 !important;
+  background-color: #fff !important;
+  max-width: 180px;
+  /* Ограничиваем максимальную ширину */
 }
 
 /* Обнуление отступов исключительно для колонок таймлайна (где есть класс .timelineCell) */

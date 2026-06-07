@@ -150,12 +150,12 @@ export const ChatBot = () => {
 
       <div className={s.messageList} ref={scrollRef}>
         {messages.map((msg, index) => (
-          <div key={index} className={s.messageItem}>
-            <Space align="start" className={msg.role === 'user' ? s.reverseRow : ''}>
-              <div className={`${s.bubble} ${msg.role === 'assistant' ? s.aiBubble : s.userBubble}`}>
-                {renderMessageText(msg.text, msg.role)}
-              </div>
-            </Space>
+          <div key={index} className={`${s.messageItem} ${msg.role === 'user' ? s.userItem : s.aiItem}`}>
+
+            <div className={`${s.bubble} ${msg.role === 'assistant' ? s.aiBubble : s.userBubble}`}>
+              {renderMessageText(msg.text, msg.role)}
+            </div>
+
           </div>
         ))}
 
@@ -173,7 +173,7 @@ export const ChatBot = () => {
         {error && (
           <div className={`${s.messageItem} ${s.aiItem}`}>
             <Alert
-              message="Ошибка"
+              title="Ошибка"
               description={error}
               type="error"
               showIcon
