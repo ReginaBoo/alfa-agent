@@ -72,13 +72,13 @@ export const Dashboard = () => {
         </Col>
       </Row>
 
-      {/* Главный контейнер сетки с флагом выравнивания высоты колонок align="stretch" */}
-      <Row gutter={[24, 24]} align="stretch">
+      {/* Сетка с корректным классом dashboardGridRow */}
+      <Row gutter={[24, 24]} align="stretch" className={s.dashboardGridRow}>
 
-        {/* ЛЕВАЯ КОЛОНКА (AI + Загрузка) */}
+        {/* ЛЕВАЯ КОЛОНКА (AI-выводы + Загруженность команд) */}
         <Col xs={24} xl={12} className={s.dashboardColumn}>
-          {/* Верхняя карточка: подстраивается под свой контент */}
-          <div className={s.dashboardCard}>
+          {/* AI-выводы */}
+          <div className={`${s.dashboardCard} ${s.aiCard}`}>
             <div className={s.titles}>
               <div className={s.title}>
                 <h1 className={s.blueTitle}>ai-выводы</h1>
@@ -94,7 +94,7 @@ export const Dashboard = () => {
             </div>
           </div>
 
-          {/* Нижняя карточка: благодаря классу s.fillCard займет ВСЁ оставшееся в колонке место */}
+          {/* Загруженность команд */}
           <div className={`${s.dashboardCard} ${s.fillCard}`}>
             <div className={s.titles}>
               <div className={s.title}>
@@ -112,9 +112,9 @@ export const Dashboard = () => {
           </div>
         </Col>
 
-        {/* ПРАВАЯ КОЛОНКА (Статистика + Активность) */}
+        {/* ПРАВАЯ КОЛОНКА (Статистика проектов + Активность по проектам) */}
         <Col xs={24} xl={12} className={s.dashboardColumn}>
-          {/* Верхняя карточка проекта */}
+          {/* Статистика по проектам (мини-карточки сверху) */}
           <div className={s.statsSection}>
             {projectStats.isLoading ? (
               <DashboardLoader minHeight="120px" tip="Считаем коммиты..." />
@@ -123,7 +123,7 @@ export const Dashboard = () => {
             )}
           </div>
 
-          {/* Нижняя карточка: тоже s.fillCard, растягивается до самого низа */}
+          {/* Активность по проектам */}
           <div className={`${s.dashboardCard} ${s.fillCard}`}>
             <div className={s.titles}>
               <div className={s.title}>

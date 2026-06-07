@@ -1,20 +1,33 @@
 .dashboardWrapper {
   width: 100%;
   padding: 16px;
+  /* Растягиваем дашборд на всю высоту экрана за вычетом шапки */
+  min-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
 }
 
-/* ВАЖНО: Делаем сами колонки Ant Design Flex-контейнерами.
-  По умолчанию на больших экранах (xl) обе колонки станут строго ОДИНАКОВОЙ высоты 
-  (благодаря поведению align="stretch" у Row).
-*/
+/* Главная сетка, которая заставит колонки тянуться вниз */
+.dashboardGridRow {
+  flex-grow: 1;
+}
+
+/* Сами колонки (Левая и Правая) */
 .dashboardColumn {
   display: flex !important;
   flex-direction: column;
-  gap: 24px;
-  /* Фиксированный отступ между верхней и нижней карточкой */
+  gap: 20px;
 }
 
-/* Универсальная базовая карточка */
+/* На больших экранах жестко привязываем высоту колонок к экрану, чтобы работал зум */
+@media (min-width: 1200px) {
+  .dashboardColumn {
+    height: calc(100vh - 180px);
+  }
+}
+
+/* Базовая карточка */
 .dashboardCard {
   display: flex;
   flex-direction: column;
@@ -23,15 +36,36 @@
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
   width: 100%;
+  box-sizing: border-box;
 }
 
-/* ГЛАВНЫЙ СЕКРЕТ: Этот класс заставляет нижнюю карточку 
-  «жадно» забирать себе всё свободное пространство внизу колонки.
-*/
+/* Верхняя карточка AI-выводов (занимает 40% от высоты колонки) */
+.aiCard {
+  height: auto;
+  min-height: 200px;
+  flex-shrink: 0;
+
+}
+
+/* Блок статистики проектов (в правой колонке сверху) */
+.statsSection {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+
+  /* УБИРАЕМ жесткие height: 20% и min-height: 200px */
+  height: auto;
+
+  /* Позволяем карточкам занять естественную высоту, 
+     которую диктует внутренний grid с метриками */
+  flex-shrink: 0;
+}
+
+/* Нижние карточки (Загруженность и Активность) занимают всё оставшееся место */
 .fillCard {
   flex-grow: 1;
-  min-height: 300px;
-  /* Минимальный базовый размер, чтоб график не сжимался в ноль на мелких экранах */
+  min-height: 380px;
+  /* Увеличиваем min-height, чтобы графики всегда оставались крупными и читаемыми */
 }
 
 /* --- Заголовки --- */
@@ -51,11 +85,22 @@
   }
 }
 
+@media (min-width: 1200px) {
+  .dashboardColumn {
+    /* Меняем фиксированный calc(100vh - 180px) на авто-высоту. 
+       Теперь и левая, и правая колонки будут плавно расти вниз, 
+       а скроллиться будет вся страница целиком */
+    height: auto;
+  }
+}
+
 .titles {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+  /* Заголовки не будут сжиматься при изменении масштаба */
 }
 
 .title {
@@ -64,45 +109,27 @@
   gap: 8px;
 }
 
-/* --- Контент AI-выводов --- */
+/* --- Внутренний скролл для AI-выводов --- */
 .scrollableContent {
   flex-grow: 1;
   min-height: 0;
   overflow-y: auto;
 }
 
-@media (min-width: 1200px) {
-  .scrollableContent {
-    max-height: 400px;
-  }
-}
-
-/* --- Секция статистики проектов --- */
-.statsSection {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-/* Контейнеры графиков внутри растянутых карточек */
+/* Контейнеры для графиков Recharts / Chart.js */
 .chartContainer {
   flex-grow: 1;
-  /* График внутри карточки тоже забирает всю высоту */
+  min-height: 0;
   width: 100%;
-  min-height: 220px;
+  position: relative;
 }
 
-/* Фикс для Recharts/Chart.js чтобы они видели реальную высоту флекс-родителя */
+/* Магия адаптивности: заставляем холст графика растягиваться строго по контейнеру */
+.chartContainer :global(.recharts-responsive-container),
 .chartContainer>div {
-  width: 100% !important;
-  height: 100% !important;
-  position: absolute;
-  /* Уберет баг бесконечного расширения графиков во флексах */
+  position: absolute !important;
   top: 0;
   left: 0;
-}
-
-/* Чтобы контейнер под абсолютный график не схлопывался */
-.chartContainer {
-  position: relative;
+  width: 100% !important;
+  height: 100% !important;
 }
