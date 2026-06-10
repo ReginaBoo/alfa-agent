@@ -800,7 +800,7 @@ def _build_system_prompt_with_schema() -> str:
 ПРИМЕР ПРАВИЛЬНОГО ОТВЕТА:
 
 ```sql
-SELECT p.name as project_name, ji.project_key, COUNT(*) as open_tasks FROM normalized.jira_issues ji LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key WHERE ji.status NOT IN ('Done', 'Closed') GROUP BY p.name, ji.project_key LIMIT 10
+SELECT p.name as project_name, ji.project_key, COUNT(*) as open_tasks FROM normalized.jira_issues ji LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key WHERE ji.status NOT IN ('Done', 'Closed', 'Готово') GROUP BY p.name, ji.project_key LIMIT 10
 ```
 
 Анализирую данные по проектам...
@@ -813,25 +813,25 @@ SELECT p.name as project_name, ji.project_key, COUNT(*) as open_tasks FROM norma
 
 Вопрос: «Какой проект самый проблемный?»
 ```sql
-SELECT project_name, project_key, overdue, bugs, (overdue + bugs) as total_problems FROM (SELECT p.name as project_name, ji.project_key, COUNT(*) FILTER (WHERE ji.due_date < NOW()) as overdue, COUNT(*) FILTER (WHERE ji.issue_type = 'Bug') as bugs FROM normalized.jira_issues ji LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key WHERE ji.status NOT IN ('Done', 'Closed') GROUP BY p.name, ji.project_key) AS subq ORDER BY total_problems DESC LIMIT 10
+SELECT project_name, project_key, overdue, bugs, (overdue + bugs) as total_problems FROM (SELECT p.name as project_name, ji.project_key, COUNT(*) FILTER (WHERE ji.due_date < NOW()) as overdue, COUNT(*) FILTER (WHERE ji.issue_type = 'Bug') as bugs FROM normalized.jira_issues ji LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key WHERE ji.status NOT IN ('Done', 'Closed', 'Готово') GROUP BY p.name, ji.project_key) AS subq ORDER BY total_problems DESC LIMIT 10
 ```
 Ответ: Топ проектов с наибольшим количеством проблем...
 
 Вопрос: «Сколько просроченных задач?»
 ```sql
-SELECT p.name as project_name, ji.project_key, COUNT(*) as overdue_count FROM normalized.jira_issues ji LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key WHERE ji.due_date < NOW() AND ji.status NOT IN ('Done', 'Closed') GROUP BY p.name, ji.project_key ORDER BY overdue_count DESC LIMIT 10
+SELECT p.name as project_name, ji.project_key, COUNT(*) as overdue_count FROM normalized.jira_issues ji LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key WHERE ji.due_date < NOW() AND ji.status NOT IN ('Done', 'Closed', 'Готово') GROUP BY p.name, ji.project_key ORDER BY overdue_count DESC LIMIT 10
 ```
 Ответ: Топ проектов по просроченным задачам...
 
 Вопрос: «Где много багов?»
 ```sql
-SELECT p.name as project_name, ji.project_key, COUNT(*) as bug_count FROM normalized.jira_issues ji LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key WHERE ji.issue_type = 'Bug' AND ji.status NOT IN ('Done', 'Closed') GROUP BY p.name, ji.project_key ORDER BY bug_count DESC LIMIT 10
+SELECT p.name as project_name, ji.project_key, COUNT(*) as bug_count FROM normalized.jira_issues ji LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key WHERE ji.issue_type = 'Bug' AND ji.status NOT IN ('Done', 'Closed', 'Готово') GROUP BY p.name, ji.project_key ORDER BY bug_count DESC LIMIT 10
 ```
 Ответ: Проекты с наибольшим количеством багов...
 
 Вопрос: «Сколько задач у Ивана?»
 ```sql
-SELECT ji.assignee_name, COUNT(*) as task_count FROM normalized.jira_issues ji WHERE ji.assignee_name LIKE '%Иван%' AND ji.status NOT IN ('Done', 'Closed') GROUP BY ji.assignee_name LIMIT 10
+SELECT ji.assignee_name, COUNT(*) as task_count FROM normalized.jira_issues ji WHERE ji.assignee_name LIKE '%Иван%' AND ji.status NOT IN ('Done', 'Closed', 'Готово') GROUP BY ji.assignee_name LIMIT 10
 ```
 Ответ: У Ивана X активных задач...
 
@@ -899,13 +899,13 @@ def _generate_sql_from_question(question: str) -> List[str]:
                 SELECT 
                     p.name as project_name, 
                     ji.project_key,
-                    COUNT(*) FILTER (WHERE ji.status NOT IN ('Done', 'Closed')) as open_tasks,
-                    COUNT(*) FILTER (WHERE ji.due_date < NOW() AND ji.status NOT IN ('Done', 'Closed')) as overdue_count,
-                    COUNT(*) FILTER (WHERE ji.issue_type = 'Bug' AND ji.status NOT IN ('Done', 'Closed')) as bug_count,
-                    COUNT(*) FILTER (WHERE ji.created_at < NOW() - INTERVAL '30 days' AND ji.status NOT IN ('Done', 'Closed')) as old_tasks
+                    COUNT(*) FILTER (WHERE ji.status NOT IN ('Done', 'Closed', 'Готово')) as open_tasks,
+                    COUNT(*) FILTER (WHERE ji.due_date < NOW() AND ji.status NOT IN ('Done', 'Closed', 'Готово')) as overdue_count,
+                    COUNT(*) FILTER (WHERE ji.issue_type = 'Bug' AND ji.status NOT IN ('Done', 'Closed', 'Готово')) as bug_count,
+                    COUNT(*) FILTER (WHERE ji.created_at < NOW() - INTERVAL '30 days' AND ji.status NOT IN ('Done', 'Closed', 'Готово')) as old_tasks
                 FROM normalized.jira_issues ji
                 LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key
-                WHERE ji.status NOT IN ('Done', 'Closed')
+                WHERE ji.status NOT IN ('Done', 'Closed', 'Готово')
                 GROUP BY p.name, ji.project_key
             ) AS subq
             ORDER BY total_problems DESC
@@ -921,7 +921,7 @@ def _generate_sql_from_question(question: str) -> List[str]:
                 COUNT(*) as overdue_count
             FROM normalized.jira_issues ji
             LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key
-            WHERE ji.due_date < NOW() AND ji.status NOT IN ('Done', 'Closed')
+            WHERE ji.due_date < NOW() AND ji.status NOT IN ('Done', 'Closed', 'Готово')
             GROUP BY p.name, ji.project_key
             ORDER BY overdue_count DESC
             LIMIT 10"""
@@ -936,7 +936,7 @@ def _generate_sql_from_question(question: str) -> List[str]:
                 COUNT(*) as bug_count
             FROM normalized.jira_issues ji
             LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key
-            WHERE ji.issue_type = 'Bug' AND ji.status NOT IN ('Done', 'Closed')
+            WHERE ji.issue_type = 'Bug' AND ji.status NOT IN ('Done', 'Closed', 'Готово')
             GROUP BY p.name, ji.project_key
             ORDER BY bug_count DESC
             LIMIT 10"""
@@ -945,7 +945,7 @@ def _generate_sql_from_question(question: str) -> List[str]:
     # Задачи у человека — с нормализацией имён
     if 'у' in question_lower and ('задач' in question_lower or 'task' in question_lower):
         # Пытаемся извлечь имя
-        name_match = re.search(r'у\s+([а-яёa-z]+)', question_lower)
+        name_match = re.search(r'у\s+([а-яёa-z0-9_.-]+)', question_lower)
         if name_match:
             raw_name = name_match.group(1)
             normalized_name = _normalize_name(raw_name)
@@ -956,7 +956,7 @@ def _generate_sql_from_question(question: str) -> List[str]:
                     COUNT(*) FILTER (WHERE ji.issue_type = 'Bug') as bug_count,
                     COUNT(*) FILTER (WHERE ji.due_date < NOW()) as overdue_count
                 FROM normalized.jira_issues ji
-                WHERE ji.assignee_name ILIKE '%{normalized_name}%' AND ji.status NOT IN ('Done', 'Closed')
+                WHERE ji.assignee_name ILIKE '%{normalized_name}%' AND ji.status NOT IN ('Done', 'Closed', 'Готово')
                 GROUP BY ji.assignee_name
                 LIMIT 10"""
             ]
@@ -966,7 +966,7 @@ def _generate_sql_from_question(question: str) -> List[str]:
                 COUNT(*) as task_count,
                 COUNT(*) FILTER (WHERE ji.issue_type = 'Bug') as bug_count
             FROM normalized.jira_issues ji
-            WHERE ji.status NOT IN ('Done', 'Closed')
+            WHERE ji.status NOT IN ('Done', 'Closed', 'Готово')
             GROUP BY ji.assignee_name
             ORDER BY task_count DESC
             LIMIT 10"""
@@ -974,7 +974,7 @@ def _generate_sql_from_question(question: str) -> List[str]:
     
     # Запрос "сколько задач у..." (без "у")
     if 'сколько' in question_lower and 'задач' in question_lower:
-        name_match = re.search(r'у\s+([а-яёa-z]+)', question_lower)
+        name_match = re.search(r'у\s+([а-яёa-z0-9_.-]+)', question_lower)
         if name_match:
             raw_name = name_match.group(1)
             normalized_name = _normalize_name(raw_name)
@@ -984,7 +984,7 @@ def _generate_sql_from_question(question: str) -> List[str]:
                     COUNT(*) as task_count,
                     COUNT(*) FILTER (WHERE ji.issue_type = 'Bug') as bug_count
                 FROM normalized.jira_issues ji
-                WHERE ji.assignee_name ILIKE '%{normalized_name}%' AND ji.status NOT IN ('Done', 'Closed')
+                WHERE ji.assignee_name ILIKE '%{normalized_name}%' AND ji.status NOT IN ('Done', 'Closed', 'Готово')
                 GROUP BY ji.assignee_name
                 LIMIT 10"""
             ]
@@ -998,7 +998,7 @@ def _generate_sql_from_question(question: str) -> List[str]:
                 COUNT(*) FILTER (WHERE ji.issue_type = 'Bug') as bugs
             FROM normalized.jira_issues ji
             LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key
-            WHERE ji.status NOT IN ('Done', 'Closed')
+            WHERE ji.status NOT IN ('Done', 'Closed', 'Готово')
             GROUP BY p.name, ji.project_key
             ORDER BY total_open DESC
             LIMIT 10"""
@@ -1021,7 +1021,7 @@ def _generate_sql_from_question(question: str) -> List[str]:
                 COUNT(*) FILTER (WHERE ji.issue_type = 'Bug') as bugs
             FROM normalized.jira_issues ji
             LEFT JOIN core.projects p ON p.jira_project_key = ji.project_key
-            WHERE ji.status NOT IN ('Done', 'Closed')
+            WHERE ji.status NOT IN ('Done', 'Closed', 'Готово')
             GROUP BY p.name, ji.project_key
             ORDER BY total_open DESC
             LIMIT 10"""

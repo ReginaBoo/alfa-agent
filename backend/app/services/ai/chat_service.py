@@ -1,3 +1,4 @@
+# app/services/ai/chat_service.py
 """
 Сервис для умного чата с AI и доступом к БД
 """
@@ -29,47 +30,47 @@ ALLOWED_TABLES = {
 
 # Запрещённые ключевые слова (DML/DDL)
 FORBIDDEN_KEYWORDS = [
-    "INSERT", "UPDATE", "DELETE", "DROP", "TRUNCATE", 
+    "INSERT", "UPDATE", "DELETE", "DROP", "TRUNCATE",
     "ALTER", "CREATE", "MERGE", "EXEC", "EXECUTE"
 ]
 
 
 class ChatService:
     """Сервис для обработки чат-запросов с AI"""
-    
+
     def __init__(self, db: Session, ai_provider: AlphaBankProvider):
         self.db = db
         self.ai_provider = ai_provider
         self.session_id: Optional[str] = None
         self.history: List[Dict[str, str]] = []
-    
+
     def set_session(self, session_id: str, history: Optional[List[Dict[str, str]]] = None):
         """Устанавливает сессию чата"""
         self.session_id = session_id
         self.history = history or []
-    
+
     async def process_message(self, message: str) -> Dict[str, Any]:
         """
         Обрабатывает сообщение пользователя и возвращает ответ AI
-        
+
         Args:
             message: Текст сообщения пользователя
-            
+
         Returns:
             Dict с ответом AI и метаданными
         """
         # Добавляем сообщение пользователя в историю
         self.history.append({"role": "user", "content": message})
-        
+
         # Формируем системный промпт
         system_prompt = self._build_system_prompt()
-        
+
         # Формируем messages для AI
         messages = [
             {"role": "system", "content": system_prompt},
             *self.history[-10:]  # Последние 10 сообщений для контекста
         ]
-        
+
         # Получаем ответ от AI
         try:
             ai_response = await self.ai_provider.chat_completions(messages)
@@ -84,13 +85,13 @@ class ChatService:
                     "tool_calls": []
                 }
             }
-        
+
         # Парсим ответ AI (может содержать tool calls)
         answer, tool_calls, sql_queries = await self._parse_ai_response(ai_response)
-        
+
         # Добавляем ответ AI в историю
         self.history.append({"role": "assistant", "content": answer})
-        
+
         return {
             "answer": answer,
             "session_id": self.session_id,
@@ -99,7 +100,7 @@ class ChatService:
                 "tool_calls": tool_calls
             }
         }
-    
+
     def _build_system_prompt(self) -> str:
         """Формирует системный промпт для AI"""
         return """Вы — умный помощник для аналитики разработки Alpha Agent.
@@ -133,75 +134,103 @@ class ChatService:
 Примеры вопросов и ответов:
 
 Пользователь: "Сколько задач у Ивана?"
-Вызови: execute_sql("SELECT assignee_name, COUNT(*) as task_count FROM normalized.jira_issues WHERE assignee_name = 'Иван' AND status NOT IN ('Done', 'Closed') GROUP BY assignee_name LIMIT 100")
+Вызови: execute_sql("SELECT assignee_name,
+COUNT(*) as task_count
+FROM normalized.jira_issues
+WHERE assignee_name = 'Иван'
+AND status NOT IN (
+    'Done',
+    'Closed',
+    'Готово',
+    'Resolved'
+)
+GROUP BY assignee_name
+LIMIT 100")
 Ответь: "У Ивана X активных задач"
 
 Пользователь: "Какой проект самый проблемный?"
-Вызови: execute_sql("SELECT project_key, COUNT(*) as bug_count FROM normalized.jira_issues WHERE issue_type = 'Bug' AND status NOT IN ('Done', 'Closed') GROUP BY project_key ORDER BY bug_count DESC LIMIT 10")
+Вызови: execute_sql("SELECT project_key, COUNT(*) as bug_count FROM normalized.jira_issues WHERE issue_type = 'Bug' AND status NOT IN ('Done', 'Closed', 'Готово') GROUP BY project_key ORDER BY bug_count DESC LIMIT 10")
 Ответь: "Самый проблемный проект — {project_key} с {count} багами"
 
 Правила:
-- Всегда выполняй SQL запросы перед ответом
-- Если данные получены — опиши их понятным языком
-- Не выдумывай данные
-- Если не уверен — спроси уточняющий вопрос
-- Ограничь ответ 2-3 предложениями"""
+
+1. Сначала определи, нужны ли данные из БД.
+
+2. Если вопрос требует фактических данных
+   (задачи, проекты, пользователи, баги, загрузка),
+   используй execute_sql.
+
+3. Если вопрос общий, приветствие,
+   уточнение или продолжение разговора —
+   отвечай без SQL.
+
+4. Не выполняй SQL без необходимости.
+
+5. Если информации недостаточно —
+   задай уточняющий вопрос.
+
+6. Не выдумывай данные.
+
+7. Если используешь SQL —
+   сначала вызови execute_sql(...),
+   затем сформируй ответ на основе результата."""
+    
 
     async def _parse_ai_response(self, ai_response: str) -> Tuple[str, List[str], List[str]]:
         """
         Парсит ответ AI и извлекает tool calls
-        
+
         Returns:
             Tuple(answer, tool_calls, sql_queries)
         """
         tool_calls = []
         sql_queries = []
-        
+
         # Простой парсинг: ищем SQL запросы в ответе
         sql_pattern = r'execute_sql\("([^"]+)"\)'
         matches = re.findall(sql_pattern, ai_response)
-        
+
         if matches:
             for sql in matches:
                 # Валидируем и выполняем SQL
                 if await self._validate_and_execute_sql(sql):
                     sql_queries.append(sql)
                     tool_calls.append("execute_sql")
-        
+
         # Если есть tool calls, очищаем ответ от технических деталей
         answer = re.sub(sql_pattern, '', ai_response).strip()
         answer = re.sub(r'\(\)', '', answer).strip()
-        
+
         # Если ответ пустой или только технические детали
         if not answer or len(answer) < 10:
             answer = "Данные получены. Что ещё вас интересует?"
-        
+
         return answer, tool_calls, sql_queries
-    
+
     async def _validate_and_execute_sql(self, sql: str) -> bool:
         """
         Валидирует и выполняет SQL запрос
-        
+
         Returns:
             True если запрос выполнен успешно
         """
         sql_upper = sql.upper().strip()
-        
+
         # 1. Проверяем на запрещённые ключевые слова
         for keyword in FORBIDDEN_KEYWORDS:
             if keyword in sql_upper:
                 logger.warning(f"Forbidden keyword in SQL: {keyword}")
                 return False
-        
+
         # 2. Проверяем что это SELECT
         if not sql_upper.startswith("SELECT"):
             logger.warning(f"Not a SELECT query: {sql[:50]}...")
             return False
-        
+
         # 3. Проверяем что таблица в разрешённом списке
         table_pattern = r'FROM\s+([a-zA-Z_][a-zA-Z0-9_.]*)'
         table_matches = re.findall(table_pattern, sql_upper)
-        
+
         for table in table_matches:
             table_lower = table.lower()
             # Проверяем полное имя таблицы (с схемой)
@@ -219,11 +248,11 @@ class ChatService:
                 if not found:
                     logger.warning(f"Table not in allowed list: {table_lower}")
                     return False
-        
+
         # 4. Добавляем LIMIT если нет
         if "LIMIT" not in sql_upper:
             sql = sql + " LIMIT 100"
-        
+
         # 5. Выполняем запрос
         try:
             logger.info(f"Executing SQL: {sql[:200]}...")
@@ -238,17 +267,17 @@ class ChatService:
 
 class ChatToolService:
     """Сервис для выполнения инструментов чата"""
-    
+
     def __init__(self, db: Session):
         self.db = db
-    
+
     def execute_sql(self, sql: str) -> Dict[str, Any]:
         """
         Выполняет SELECT запрос к БД
-        
+
         Args:
             sql: SQL запрос
-            
+
         Returns:
             Результат запроса
         """
@@ -258,15 +287,15 @@ class ChatToolService:
                 "success": False,
                 "error": "Invalid SQL query"
             }
-        
+
         try:
             result = self.db.execute(text(sql))
             rows = result.fetchall()
             columns = result.keys()
-            
+
             # Преобразуем в список словарей
             data = [dict(zip(columns, row)) for row in rows]
-            
+
             return {
                 "success": True,
                 "data": data,
@@ -278,30 +307,30 @@ class ChatToolService:
                 "success": False,
                 "error": str(e)
             }
-    
+
     @staticmethod
     def _validate_sql(sql: str) -> bool:
         """Валидирует SQL запрос"""
         sql_upper = sql.upper().strip()
-        
+
         # Проверяем на запрещённые ключевые слова
         for keyword in FORBIDDEN_KEYWORDS:
             if keyword in sql_upper:
                 return False
-        
+
         # Проверяем что это SELECT
         if not sql_upper.startswith("SELECT"):
             return False
-        
+
         return True
-    
+
     def get_project_metrics(self, project_key: str) -> Dict[str, Any]:
         """
         Получает метрики проекта
-        
+
         Args:
             project_key: Ключ проекта (например, "PROJ")
-            
+
         Returns:
             Метрики проекта
         """
@@ -309,24 +338,27 @@ class ChatToolService:
         from app.services.metrics.sla_score import calculate_sla_score
         from app.services.metrics.health_score import calculate_health_score
         from app.db.models import JiraIssue
-        
+
         # Получаем данные
         assignees = self.db.query(JiraIssue.assignee_account_id).filter(
             JiraIssue.project_key == project_key,
             JiraIssue.assignee_account_id.isnot(None)
         ).distinct().all()
-        
+
         workload_values = []
         for (assignee_id,) in assignees:
-            wi = calculate_workload_index(self.db, assignee_id, project_key, weeks=2)
+            wi = calculate_workload_index(
+                self.db, assignee_id, project_key, weeks=2)
             if wi:
                 workload_values.append(wi)
-        
-        avg_workload = sum(workload_values) / len(workload_values) if workload_values else 0
-        
-        sla = calculate_sla_score(self.db, project_key=project_key, period_days=30)
+
+        avg_workload = sum(workload_values) / \
+            len(workload_values) if workload_values else 0
+
+        sla = calculate_sla_score(
+            self.db, project_key=project_key, period_days=30)
         health = calculate_health_score(self.db, project_key=project_key)
-        
+
         return {
             "project_key": project_key,
             "workload_index": round(avg_workload, 2),
@@ -334,25 +366,25 @@ class ChatToolService:
             "health_score": health['health_score'],
             "status": health['status']
         }
-    
+
     def get_user_workload(self, user_id: str) -> Dict[str, Any]:
         """
         Получает загрузку пользователя
-        
+
         Args:
             user_id: ID пользователя (account_id)
-            
+
         Returns:
             Загрузка пользователя
         """
         from app.db.models import JiraIssue
-        
+
         # Получаем задачи пользователя
         issues = self.db.query(JiraIssue).filter(
             JiraIssue.assignee_account_id == user_id,
             JiraIssue.status.notin_(['Done', 'Closed', 'Готово'])
         ).all()
-        
+
         # Группируем по проектам
         projects = {}
         for issue in issues:
@@ -360,7 +392,7 @@ class ChatToolService:
                 projects[issue.project_key] = {"count": 0, "sp": 0}
             projects[issue.project_key]["count"] += 1
             projects[issue.project_key]["sp"] += issue.story_points or 0
-        
+
         return {
             "user_id": user_id,
             "total_tasks": len(issues),
