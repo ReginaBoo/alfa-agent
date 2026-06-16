@@ -117,3 +117,10 @@ export interface FocusCategory {
 export interface TeamFocusData {
   categories: FocusCategory[];
 }
+
+
+export interface MeResponse {
+  id: number;
+  name: string;
+  email: string;
+}

@@ -63,3 +63,12 @@
   border-radius: 4px;
   white-space: nowrap;
 }
+
+
+.arrow {
+  transition: transform 0.2s ease;
+}
+
+.arrowOpen {
+  transform: rotate(180deg);
+}

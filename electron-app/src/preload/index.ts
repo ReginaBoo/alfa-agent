@@ -17,9 +17,17 @@ if (process.contextIsolated) {
       // Слушать успешную авторизацию
       onAuthSuccess: (callback: (token: string) => void) => {
         ipcRenderer.on('auth-success', (_event, token) => callback(token));
-      }
+      },
+      logout: async () => {
+        return await ipcRenderer.invoke('logout');
+      },
+      onLogout: (callback: () => void) => {
+        ipcRenderer.on('auth-logout', callback);
+      },
     })
   } catch (error) {
     console.error(error)
   }
 }
+
+

@@ -152,7 +152,7 @@ function createWindow(): void {
     mainWindow?.hide()
   })
 
-  ipcMain.handle('get-cookie', async (event, url, name) => {
+  ipcMain.handle('get-cookie', async (_event, url: string, name) => {
     try {
       const cookies = await session.defaultSession.cookies.get({ url });
       const cookie = cookies.find(c => c.name === name);
@@ -164,7 +164,7 @@ function createWindow(): void {
     }
   });
 
-  ipcMain.handle('get-all-cookies', async (event, url) => {
+  ipcMain.handle('get-all-cookies', async (_event, url: string) => {
     try {
       const cookies = await session.defaultSession.cookies.get({ url });
       console.log('[IPC] get-all-cookies:', cookies);
@@ -174,6 +174,7 @@ function createWindow(): void {
       return [];
     }
   });
+
 
   // Обработчик для запуска авторизации из renderer
   ipcMain.handle('start-login', async () => {
@@ -192,6 +193,18 @@ function createWindow(): void {
       console.error('[IPC] Error getting session token:', error);
       return null;
     }
+  });
+
+  ipcMain.handle('logout', async () => {
+    console.log('[MAIN] logout IPC received ');
+
+    await session.defaultSession.clearStorageData({
+      storages: ['cookies']
+    });
+
+    mainWindow?.webContents.send('auth-logout');
+
+    console.log('[MAIN] auth-logout sent to renderer');
   });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -258,6 +271,8 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
+
+
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

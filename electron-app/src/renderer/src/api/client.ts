@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api',
+  baseURL: 'http://localhost:8000/',
   withCredentials: true,
 });
 
@@ -26,7 +26,7 @@ if (token) {
 
 // Перехватчик для логирования
 api.interceptors.request.use(config => {
-  console.log(`📤 [API] ${config.method?.toUpperCase()} ${config.url}`);
+  console.log(`[API] ${config.method?.toUpperCase()} ${config.url}`);
   console.log(`   X-Session-Token:`, config.headers['X-Session-Token'] || 'NOT SET');
   return config;
 });

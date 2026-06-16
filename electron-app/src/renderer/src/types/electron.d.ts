@@ -1,4 +1,4 @@
-export {};
+export { };
 
 declare global {
   interface Window {
@@ -9,6 +9,9 @@ declare global {
       startLogin: () => Promise<void>;
       onAuthSuccess: (callback: (token: string) => void) => void;
       removeAuthListener: () => void;
+      getSessionToken: () => Promise<string | null>;
+      logout: () => Promise<void>;
+      onLogout: (callback: () => void) => void;
     };
   }
 }

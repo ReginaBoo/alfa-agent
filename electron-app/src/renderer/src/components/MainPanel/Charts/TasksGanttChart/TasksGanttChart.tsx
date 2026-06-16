@@ -130,6 +130,8 @@ const generateGanttColumns = (
           return (
             <div className={s.anchorCell}>
               <Tooltip
+                placement="top"
+                autoAdjustOverflow
                 title={
                   <div style={{ padding: '4px', minWidth: '180px' }}>
                     <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>{record.task}</div>

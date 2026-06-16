@@ -8,17 +8,17 @@ import { CycleTimeChart } from '../../Charts/CycleTimeChart/CycleTimeChart';
 import { TasksGanttChart } from '../../Charts/TasksGanttChart/TasksGanttChart';
 import { TeamWorkloadList } from '../../Charts/TeamWorkloadList/TeamWorkloadList';
 import { TeamFocusChart } from '../../Charts/TeamFocusChart/TeamFocusChart';
-import { DownloadReportBtn, MetricsSelect, PeriodSelect, DashboardLoader, DashboardEmpty, MetricInfoTooltip, MetricTypeBadge } from '../../../shared/DashboardControls';
-import { DashboardPeriod, DashboardMetric } from '../../../../types/dashboard';
+import { PeriodSelect, DashboardLoader, DashboardEmpty, MetricInfoTooltip, MetricTypeBadge } from '../../../shared/DashboardControls';
+import { DashboardPeriod } from '../../../../types/dashboard';
 import { useProjectTasks, useProjectAIInsights, useProjectCycleTime, useProjectTeamWorkload, useProjectTeamFocus } from '../../../../hooks/useProjectData';
 
 export const ProjectDashboard = () => {
   const [timePeriod, setTimePeriod] = useState<DashboardPeriod>('all');
-  const [activeMetrics, setActiveMetrics] = useState<DashboardMetric[]>([
-    'effectiveness',
-    'activity',
-    'codeCount',
-  ]);
+  // const [activeMetrics, setActiveMetrics] = useState<DashboardMetric[]>([
+  //   'effectiveness',
+  //   'activity',
+  //   'codeCount',
+  // ]);
 
   const { id } = useParams<{ id: string }>();
   const { data: aiInsights = [], isLoading: isAiInsightsLoading } = useProjectAIInsights(id || '');
@@ -27,9 +27,9 @@ export const ProjectDashboard = () => {
   const { data: focusData, isLoading: isFocusLoading } = useProjectTeamFocus(id || '', timePeriod);
   const { data: projectData, isLoading } = useProjectTasks(id || '', timePeriod);
 
-  const handleDownloadReport = () => {
-    console.log('Скачивание отчета за период:', timePeriod);
-  };
+  // const handleDownloadReport = () => {
+  //   console.log('Скачивание отчета за период:', timePeriod);
+  // };
 
   // 🔥 УМНОЕ ОПРЕДЕЛЕНИЕ: что показывать
   const getDisplayData = () => {
@@ -62,12 +62,12 @@ export const ProjectDashboard = () => {
       <Row justify="end" style={{ marginBottom: 20 }}>
         <Col>
           <Space size={16}>
-            <DownloadReportBtn onDownload={handleDownloadReport} />
+            {/* <DownloadReportBtn onDownload={handleDownloadReport} /> */}
             <PeriodSelect value={timePeriod} onChange={setTimePeriod} />
-            <MetricsSelect
+            {/* <MetricsSelect
               value={activeMetrics}
               onChange={(metrics) => setActiveMetrics(metrics)}
-            />
+            /> */}
           </Space>
         </Col>
       </Row>
@@ -160,7 +160,7 @@ export const ProjectDashboard = () => {
 
               {isWorkloadLoading ? (
                 <DashboardLoader minHeight="180px" tip="Загрузка занятости..." />
-              ) : !workloadData ? (
+              ) : !workloadData || workloadData.members.length == 0 ? (
                 <DashboardEmpty description="Нет данных по загрузке" minHeight="180px" />
               ) : (
                 <TeamWorkloadList
@@ -183,7 +183,7 @@ export const ProjectDashboard = () => {
               </div>
               {isFocusLoading ? (
                 <DashboardLoader minHeight="180px" tip="Считаем фокус..." />
-              ) : !focusData ? (
+              ) : !focusData || focusData.categories.length == 0 ? (
                 <DashboardEmpty description="Нет данных по фокусу" minHeight="180px" />
               ) : (
                 <TeamFocusChart categories={focusData.categories} />

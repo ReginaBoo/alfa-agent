@@ -283,5 +283,4 @@ export const dashboardApi = {
     const response = await api.get('/chat/allowed-tables');
     return response.data;
   },
-
 };

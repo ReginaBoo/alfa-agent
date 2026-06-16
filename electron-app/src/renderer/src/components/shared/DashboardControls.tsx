@@ -4,7 +4,7 @@ import {
 } from '@ant-design/icons';
 import { DashboardPeriod, DashboardMetric, WorkloadCalculationType } from '../../types/dashboard';
 import s from './DashboardControls.module.css';
-
+import { useState } from 'react';
 interface DownloadReportBtnProps {
   onDownload?: () => void;
   loading?: boolean; // Полезно, если отчет будет генерироваться какое-то время
@@ -33,15 +33,22 @@ interface PeriodSelectProps {
 }
 
 export const PeriodSelect = ({ value, onChange }: PeriodSelectProps) => {
+  const [open, setOpen] = useState(false);
+
   return (
     <Select
       className={s.projectSelect}
       value={value}
       onChange={(val) => onChange(val as DashboardPeriod)}
-      suffixIcon={<DownOutlined />}
+      onOpenChange={setOpen}
+      suffixIcon={
+        <DownOutlined
+          className={`${s.arrow} ${open ? s.arrowOpen : ''}`}
+        />
+      }
       options={[
         { value: 'all', label: 'Весь период' },
-        { value: 'last week', label: 'Последняя неделя' }
+        { value: 'last week', label: 'Последняя неделя/месяц' }
       ]}
     />
   );

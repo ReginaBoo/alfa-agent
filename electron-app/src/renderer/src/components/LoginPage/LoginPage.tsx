@@ -12,23 +12,24 @@ export const LoginPage = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
 
-    console.log('🔐 [LoginPage] URL params:', window.location.search);
-    console.log('🔐 [LoginPage] Token from URL:', token);
+    console.log('[LoginPage] URL params:', window.location.search);
+    console.log('[LoginPage] Token from URL:', token);
 
     if (token) {
-      console.log('💾 Saving token to localStorage...');
+      console.log('Saving token to localStorage...');
       localStorage.setItem('session_token', token);
 
       console.log('🔧 Setting token in API headers...');
       api.defaults.headers.common['X-Session-Token'] = token;
 
-      console.log('✅ Token saved, redirecting to /dashboard');
+      console.log('Token saved, redirecting to /dashboard');
       message.success('Авторизация успешна!');
 
-      // Очищаем URL от токена и перенаправляем
-      navigate('/dashboard', { replace: true });
+      setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 20);
     } else {
-      console.log('❌ No token in URL');
+      console.log('No token in URL');
     }
   }, [navigate]);
 

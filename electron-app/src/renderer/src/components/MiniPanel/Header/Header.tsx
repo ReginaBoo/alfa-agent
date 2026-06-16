@@ -9,9 +9,6 @@ import {
   MessageOutlined,
   AppstoreOutlined,
 } from '@ant-design/icons';
-
-const BACKEND_URL = 'http://localhost:5173/dashboard';
-
 interface HeaderProps {
   onTabChange: (key: string) => void;
 }

@@ -8,9 +8,9 @@ import { Dashboard } from './components/MainPanel/pages/Dashboard/Dashboard';
 import { LoginPage } from './components/LoginPage/LoginPage';
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
-import { Spin, Typography } from 'antd';
+import { Spin } from 'antd';
 import { setAuthToken } from './api/client';
+import api from './api/client';
 
 // Меняем тип пропсов для ElectronAuthChecker, теперь children — это функция
 interface ElectronAuthCheckerProps {
@@ -31,7 +31,7 @@ function ElectronAuthChecker({ children }: ElectronAuthCheckerProps) {
         return;
       }
 
-      const response = await axios.get('http://localhost:8000/auth/me', {
+      const response = await api.get('/auth/me', {
         headers: { 'X-Session-Token': token }
       });
 
@@ -65,17 +65,35 @@ function ElectronAuthChecker({ children }: ElectronAuthCheckerProps) {
   };
 
   useEffect(() => {
+    const handler = () => {
+      console.log('[Auth] logout from Electron');
+
+      setAuthToken(null);
+      localStorage.removeItem('session_token');
+
+      setAuthorized(false);
+    };
+
+    window.electron?.onLogout?.(handler);
+
+    return () => {
+      window.electron?.removeAuthListener?.();
+    };
+
+  }, []);
+
+  useEffect(() => {
     if (window.electron?.onAuthSuccess) {
       window.electron.onAuthSuccess(async (token: string) => {
         setAuthToken(token);
         await checkAuth();
       });
     }
-
     const init = async () => {
       await syncTokenFromMain();
       await checkAuth();
     };
+
     init();
   }, []);
 
@@ -93,24 +111,44 @@ function ElectronAuthChecker({ children }: ElectronAuthCheckerProps) {
   return <>{children({ authorized, handleLogin, isLoggingIn })}</>;
 }
 
-// Веб-компонент проверки авторизации
-function WebAuthChecker() {
-  const navigate = useNavigate()
+export function WebAuthChecker() {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    axios.defaults.withCredentials = true
+    const check = async () => {
+      try {
+        await api.get('/auth/me');
 
-    axios
-      .get('/auth/me', {
-        withCredentials: true,
-      })
-      .catch(() => {
-        navigate('/login')
-      })
-  }, [navigate])
+        if (window.location.pathname === '/login') {
+          navigate('/dashboard', { replace: true });
+        }
+      } catch {
+        navigate('/login', { replace: true });
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  return null
+    check();
+  }, [navigate]);
+
+  if (loading) {
+    return (
+      <div style={{
+        height: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  return null;
 }
+
 
 function App() {
   return (

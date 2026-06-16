@@ -1,17 +1,21 @@
-import { Select, Badge, Avatar, Space } from 'antd';
+import { Select, Avatar, MenuProps, Dropdown } from 'antd';
 import {
   AppstoreFilled,
-  BellOutlined,
   DownOutlined, RocketOutlined, TeamOutlined, ProjectOutlined
 } from '@ant-design/icons';
 import s from './Header.module.css';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useProjects } from '../../../hooks/useDashboardData';
+import { useAuth } from '../../../hooks/useHeader';
+import { logout } from '../../../api/logout';
+
+import { useState } from 'react';
 export const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { data: projects = [] } = useProjects();
 
+  const [open, setOpen] = useState(false);
 
   const getCurrentValue = () => {
     const pathParts = location.pathname.split('/');
@@ -20,6 +24,47 @@ export const Header = () => {
     }
     return 'all';
   };
+
+
+
+  const currentProjectId = getCurrentValue();
+
+  const currentProject = projects.find(
+    p => String(p.id) === currentProjectId
+  );
+
+  const { user } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+  };
+
+  const items: MenuProps['items'] = [
+    {
+      key: 'user-info',
+      label: (
+        <div style={{ padding: '4px 0' }}>
+          <div style={{ fontWeight: 600, color: '#02489B' }}>
+            {user?.name || 'Пользователь'}
+          </div>
+          <div style={{ fontSize: 12, color: '#02489B' }}>
+            {user?.email}
+          </div>
+        </div>
+      ),
+      disabled: true,
+    },
+    {
+      type: 'divider',
+    },
+    {
+      key: 'logout',
+      label: 'Выйти',
+      danger: true,
+      onClick: handleLogout,
+    },
+  ];
+
 
   const handleSelectChange = (value: string) => {
     if (value === 'all') {
@@ -34,8 +79,17 @@ export const Header = () => {
       <div className={s.leftSection}>
         <RocketOutlined className={s.rocketIcon} />
         <div className={s.logoTitle}>
-          <AppstoreFilled className={s.logo} />
-          <span className={s.title}>Главная</span>
+          {currentProjectId === 'all' ? (
+            <AppstoreFilled className={s.logo} />
+          ) : (
+            <ProjectOutlined className={s.logo} />
+          )}
+
+          <span className={s.title}>
+            {currentProjectId === 'all'
+              ? 'Главная'
+              : currentProject?.name}
+          </span>
         </div>
       </div>
 
@@ -43,40 +97,41 @@ export const Header = () => {
         <Select
           className={s.projectSelect}
           value={getCurrentValue()}
-          suffixIcon={<DownOutlined />}
           onChange={handleSelectChange}
+          onOpenChange={setOpen}
+          suffixIcon={
+            <DownOutlined
+              className={`${s.arrow} ${open ? s.arrowOpen : ''}`}
+            />
+          }
           options={[
             {
               value: 'all',
               label: (
-                <Space>
+                <div className={s.optionLabel}>
                   <TeamOutlined />
                   <span>Все проекты</span>
-                </Space>
+                </div>
               ),
             },
             ...projects.map(p => ({
               value: String(p.id),
               label: (
-                <Space>
-                  <ProjectOutlined />
+                <div className={s.optionLabel}>
                   <span>{p.name}</span>
-                </Space>
+                </div>
               )
             }))
           ]}
         />
 
-        <Badge dot color="#ff4d4f" offset={[-2, 4]}>
-          <div className={s.iconBtn}>
-            <BellOutlined />
-          </div>
-        </Badge>
+        <Dropdown menu={{ items }} trigger={['click']}>
+          <Avatar className={s.avatar}>
+            {user?.name?.[0] || user?.email?.[0] || ''}
+          </Avatar>
+        </Dropdown>
 
-        <Avatar style={{ backgroundColor: '#e6f7ff', color: '#1677ff', fontWeight: 'bold' }}>
-          Л
-        </Avatar>
       </div>
-    </header>
+    </header >
   );
 };

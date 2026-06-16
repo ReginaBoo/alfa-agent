@@ -6,9 +6,9 @@ import { AIInsights } from '../../Charts/AIInsights/AIInsights';
 import { useState, useMemo } from 'react';
 import s from './Dashboard.module.css';
 import { useProjectActivity, useAIInsights, useProjectStats, useTeamsLoad, useProjects } from '../../../../hooks/useDashboardData';
-import { DownloadReportBtn, DashboardLoader, DashboardEmpty, PeriodSelect, NoProjectsEmpty, MetricInfoTooltip } from '../../../shared/DashboardControls';
+import { DashboardLoader, DashboardEmpty, PeriodSelect, NoProjectsEmpty, MetricInfoTooltip } from '../../../shared/DashboardControls';
 import { DashboardPeriod, ProjectStatsItem } from '../../../../types/dashboard';
-
+import { useMinLoading } from '../../../../hooks/useMinLoading'
 export const Dashboard = () => {
   const [timePeriod, setTimePeriod] = useState<DashboardPeriod>('all');
 
@@ -18,9 +18,9 @@ export const Dashboard = () => {
   const { data: projects = [], isLoading: isProjectsLoading } = useProjects();
   const teamsLoad = useTeamsLoad(timePeriod);
 
-  const handleDownloadReport = () => {
-    console.log('Скачивание отчета за период:', timePeriod);
-  };
+  // const handleDownloadReport = () => {
+  //   console.log('Скачивание отчета за период:', timePeriod);
+  // };
 
   const normalizedStats = useMemo<ProjectStatsItem[]>(() => {
     if (!projects.length) return [];
@@ -49,7 +49,8 @@ export const Dashboard = () => {
     });
   }, [projects, projectStats.data]);
 
-  if (isProjectsLoading) {
+  const showLoader = useMinLoading(isProjectsLoading, 250);
+  if (showLoader) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
         <DashboardLoader minHeight="100px" tip="Загрузка..." />
@@ -66,7 +67,7 @@ export const Dashboard = () => {
       <Row justify="end" style={{ marginBottom: 20 }}>
         <Col>
           <Space size={16}>
-            <DownloadReportBtn onDownload={handleDownloadReport} />
+            {/* <DownloadReportBtn onDownload={handleDownloadReport} /> */}
             <PeriodSelect value={timePeriod} onChange={setTimePeriod} />
           </Space>
         </Col>
@@ -133,9 +134,13 @@ export const Dashboard = () => {
             </div>
             <div className={s.chartContainer}>
               {activity.isLoading ? (
-                <DashboardLoader minHeight="200px" tip="Загружаем активность" />
+                <div className={s.emptyState}>
+                  <DashboardLoader minHeight="200px" tip="Загружаем активность" />
+                </div>
               ) : activity.data.length === 0 ? (
-                <DashboardEmpty description="Пока нет активности по проектам" minHeight="200px" />
+                <div className={s.emptyState}>
+                  <DashboardEmpty description="Пока нет активности по проектам" />
+                </div>
               ) : (
                 <ActivityChart backendData={activity.data} />
               )}

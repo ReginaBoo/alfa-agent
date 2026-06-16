@@ -45,7 +45,23 @@
 .projectSelect {
   min-width: 150px;
   color: #616161;
+}
 
+.optionLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.optionLabel svg {
+  flex-shrink: 0;
+}
+
+.optionLabel span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .iconBtn {
@@ -58,4 +74,31 @@
 
 .iconBtn:hover {
   color: #3460DC;
+}
+
+.arrow {
+  transition: transform 0.2s ease;
+}
+
+.arrowOpen {
+  transform: rotate(180deg);
+}
+
+.avatar {
+  background-color: #F1F5F9 !important;
+  color: #02489B !important;
+
+  font-weight: 600;
+  font-size: 14px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 36px;
+  height: 36px;
+
+  border: 1px solid #E2E8F0;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
