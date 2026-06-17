@@ -147,25 +147,37 @@ const generateGanttColumns = (
                   if (rafRef.current) return;
 
                   rafRef.current = requestAnimationFrame(() => {
-                    setTooltip({
-                      visible: true,
-                      x: lastPos.current.x,
-                      y: lastPos.current.y,
-                      content: (
-                        <div>
-                          <div style={{ fontWeight: 'bold', marginBottom: 4 }}>
-                            {record.task}
-                          </div>
-                          <div>Исполнитель: {responsibleName}</div>
+                    setTooltip(prev => {
+                      // если позиция почти не изменилась — НЕ обновляем state
+                      if (
+                        Math.abs(prev.x - lastPos.current.x) < 2 &&
+                        Math.abs(prev.y - lastPos.current.y) < 2 &&
+                        prev.visible
+                      ) {
+                        return prev;
+                      }
+
+                      return {
+                        visible: true,
+                        x: lastPos.current.x,
+                        y: lastPos.current.y,
+                        content: (
                           <div>
-                            Сроки: {taskStart.format('DD.MM')} - {taskEnd.format('DD.MM')}
+                            <div style={{ fontWeight: 'bold', marginBottom: 4 }}>
+                              {record.task}
+                            </div>
+                            <div>Исполнитель: {responsibleName}</div>
+                            <div>
+                              Сроки: {taskStart.format('DD.MM')} - {taskEnd.format('DD.MM')}
+                            </div>
                           </div>
-                        </div>
-                      )
+                        )
+                      };
                     });
 
                     rafRef.current = null;
                   });
+
                 }}
                 onMouseLeave={() =>
                   setTooltip(prev => ({ ...prev, visible: false }))
@@ -306,6 +318,8 @@ export const TasksGanttChart: React.FC<TasksGanttChartProps> = ({ data, viewRang
             position: 'fixed',
             top: tooltip.y + 12,
             left: tooltip.x + 12,
+            transform: 'translate3d(0,0,0)',
+            willChange: 'transform',
             background: '#fff',
             padding: '8px 10px',
             borderRadius: 6,

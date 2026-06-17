@@ -44,7 +44,7 @@
 
 /* Гарантируем, что фиксированные левые колонки перекроют уезжающие вбок плашки при скролле */
 .ganttTable :global(.ant-table-cell-fix-left) {
-  z-index: 30 !important;
+  z-index: 100 !important;
   /* Значение должно быть выше, чем z-index у .absoluteTaskBar */
   background-color: #fff !important;
   max-width: 180px;
@@ -94,7 +94,7 @@
   cursor: pointer;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
   transition: filter 0.2s;
-
+  will-change: transform;
   /* Текст внутри плашки теперь будет идеально обрезаться троеточием строго у правого края всей длинной плашки */
   overflow: hidden;
 }
