@@ -1,7 +1,7 @@
 import { Select, Avatar, MenuProps, Dropdown } from 'antd';
 import {
   AppstoreFilled,
-  DownOutlined, RocketOutlined, TeamOutlined, ProjectOutlined
+  DownOutlined, TeamOutlined, ProjectOutlined
 } from '@ant-design/icons';
 import s from './Header.module.css';
 import { useNavigate, useLocation } from 'react-router-dom';

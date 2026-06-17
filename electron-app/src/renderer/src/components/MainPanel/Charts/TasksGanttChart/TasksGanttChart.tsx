@@ -66,7 +66,10 @@ const generateColorMap = (records: GanttRecord[]): Record<string, string> => {
 const generateGanttColumns = (
   startDate: string,
   endDate: string,
-  colorMap: Record<string, string>
+  colorMap: Record<string, string>,
+  setTooltip: React.Dispatch<React.SetStateAction<any>>,
+  rafRef: React.MutableRefObject<number | null>,
+  lastPos: React.MutableRefObject<{ x: number; y: number }>
 ) => {
   const timelineStart = dayjs(startDate).startOf('isoWeek');
   const timelineEnd = dayjs(endDate);
@@ -129,35 +132,50 @@ const generateGanttColumns = (
 
           return (
             <div className={s.anchorCell}>
-              <Tooltip
-                placement="top"
-                autoAdjustOverflow
-                title={
-                  <div style={{ padding: '4px', minWidth: '180px' }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '6px' }}>{record.task}</div>
-                    <div><span style={{ color: '#aaa' }}>Исполнитель:</span> {responsibleName}</div>
-                    <div><span style={{ color: '#aaa' }}>Сроки:</span> {taskStart.format('DD.MM')} - {taskEnd.format('DD.MM')}</div>
-                    {record.isOverdue && record.overdueSince && (
-                      <div style={{ color: '#ff4d4f' }}>Просрочена с {dayjs(record.overdueSince).format('DD.MM.YYYY')}</div>
-                    )}
-                    <div><span style={{ color: '#aaa' }}>Прогресс:</span> {record.progress}%</div>
-                  </div>
+
+              <div
+                className={`${s.absoluteTaskBar} ${record.isOverdue ? s.overdueTask : ''}`}
+                style={{
+                  left: `${leftPercent}%`,
+                  width: `${widthPercent}%`,
+                  backgroundColor: barColor,
+                  borderRadius: `${isCutLeft ? '0' : '4px'} ${isCutRight ? '0' : '4px'} ${isCutRight ? '0' : '4px'} ${isCutLeft ? '0' : '4px'}`
+                }}
+                onMouseMove={(e) => {
+                  lastPos.current = { x: e.clientX, y: e.clientY };
+
+                  if (rafRef.current) return;
+
+                  rafRef.current = requestAnimationFrame(() => {
+                    setTooltip({
+                      visible: true,
+                      x: lastPos.current.x,
+                      y: lastPos.current.y,
+                      content: (
+                        <div>
+                          <div style={{ fontWeight: 'bold', marginBottom: 4 }}>
+                            {record.task}
+                          </div>
+                          <div>Исполнитель: {responsibleName}</div>
+                          <div>
+                            Сроки: {taskStart.format('DD.MM')} - {taskEnd.format('DD.MM')}
+                          </div>
+                        </div>
+                      )
+                    });
+
+                    rafRef.current = null;
+                  });
+                }}
+                onMouseLeave={() =>
+                  setTooltip(prev => ({ ...prev, visible: false }))
                 }
               >
-                <div
-                  className={`${s.absoluteTaskBar} ${record.isOverdue ? s.overdueTask : ''}`}
-                  style={{
-                    left: `${leftPercent}%`,
-                    width: `${widthPercent}%`,
-                    backgroundColor: barColor,
-                    borderRadius: `${isCutLeft ? '0' : '4px'} ${isCutRight ? '0' : '4px'} ${isCutRight ? '0' : '4px'} ${isCutLeft ? '0' : '4px'}`
-                  }}
-                >
-                  <span className={s.barText}>
-                    {responsibleName !== 'Не назначен' ? responsibleName : ''}
-                  </span>
-                </div>
-              </Tooltip>
+                <span className={s.barText}>
+                  {responsibleName !== 'Не назначен' ? responsibleName : ''}
+                </span>
+              </div>
+
             </div>
           );
         }
@@ -214,7 +232,20 @@ const fixedColumns = [
 ];
 
 export const TasksGanttChart: React.FC<TasksGanttChartProps> = ({ data, viewRange }) => {
+  const [tooltip, setTooltip] = React.useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    content: React.ReactNode;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    content: null
+  });
 
+  const rafRef = React.useRef<number | null>(null);
+  const lastPos = React.useRef({ x: 0, y: 0 });
   // Карта цветов сотрудников
   const autoResponsibleColors = useMemo(() => {
     return generateColorMap(data);
@@ -226,9 +257,15 @@ export const TasksGanttChart: React.FC<TasksGanttChartProps> = ({ data, viewRang
   }, [autoResponsibleColors]);
 
   const dynamicColumns = useMemo(() => {
-    return generateGanttColumns(viewRange.start, viewRange.end, autoResponsibleColors);
-  }, [viewRange.start, viewRange.end, autoResponsibleColors]);
-
+    return generateGanttColumns(
+      viewRange.start,
+      viewRange.end,
+      autoResponsibleColors,
+      setTooltip,
+      rafRef,
+      lastPos
+    );
+  }, [viewRange.start, viewRange.end, autoResponsibleColors, setTooltip]);
   const columns = useMemo(() => [...fixedColumns, ...dynamicColumns], [dynamicColumns]);
 
   return (
@@ -260,9 +297,27 @@ export const TasksGanttChart: React.FC<TasksGanttChartProps> = ({ data, viewRang
           dataSource={data}
           pagination={false}
           bordered
-          scroll={{ x: 'max-content', y: 380 }}
+          scroll={{ x: 'max-content', y: 400 }}
         />
       </div>
+      {tooltip.visible && (
+        <div
+          style={{
+            position: 'fixed',
+            top: tooltip.y + 12,
+            left: tooltip.x + 12,
+            background: '#fff',
+            padding: '8px 10px',
+            borderRadius: 6,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            zIndex: 9999,
+            pointerEvents: 'none',
+            fontSize: 12
+          }}
+        >
+          {tooltip.content}
+        </div>
+      )}
     </div>
   );
 };
