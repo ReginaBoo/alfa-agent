@@ -183,10 +183,7 @@ def get_projects_stats(
             detail="period must be 'all' or 'last week'"
         )
 
-    # Ключ кэша
     cache_key = f"projects_stats:{current_user.id}:{period}"
-
-    # Пробуем получить из кэша
     cached_stats = cache_service.get(cache_key)
     if cached_stats is not None:
         return cached_stats
@@ -195,7 +192,6 @@ def get_projects_stats(
     if period == "last week":
         cutoff_date = datetime.utcnow() - timedelta(days=7)
 
-    # Получаем проекты пользователя из core.projects через UserProject
     user_projects = db.query(Project).join(
         UserProject, UserProject.project_id == Project.id
     ).filter(
@@ -203,57 +199,68 @@ def get_projects_stats(
         Project.is_active == True
     ).all()
 
-    # Извлекаем Jira project keys (jira_project_key)
     user_project_keys = [
         p.jira_project_key for p in user_projects if p.jira_project_key]
 
     if not user_project_keys:
-        # Нет проектов у пользователя — возвращаем пустой результат
         return []
 
-    # Фильтруем JiraIssue только по проектам пользователя
     projects_query = db.query(JiraIssue.project_key).filter(
         JiraIssue.project_key.in_(user_project_keys)
     ).distinct()
-
     projects = projects_query.all()
 
     # ============================================================
-    # ПОЛУЧАЕМ base_url ДЛЯ ССЫЛОК
+    # ПОЛУЧАЕМ MAP instance_url ДЛЯ КАЖДОГО ПРОЕКТА
     # ============================================================
-
-    base_url = None
-
-    # Ищем токен текущего пользователя
-    atlassian_token = db.query(IntegrationToken).filter(
+    
+    # Получаем все токены пользователя
+    user_tokens = db.query(IntegrationToken).filter(
         IntegrationToken.provider == "jira",
         IntegrationToken.user_id == current_user.id
-    ).first()
-
-    if atlassian_token and atlassian_token.instance_url:
-        base_url = atlassian_token.instance_url.rstrip('/')
-        print(f"[DEBUG] Found base_url from user's token: {base_url}")
-    else:
-        # Fallback: ищем любой токен (только для теста)
-        any_token = db.query(IntegrationToken).filter(
-            IntegrationToken.provider == "jira"
-        ).first()
-
+    ).all()
+    
+    # Создаем маппинг: project_key -> instance_url
+    # Используем jira_project_key из core.projects и instance_url из токена
+    project_instance_map = {}
+    
+    for token in user_tokens:
+        if not token.instance_url:
+            continue
+        
+        # Для каждого токена получаем список проектов из этого инстанса
+        # Делаем запрос к Jira API для получения проектов
+        try:
+            import requests
+            response = requests.get(
+                f"https://api.atlassian.com/ex/jira/{token.instance_id}/rest/api/3/project",
+                headers={"Authorization": f"Bearer {token.access_token}"},
+                timeout=10
+            )
+            if response.status_code == 200:
+                jira_projects = response.json()
+                for p in jira_projects:
+                    p_key = p.get("key")
+                    if p_key in user_project_keys:
+                        project_instance_map[p_key] = token.instance_url.rstrip('/')
+        except Exception as e:
+            logger.warning(f"Failed to get projects for instance {token.instance_url}: {e}")
+            continue
+    
+    # Fallback: если маппинг пустой, используем первый токен
+    fallback_url = None
+    if not project_instance_map and user_tokens:
+        any_token = user_tokens[0]
         if any_token and any_token.instance_url:
-            base_url = any_token.instance_url.rstrip('/')
-            print(f"[DEBUG] Using fallback token: {base_url}")
-        else:
-            print(f"[WARNING] No instance_url found")
+            fallback_url = any_token.instance_url.rstrip('/')
 
     result = []
 
     for idx, (project_key,) in enumerate(projects, start=1):
-        # Фильтруем задачи по проекту
         jira_query = db.query(JiraIssue).filter(
             JiraIssue.project_key == project_key
         )
 
-        # Находим Project объект (уже есть в user_projects)
         project_obj = next(
             (p for p in user_projects if p.jira_project_key == project_key),
             None
@@ -271,7 +278,7 @@ def get_projects_stats(
         if not jira_issues:
             continue
 
-                # ---------------------------
+        # ---------------------------
         # WORKLOAD
         # ---------------------------
         assignees = db.query(
@@ -282,18 +289,14 @@ def get_projects_stats(
         ).distinct().all()
 
         workload_values = []
-        
-        # Получаем дату создания проекта
         project_created_at = project_obj.created_at if project_obj else datetime.utcnow()
         
         for (assignee_id,) in assignees:
             if period == "last week":
-                # Для last week - всегда 1 неделя
                 weeks_count = 1
             else:
-                # Для all - рассчитываем количество недель с момента создания проекта
                 days_since_start = (datetime.utcnow() - project_created_at).days
-                weeks_count = max(2, min(days_since_start / 7, 52))  # от 2 до 52 недель
+                weeks_count = max(2, min(days_since_start / 7, 52))
             
             wi = calculate_workload_index(
                 db=db,
@@ -307,12 +310,10 @@ def get_projects_stats(
         if workload_values:
             avg_workload = round(sum(workload_values) / len(workload_values), 2)
         else:
-            # Fallback: расчёт на уровне проекта
             if period == "last week":
                 weeks_count = 1
                 cutoff = datetime.utcnow() - timedelta(days=7)
             else:
-                # Для all - считаем с момента создания проекта
                 cutoff = project_created_at
             
             open_sp = db.query(func.sum(JiraIssue.story_points)).filter(
@@ -327,11 +328,7 @@ def get_projects_stats(
             ).scalar() or 0
             
             if closed_sp > 0:
-                if period == "last week":
-                    avg_workload = open_sp / (closed_sp / weeks_count)
-                else:
-                    # Для all - используем всю историю
-                    avg_workload = open_sp / (closed_sp / weeks_count) if weeks_count > 0 else open_sp
+                avg_workload = open_sp / (closed_sp / weeks_count) if weeks_count > 0 else open_sp
             else:
                 avg_workload = 0
 
@@ -341,18 +338,13 @@ def get_projects_stats(
         # REVIEW TIME
         # ---------------------------
         avg_review_hours = 0
-        closed_issues = [
-            i for i in jira_issues
-            if i.closed_at and i.created_at
-        ]
+        closed_issues = [i for i in jira_issues if i.closed_at and i.created_at]
         if closed_issues:
             review_times = []
             for issue in closed_issues:
                 delta = issue.closed_at - issue.created_at
                 review_times.append(delta.total_seconds() / 3600)
-            avg_review_hours = round(
-                sum(review_times) / len(review_times)
-            )
+            avg_review_hours = round(sum(review_times) / len(review_times))
         review_time_str = f"{avg_review_hours}ч"
 
         # ---------------------------
@@ -360,12 +352,11 @@ def get_projects_stats(
         # ---------------------------
         bugs_count = len([
             i for i in jira_issues
-            if i.issue_type
-            and i.issue_type.lower() in ["bug", "defect", "error"]
+            if i.issue_type and i.issue_type.lower() in ["bug", "defect", "error"]
         ])
 
         # ---------------------------
-        # PR COUNT & COMMITS (GitHub)
+        # PR COUNT & COMMITS
         # ---------------------------
         from app.db.models.normalized import GithubPullRequest, GithubCommit
 
@@ -401,7 +392,6 @@ def get_projects_stats(
         # ---------------------------
         # STATUS
         # ---------------------------
-        # Статус по workload: 40-85% норма, 85-100% среднее, 101-120% перегруз
         if sla_score < 70 or avg_workload_percent > 120:
             status = "error"
         elif sla_score < 85 or avg_workload_percent > 85:
@@ -409,10 +399,16 @@ def get_projects_stats(
         else:
             status = "success"
 
+        # ============================================================
         # ФОРМИРУЕМ ССЫЛКУ НА JIRA
+        # ============================================================
         jira_url = None
-        if base_url and project_key:
-            jira_url = f"{base_url}/jira/software/projects/{project_key}/summary"
+        instance_url = project_instance_map.get(project_key)
+        
+        if instance_url:
+            jira_url = f"{instance_url}/jira/software/projects/{project_key}/summary"
+        elif fallback_url:
+            jira_url = f"{fallback_url}/jira/software/projects/{project_key}/summary"
 
         result.append({
             "id": idx,
@@ -431,9 +427,7 @@ def get_projects_stats(
             }
         })
 
-    # Сохраняем в кэш на 2 минуты
     cache_service.set(cache_key, result, expire=120)
-
     return result
 
 
@@ -594,21 +588,48 @@ def get_user_projects(
     db: Session = Depends(get_db)
 ):
     """
-    Возвращает все проекты пользователя
+    Возвращает все проекты пользователя, в которых есть задачи
     для dropdown на frontend.
     """
     from app.db.models.identity import IntegrationToken
+    from app.db.models import JiraIssue
 
-    # Получаем base_url для ссылок
-    base_url = None
-    atlassian_token = db.query(IntegrationToken).filter(
+    # Получаем все токены пользователя
+    user_tokens = db.query(IntegrationToken).filter(
         IntegrationToken.provider == "jira",
         IntegrationToken.user_id == current_user.id
-    ).first()
+    ).all()
+    
+    # Создаем маппинг: project_key -> instance_url
+    project_instance_map = {}
+    
+    for token in user_tokens:
+        if not token.instance_url or not token.access_token:
+            continue
+        
+        try:
+            import requests
+            response = requests.get(
+                f"https://api.atlassian.com/ex/jira/{token.instance_id}/rest/api/3/project",
+                headers={"Authorization": f"Bearer {token.access_token}"},
+                timeout=10
+            )
+            if response.status_code == 200:
+                jira_projects = response.json()
+                for p in jira_projects:
+                    p_key = p.get("key")
+                    project_instance_map[p_key] = token.instance_url.rstrip('/')
+        except Exception as e:
+            logger.warning(f"Failed to get projects for instance {token.instance_url}: {e}")
+            continue
+    
+    fallback_url = None
+    if not project_instance_map and user_tokens:
+        any_token = user_tokens[0]
+        if any_token and any_token.instance_url:
+            fallback_url = any_token.instance_url.rstrip('/')
 
-    if atlassian_token and atlassian_token.instance_url:
-        base_url = atlassian_token.instance_url.rstrip('/')
-
+    # Получаем проекты пользователя
     projects = (
         db.query(Project)
         .join(UserProject, UserProject.project_id == Project.id)
@@ -622,6 +643,18 @@ def get_user_projects(
 
     result = []
     for project in projects:
+        project_key = project.jira_project_key or project.key
+        
+        # ✅ Проверяем, есть ли задачи в этом проекте
+        issues_count = db.query(JiraIssue).filter(
+            JiraIssue.project_key == project_key,
+            JiraIssue.is_deleted == False
+        ).count()
+        
+        # Пропускаем проекты без задач
+        if issues_count == 0:
+            continue
+
         project_data = {
             "id": project.id,
             "key": project.key,
@@ -629,9 +662,17 @@ def get_user_projects(
             "avatar_url": project.avatar_url
         }
 
-        # Добавляем ссылку на Jira, если base_url есть
-        if base_url and project.jira_project_key:
-            project_data["jira_url"] = f"{base_url}/jira/software/projects/{project.jira_project_key}/summary"
+        # Формируем ссылку на Jira
+        jira_url = None
+        if project_key:
+            instance_url = project_instance_map.get(project_key)
+            if instance_url:
+                jira_url = f"{instance_url}/jira/software/projects/{project_key}/summary"
+            elif fallback_url:
+                jira_url = f"{fallback_url}/jira/software/projects/{project_key}/summary"
+        
+        if jira_url:
+            project_data["jira_url"] = jira_url
 
         result.append(project_data)
 

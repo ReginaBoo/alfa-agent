@@ -16,7 +16,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - app-network  # ← ДОБАВИТЬ: чтобы backend/worker могли подключиться
+      - app-network
 
   timescaledb:
     image: timescale/timescaledb:latest-pg15
@@ -30,12 +30,12 @@ services:
     volumes:
       - timescale_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]  # ← убрал лишний redis-cli
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
     networks:
-      - app-network  # ← ДОБАВИТЬ: чтобы backend/worker могли подключиться
+      - app-network
 
   backend:
     build: .
@@ -52,7 +52,6 @@ services:
       - .:/app
     environment:
       - PYTHONPATH=/app
-      # Переопределяем переменные для подключения (ВАЖНО!)
       - POSTGRES_HOST=db
       - POSTGRES_PORT=5432
       - POSTGRES_USER=postgres
@@ -64,14 +63,17 @@ services:
       - TIMESCALE_PASSWORD=postgres
       - TIMESCALE_DB=metrics_db
       - REDIS_URL=redis://redis:6379/0
-      - RQ_REDIS_URL=redis://redis:6379/0 
+      - RQ_REDIS_URL=redis://redis:6379/0
     dns:
       - 8.8.8.8
       - 8.8.4.4
+    extra_hosts:  # ← ДОБАВЛЕНО
+      - "auth.atlassian.com:13.227.180.4"
+      - "api.atlassian.com:13.227.180.4"
     command: >
       sh -c "alembic upgrade head &&
-             python scripts/init_timescale.py &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+            python scripts/init_timescale.py &&
+            uvicorn app.main:app --host 0.0.0.0 --port 8000 --http h11 --reload"
     networks:
       - app-network
 
@@ -88,7 +90,7 @@ services:
       timeout: 3s
       retries: 3
     networks:
-      - app-network  # ← ИЗМЕНИТЬ: было "default", теперь "app-network"
+      - app-network
 
   worker:
     build: .
@@ -122,6 +124,9 @@ services:
     dns:
       - 8.8.8.8
       - 8.8.4.4
+    extra_hosts:  # ← ДОБАВЛЕНО
+      - "auth.atlassian.com:13.227.180.4"
+      - "api.atlassian.com:13.227.180.4"
     networks:
       - app-network
 

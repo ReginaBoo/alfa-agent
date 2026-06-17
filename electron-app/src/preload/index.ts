@@ -30,4 +30,3 @@ if (process.contextIsolated) {
   }
 }
 
-

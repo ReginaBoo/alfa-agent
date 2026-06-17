@@ -55,7 +55,7 @@ export const Notifications = () => {
 
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60000);
+    const interval = setInterval(fetchNotifications, 600000);
     return () => clearInterval(interval);
   }, []);
 

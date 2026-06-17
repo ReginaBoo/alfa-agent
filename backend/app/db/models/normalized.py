@@ -36,6 +36,7 @@ class JiraIssue(Base):
     created_at = Column(DateTime, nullable=False)
     updated_at = Column(DateTime, nullable=False, index=True)
     parent_issue_id = Column(Integer, nullable=True, index=True)
+    parent_issue_key = Column(String(255), nullable=True, index=True)
     last_synced_at = Column(DateTime, default=datetime.utcnow)
     is_deleted = Column(Boolean, default=False)
     snapshot_version = Column(Integer, default=1)

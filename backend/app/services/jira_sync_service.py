@@ -253,6 +253,18 @@ class JiraSyncService:
                 
                 total_issues += 1
                 fields = issue.get("fields", {})
+
+                parent = fields.get('parent')
+                parent_issue_key = parent.get('key') if parent else None
+
+                # Также можно попробовать найти parent_issue_id по ключу
+                parent_issue_id = None
+                if parent_issue_key:
+                    parent_issue = self.db.query(JiraIssue).filter(
+                        JiraIssue.issue_key == parent_issue_key
+                    ).first()
+                    if parent_issue:
+                        parent_issue_id = parent_issue.id
                 
                 # 1. СОХРАНЯЕМ СЫРЫЕ ДАННЫЕ в raw_events
                 raw_event = RawEvent(
@@ -386,6 +398,8 @@ class JiraSyncService:
                         existing.story_points = story_points
                     existing.due_date = fields.get("duedate")
                     existing.updated_at = fields.get("updated")
+                    existing.parent_issue_key = parent_issue_key
+                    existing.parent_issue_id = parent_issue_id
                     existing.last_synced_at = datetime.utcnow()
                     existing.original_estimate = timetracking['original_estimate']
                     existing.time_spent = timetracking['time_spent']
@@ -410,6 +424,8 @@ class JiraSyncService:
                         due_date=fields.get("duedate"),
                         created_at=fields.get("created"),
                         updated_at=fields.get("updated"),
+                        parent_issue_id=parent_issue_id,      # ← ID родителя (если найден)
+                        parent_issue_key=parent_issue_key,
                         last_synced_at=datetime.utcnow(),
                         original_estimate=timetracking['original_estimate'],
                         time_spent=timetracking['time_spent'],

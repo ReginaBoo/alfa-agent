@@ -107,6 +107,9 @@ class ForceCorsMiddleware(BaseHTTPMiddleware):
         return response
 
 # Добавляем принудительный CORS middleware ПЕРВЫМ
+@app.get("/ping")
+async def ping():
+    return {"status": "ok", "message": "Backend is alive!"}
 app.add_middleware(ForceCorsMiddleware)
 
 # --- Подключение роутеров ---

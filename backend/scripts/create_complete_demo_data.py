@@ -2,15 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 УНИВЕРСАЛЬНЫЙ СКРИПТ ДЛЯ ГЕНЕРАЦИИ ПОЛНЫХ ТЕСТОВЫХ ДАННЫХ
-
-Создаёт реалистичные данные для демонстрации всех функций фронтенда:
-- Jira задачи с разными статусами, assignees, датами
-- GitHub PRs, Commits, Reviews
-- Confluence страницы (опционально)
-- Changelog для задач (история переходов статусов)
-
-Запуск: docker exec -i backend-backend-1 python scripts/create_complete_demo_data.py
-Или локально: python backend/scripts/create_complete_demo_data.py
+(ВЕРСИЯ С УНИКАЛЬНЫМИ КЛЮЧАМИ ДЛЯ ТЕСТОВОГО АККАУНТА)
+docker exec -i backend-backend-1 python scripts/create_complete_demo_data.py
 """
 
 import sys
@@ -25,12 +18,11 @@ from app.db.session import SessionLocal
 from sqlalchemy import text
 
 # ============================================================
-# КОНФИГУРАЦИЯ ПРОЕКТОВ
+# КОНФИГУРАЦИЯ ПРОЕКТОВ С УНИКАЛЬНЫМИ КЛЮЧАМИ
 # ============================================================
 
 PROJECTS_CONFIG = {
-    # === LOW WORKLOAD (underloaded, success) ===
-    "IDLE": {
+    "TEST_IDLE": {
         "name": "Документация",
         "description": "Поддержка документации",
         "category": "Documentation",
@@ -46,7 +38,7 @@ PROJECTS_CONFIG = {
         "open_ratio": 0.30,
         "closed_recent_ratio": 0.70
     },
-    "NEWPROJ": {
+    "TEST_NEWPROJ": {
         "name": "Исследование",
         "description": "R&D и исследования",
         "category": "Research",
@@ -62,9 +54,7 @@ PROJECTS_CONFIG = {
         "open_ratio": 0.30,
         "closed_recent_ratio": 0.80
     },
-    
-    # === MEDIUM-LOW WORKLOAD (optimal, success) ===
-    "HEALTH": {
+    "TEST_HEALTH": {
         "name": "Веб-Платформа",
         "description": "Разработка основной веб-платформы",
         "category": "Development",
@@ -80,7 +70,7 @@ PROJECTS_CONFIG = {
         "open_ratio": 0.40,
         "closed_recent_ratio": 0.60
     },
-    "KAN": {
+    "TEST_KAN": {
         "name": "My Software Team",
         "description": "Разработка программного обеспечения",
         "category": "Development",
@@ -96,7 +86,7 @@ PROJECTS_CONFIG = {
         "open_ratio": 0.40,
         "closed_recent_ratio": 0.60
     },
-    "IMBAL": {
+    "TEST_IMBAL": {
         "name": "API-Сервис",
         "description": "Разработка API для интеграций",
         "category": "Backend",
@@ -112,7 +102,7 @@ PROJECTS_CONFIG = {
         "open_ratio": 0.50,
         "closed_recent_ratio": 0.50
     },
-    "KANBAN": {
+    "TEST_KANBAN": {
         "name": "Операционные Задачи",
         "description": "Текущая операционная деятельность",
         "category": "Operations",
@@ -128,9 +118,7 @@ PROJECTS_CONFIG = {
         "open_ratio": 0.50,
         "closed_recent_ratio": 0.50
     },
-    
-    # === HIGH WORKLOAD (overloaded, error) ===
-    "CRUNCH": {
+    "TEST_CRUNCH": {
         "name": "Мобильное Приложение",
         "description": "Разработка мобильного приложения под давлением",
         "category": "Mobile",
@@ -146,7 +134,7 @@ PROJECTS_CONFIG = {
         "open_ratio": 0.55,
         "closed_recent_ratio": 0.45
     },
-    "BUGS": {
+    "TEST_BUGS": {
         "name": "Техподдержка",
         "description": "Поддержка и исправление багов",
         "category": "Support",
@@ -162,7 +150,7 @@ PROJECTS_CONFIG = {
         "open_ratio": 0.60,
         "closed_recent_ratio": 0.40
     },
-    "EMAL": {
+    "TEST_EMAL": {
         "name": "(Example) Mobile App Launch",
         "description": "Запуск мобильного приложения",
         "category": "Mobile",
@@ -178,9 +166,7 @@ PROJECTS_CONFIG = {
         "open_ratio": 0.60,
         "closed_recent_ratio": 0.40
     },
-    
-    # === PROJECT WITH FULL CYCLE (for cycle time visualization) ===
-    "FULLCYCLE": {
+    "TEST_FULLCYCLE": {
         "name": "Корпоративный Портал",
         "description": "Разработка корпоративного портала с полным циклом",
         "category": "Enterprise",
@@ -207,11 +193,30 @@ PROJECTS_CONFIG = {
 }
 
 # ============================================================
+# БАЗОВЫЕ СТАТУСЫ ДЛЯ ВСЕХ ПРОЕКТОВ
+# ============================================================
+
+BASE_STATUS_MAPPINGS = [
+    {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
+    {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
+    {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
+    {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+    {"status": "Бизнес-тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
+    {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
+]
+
+# Для проектов с коротким workflow
+SHORT_WORKFLOW_MAPPINGS = [
+    {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
+    {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
+    {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
+]
+
+# ============================================================
 # ГЕНЕРАЦИЯ ДАННЫХ
 # ============================================================
 
 def get_or_create_project(db, project_key, project_name, jira_project_key):
-    """Получает или создаёт проект в core.projects"""
     result = db.execute(
         text("SELECT id FROM core.projects WHERE key = :key"),
         {"key": project_key}
@@ -220,7 +225,6 @@ def get_or_create_project(db, project_key, project_name, jira_project_key):
     if result:
         return result[0]
     
-    # Создаём проект
     result = db.execute(text("""
         INSERT INTO core.projects (key, name, jira_project_key, is_active, created_at, updated_at)
         VALUES (:key, :name, :jira_project_key, true, NOW(), NOW())
@@ -234,8 +238,7 @@ def get_or_create_project(db, project_key, project_name, jira_project_key):
     return result.fetchone()[0]
 
 
-def ensure_user_project_link(db, project_id, user_id=1):
-    """Создаёт связь пользователя с проектом если её нет"""
+def ensure_user_project_link(db, project_id, user_id=2):
     result = db.execute(text("""
         SELECT id FROM core.user_projects 
         WHERE project_id = :project_id AND user_id = :user_id
@@ -250,20 +253,16 @@ def ensure_user_project_link(db, project_id, user_id=1):
 
 
 def get_user_account_id(username):
-    """Генерирует account_id на основе username (для тестовых данных)"""
     if not username:
         return None
-    # Генерируем стабильный ID на основе имени
     hash_val = abs(hash(username))
     return f"{hash_val:08d}-{hash_val >> 16:04x}-{hash_val >> 32:04x}-8000-{hash_val >> 48:012x}"
 
 
 def generate_changelog(issue_key, created_at, closed_at, workflow, config=None):
-    """Генерирует историю переходов статусов с реалистичным временем"""
     changelog = []
     
     if not closed_at:
-        # Задача не закрыта - только начальные переходы
         current_time = created_at
         max_statuses = min(2, len(workflow))
         for i in range(max_statuses):
@@ -278,15 +277,12 @@ def generate_changelog(issue_key, created_at, closed_at, workflow, config=None):
             })
             current_time += timedelta(hours=random.randint(2, 24))
     else:
-        # Задача закрыта - полный цикл
         current_time = created_at
         total_cycle_hours = (closed_at - created_at).total_seconds() / 3600
         
-        # Done/Closed/Внедрение - БЫСТРЫЕ (1-3 часа), остальное распределяем
         done_status = workflow[-1]
         active_statuses = workflow[:-1]
         
-        # Время на активные этапы = общее время - 1-3 часа на Done
         done_hours = random.uniform(1, 3)
         active_time = total_cycle_hours - done_hours
         
@@ -294,10 +290,8 @@ def generate_changelog(issue_key, created_at, closed_at, workflow, config=None):
             active_time = total_cycle_hours * 0.8
             done_hours = total_cycle_hours * 0.2
         
-        # Если есть веса для этапов (для FULLCYCLE)
         if config and "cycle_weights" in config:
             weights = config["cycle_weights"]
-            # Пересчитываем веса без последнего статуса
             active_weights = {k: v for k, v in weights.items() if k in active_statuses}
             total_active_weight = sum(active_weights.values())
             
@@ -312,16 +306,13 @@ def generate_changelog(issue_key, created_at, closed_at, workflow, config=None):
                 })
                 
                 if status == done_status:
-                    # Done - быстро (1-3 часа)
                     current_time += timedelta(hours=done_hours)
                 elif status in active_weights:
-                    # Активные этапы - по весам
                     weight = active_weights[status] / total_active_weight
                     stage_hours = active_time * weight
                     stage_hours = stage_hours * random.uniform(0.7, 1.3)
                     current_time += timedelta(hours=stage_hours)
         else:
-            # Обычные проекты - равномерное распределение
             hours_per_active = active_time / len(active_statuses) if active_statuses else active_time
             
             for i, status in enumerate(workflow):
@@ -335,10 +326,8 @@ def generate_changelog(issue_key, created_at, closed_at, workflow, config=None):
                 })
                 
                 if status == done_status:
-                    # Done - быстро
                     current_time += timedelta(hours=done_hours)
                 elif status != workflow[-1]:
-                    # Активные этапы
                     stage_hours = hours_per_active * random.uniform(0.7, 1.3)
                     current_time += timedelta(hours=stage_hours)
     
@@ -346,9 +335,6 @@ def generate_changelog(issue_key, created_at, closed_at, workflow, config=None):
 
 
 def generate_issue_data(project_key, config, issue_num, project_id, now, is_subtask=False, parent_id=None):
-    """Генерирует данные для одной задачи с правильным распределением по времени"""
-    
-    # Тип задачи
     if is_subtask:
         issue_type = "Sub-task"
         prefix = "Sub"
@@ -369,7 +355,6 @@ def generate_issue_data(project_key, config, issue_num, project_id, now, is_subt
     status_rand = random.random()
     
     if status_rand < open_ratio:
-        # Открытые задачи — текущие
         if len(workflow) >= 3:
             status_idx = random.choice([0, 1, 2])
         elif len(workflow) >= 2:
@@ -379,37 +364,24 @@ def generate_issue_data(project_key, config, issue_num, project_id, now, is_subt
         status = workflow[status_idx]
         is_closed = False
     else:
-        # Закрытые задачи
         status = workflow[-1]
         is_closed = True
     
     all_team = config["team"] + config.get("qa", [])
     assignee = random.choice(all_team) if random.random() < 0.85 else None
     
-    # ============================================================
-    # 🔥 НОВОЕ РАСПРЕДЕЛЕНИЕ ДАТ
-    # ============================================================
-    
     if is_closed:
-        # Закрытые задачи:
-        # 40% — за последние 7 дней (для last week)
-        # 35% — за 8-30 дней (для истории)
-        # 25% — за 31-90 дней (для velocity)
         rand_type = random.random()
         
         if rand_type < 0.6:
-            # Последние 7 дней
             closed_days_ago = random.randint(1, 7)
         elif rand_type < 0.9:
-            # 8-30 дней назад
             closed_days_ago = random.randint(8, 30)
         else:
-            # 31-90 дней назад
             closed_days_ago = random.randint(31, 90)
         
         closed_at = now - timedelta(days=closed_days_ago)
         
-        # Cycle time
         avg_cycle = config.get("avg_cycle_time_days", 5)
         cycle_variation = random.uniform(0.5, 1.5)
         cycle_time_days = max(1, int(avg_cycle * cycle_variation))
@@ -418,21 +390,17 @@ def generate_issue_data(project_key, config, issue_num, project_id, now, is_subt
         updated_at = closed_at
         due_date = created_at + timedelta(days=random.randint(7, 30))
     else:
-        # Открытые задачи — все созданы в последние 30 дней
         created_days_ago = random.randint(1, 30)
         created_at = now - timedelta(days=created_days_ago)
         updated_at = now
         closed_at = None
         
-        # Due date: 30% просрочены, 70% в будущем
         if random.random() < 0.3:
             due_date = now - timedelta(days=random.randint(1, 14))
         else:
             due_date = now + timedelta(days=random.randint(7, 30))
     
-    # Story points
     if is_closed:
-        # Закрытые задачи — большие SP
         if issue_type == "Bug":
             story_points = random.choice([5, 8, 13])
         elif issue_type == "Story":
@@ -440,7 +408,6 @@ def generate_issue_data(project_key, config, issue_num, project_id, now, is_subt
         else:
             story_points = random.choice([5, 8, 13])
     else:
-        # Открытые задачи — маленькие SP
         if issue_type == "Bug":
             story_points = random.choice([1, 2, 3])
         elif issue_type == "Story":
@@ -448,7 +415,6 @@ def generate_issue_data(project_key, config, issue_num, project_id, now, is_subt
         else:
             story_points = random.choice([2, 3, 5])
     
-    # Время в работе
     if is_closed:
         time_spent = random.randint(4, 40)
         remaining_estimate = 0
@@ -458,7 +424,6 @@ def generate_issue_data(project_key, config, issue_num, project_id, now, is_subt
     
     original_estimate = time_spent + remaining_estimate if remaining_estimate else time_spent * 2
     
-    # Описание
     summaries = {
         "Bug": [
             f"[{prefix}-{issue_num}] Критическая ошибка в модуле аутентификации",
@@ -502,7 +467,6 @@ def generate_issue_data(project_key, config, issue_num, project_id, now, is_subt
     }
 
 
-
 def main():
     print("=" * 70)
     print("🚀 ГЕНЕРАЦИЯ ПОЛНЫХ ТЕСТОВЫХ ДАННЫХ ДЛЯ ДЕМО")
@@ -513,19 +477,35 @@ def main():
     
     try:
         # ============================================================
-        # 1. ОЧИСТКА СТАРЫХ ДАННЫХ И КЭША
+        # 1. ОЧИСТКА СТАРЫХ ДАННЫХ
         # ============================================================
-        print("\n🗑️ Очистка старых данных...")
-        db.execute(text("DELETE FROM normalized.project_status_mappings"))
-        db.execute(text("DELETE FROM normalized.issue_changelog"))
-        db.execute(text("DELETE FROM normalized.jira_issues"))
-        db.execute(text("DELETE FROM normalized.github_pull_request_reviews"))
-        db.execute(text("DELETE FROM normalized.github_commits"))
-        db.execute(text("DELETE FROM normalized.github_pull_requests"))
-        db.execute(text("DELETE FROM normalized.confluence_comments"))
-        db.execute(text("DELETE FROM normalized.confluence_pages"))
+        print("\n🗑️ Очистка старых тестовых данных...")
+
+        # Удаляем только тестовые проекты (с префиксом TEST_)
+        test_project_keys = [f"TEST_{key}" for key in PROJECTS_CONFIG.keys()]
+
+        # Удаляем статусы для тестовых проектов
+        for project_key in test_project_keys:
+            db.execute(text("""
+                DELETE FROM normalized.project_status_mappings 
+                WHERE project_key = :project_key
+            """), {"project_key": project_key})
+
+        # Удаляем задачи тестовых проектов
+        if test_project_keys:
+            db.execute(text("""
+                DELETE FROM normalized.jira_issues 
+                WHERE project_key IN :keys
+            """), {"keys": tuple(test_project_keys)})
+
+        # Удаляем changelog для тестовых задач
+        db.execute(text("""
+            DELETE FROM normalized.issue_changelog 
+            WHERE issue_key LIKE 'TEST_%'
+        """))
+
         db.commit()
-        print("   ✅ Удалено")
+        print("   ✅ Тестовые данные удалены")
         
         # Очищаем кэш
         print("\n🗑️ Очистка кэша...")
@@ -536,94 +516,19 @@ def main():
         except Exception as e:
             print(f"   ⚠️ Не удалось очистить кэш: {e}")
         
-        # Добавим ещё раз для уверенности (в случае если были дубли)
-        print("   🔄 Дополнительная очистка Jira задач...")
-        db.execute(text("DELETE FROM normalized.jira_issues WHERE is_deleted = false"))
-        db.commit()
-        print("   ✅ Готово")
-        
         # ============================================================
-        # 1.5. СОЗДАЁМ STATUS MAPPINGS ДЛЯ КАЖДОГО ПРОЕКТА
+        # 2. СОЗДАЁМ STATUS MAPPINGS (ПРАВИЛЬНАЯ ВЕРСИЯ)
         # ============================================================
         print("\n🔧 Создание status mappings...")
         
-        from app.db.models.normalized import ProjectStatusMapping
-        
-        status_mappings = {
-            "HEALTH": [
-                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Бизнес-тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
-            ],
-            "CRUNCH": [
-                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
-            ],
-            "BUGS": [
-                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
-            ],
-            "KANBAN": [
-                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Бизнес-тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
-            ],
-            "IDLE": [
-                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
-            ],
-            "EMAL": [
-                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Бизнес-тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
-            ],
-            "IMBAL": [
-                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Бизнес-тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
-            ],
-            "KAN": [
-                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
-            ],
-            "NEWPROJ": [
-                {"status": "Аналитика", "is_open": True, "is_in_progress": False, "is_closed": False},
-                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
-            ],
-            "FULLCYCLE": [
-                {"status": "Аналитика", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Код", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Ожидание ревью", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Бизнес-тестирование", "is_open": True, "is_in_progress": True, "is_closed": False},
-                {"status": "Внедрение", "is_open": False, "is_in_progress": False, "is_closed": True},
-            ],
-        }
-        
-        for project_key, mappings in status_mappings.items():
+        # Для каждого проекта создаем маппинги
+        for project_key, config in PROJECTS_CONFIG.items():
+            # Определяем, какой набор статусов использовать
+            if len(config["workflow"]) <= 3:
+                mappings = SHORT_WORKFLOW_MAPPINGS
+            else:
+                mappings = BASE_STATUS_MAPPINGS
+            
             for mapping in mappings:
                 db.execute(text("""
                     INSERT INTO normalized.project_status_mappings (
@@ -651,7 +556,7 @@ def main():
         print("   ✅ Status mappings созданы")
         
         # ============================================================
-        # 2. ГЕНЕРАЦИЯ JIRA ЗАДАЧ
+        # 3. ГЕНЕРАЦИЯ JIRA ЗАДАЧ
         # ============================================================
         print("\n📝 Генерация Jira задач...")
         
@@ -665,20 +570,16 @@ def main():
                 print(f"   ⚠️ Не удалось создать проект {project_key}, пропускаем")
                 continue
             
-            # Создаём связь с пользователем
             ensure_user_project_link(db, project_id)
             
             print(f"   📁 {project_key}: {config['issue_count']} задач")
             
             parent_task_id = None
-            parent_issue_key = None
             
             for i in range(config["issue_count"]):
-                # 30% задач - родительские (этапы), 70% - подзадачи
                 is_subtask = (parent_task_id is not None and random.random() < 0.7)
                 
                 if is_subtask:
-                    # Генерируем подзадачу
                     issue = generate_issue_data(
                         project_key, config, 
                         issue_num=i+1, 
@@ -688,7 +589,6 @@ def main():
                         parent_id=parent_task_id
                     )
                 else:
-                    # Генерируем родительскую задачу
                     issue = generate_issue_data(
                         project_key, config, 
                         issue_num=i+1, 
@@ -697,13 +597,11 @@ def main():
                         is_subtask=False,
                         parent_id=None
                     )
-                    parent_task_id = issue_id  # Сохраняем ID для следующих подзадач
-                    parent_issue_key = issue["issue_key"]
+                    parent_task_id = issue_id
                 
                 issue["id"] = issue_id
                 all_issues.append(issue)
                 
-                # Генерируем changelog только для родительских задач
                 if not is_subtask:
                     changelog = generate_changelog(
                         issue["issue_key"],
@@ -716,11 +614,9 @@ def main():
                 
                 issue_id += 1
                 
-                # Сбрасываем parent после 2-3 подзадач
                 if parent_task_id and (i + 1) % random.randint(2, 3) == 0:
                     parent_task_id = None
         
-        # Вставляем задачи
         print(f"\n💾 Вставка {len(all_issues)} задач Jira...")
         for issue in all_issues:
             try:
@@ -740,6 +636,7 @@ def main():
                         :created_at, :updated_at, :closed_at, :due_date,
                         :parent_issue_id, :last_synced, :is_deleted
                     )
+                    ON CONFLICT (id) DO NOTHING
                 """), {
                     "id": issue["id"],
                     "issue_key": issue["issue_key"],
@@ -765,122 +662,37 @@ def main():
             except Exception as e:
                 print(f"   ⚠️ Ошибка при вставке {issue['issue_key']}: {e}")
         
-        # Вставляем changelog
         print(f"💾 Вставка {len(all_changelogs)} записей changelog...")
         changelog_id = 10000
         for log in all_changelogs:
-            db.execute(text("""
-                INSERT INTO normalized.issue_changelog (
-                    id, issue_key, field_name, from_value, to_value,
-                    changed_at, author_account_id, created_at
-                ) VALUES (
-                    :id, :issue_key, :field_name, :from_value, :to_value,
-                    :changed_at, :author_account_id, :created_at
-                )
-            """), {
-                "id": changelog_id,
-                "issue_key": log["issue_key"],
-                "field_name": log["field_name"],
-                "from_value": log["from_value"],
-                "to_value": log["to_value"],
-                "changed_at": log["changed_at"],
-                "author_account_id": log["author_account_id"],
-                "created_at": log["changed_at"]
-            })
-            changelog_id += 1
-        
-        db.commit()
-        
-        # ============================================================
-        # 3. ГЕНЕРАЦИЯ GITHUB PRs, COMMITS, REVIEWS
-        # ============================================================
-        print("\n📝 Генерация GitHub данных...")
-        
-        # Вставляем PRs и коммиты (используем существующий скрипт)
-        from scripts.create_real_github_data import main as generate_github_data
-        generate_github_data()
-        
-        # ============================================================
-        # 4. ГЕНЕРАЦИЯ CONFLUENCE СТРАНИЦ
-        # ============================================================
-        print("\n📄 Генерация Confluence страниц...")
-        
-        page_id = 1
-        for project_key, config in PROJECTS_CONFIG.items():
-            project_id = get_or_create_project(db, project_key, config["name"], project_key)
-            if not project_id:
-                continue
-            
-            # Создаём 2-3 страницы на проект
-            for i in range(random.randint(2, 3)):
-                page_created = now - timedelta(days=random.randint(10, 60))
-                
+            try:
                 db.execute(text("""
-                    INSERT INTO normalized.confluence_pages (
-                        id, space_id, space_key, title, author_id,
-                        author_name, version, status, content,
-                        created_at, updated_at, last_synced_at,
-                        is_deleted
+                    INSERT INTO normalized.issue_changelog (
+                        id, issue_key, field_name, from_value, to_value,
+                        changed_at, author_account_id, created_at
                     ) VALUES (
-                        :id, :space_id, :space_key, :title, :author_id,
-                        :author_name, :version, :status, :content,
-                        :created_at, :updated_at, :last_synced,
-                        :is_deleted
+                        :id, :issue_key, :field_name, :from_value, :to_value,
+                        :changed_at, :author_account_id, :created_at
                     )
+                    ON CONFLICT (id) DO NOTHING
                 """), {
-                    "id": f"PAGE-{page_id}",
-                    "space_id": f"SPACE-{project_id}",
-                    "space_key": project_key,
-                    "title": f"{config['name']} - Документация {i+1}",
-                    "author_id": get_user_account_id(random.choice(config["team"])),
-                    "author_name": random.choice(config["team"]),
-                    "version": random.randint(1, 5),
-                    "status": "current",
-                    "content": f"<p>Техническая документация для проекта {config['name']}</p>",
-                    "created_at": page_created,
-                    "updated_at": page_created + timedelta(days=random.randint(1, 20)),
-                    "last_synced": now,
-                    "is_deleted": False
+                    "id": changelog_id,
+                    "issue_key": log["issue_key"],
+                    "field_name": log["field_name"],
+                    "from_value": log["from_value"],
+                    "to_value": log["to_value"],
+                    "changed_at": log["changed_at"],
+                    "author_account_id": log["author_account_id"],
+                    "created_at": log["changed_at"]
                 })
-                page_id += 1
+                changelog_id += 1
+            except Exception as e:
+                print(f"   ⚠️ Ошибка при вставке changelog {log['issue_key']}: {e}")
         
         db.commit()
-
-
-                # ============================================================
-        # 4.5. ОБНОВЛЕНИЕ АКТИВНОСТИ ПРОЕКТОВ
-        # ============================================================
-        print("\n📅 Обновление активности проектов...")
-        
-        for project_key, config in PROJECTS_CONFIG.items():
-            # Получаем задачи проекта
-            issues = db.execute(text("""
-                SELECT id FROM normalized.jira_issues 
-                WHERE project_key = :project_key AND is_deleted = false
-                LIMIT 30
-            """), {"project_key": project_key}).fetchall()
-            
-            for issue in issues:
-                # Добавляем 3-5 случайных обновлений в последние 60 дней
-                num_updates = random.randint(3, 6)
-                for _ in range(num_updates):
-                    days_ago = random.randint(1, 60)
-                    update_date = datetime.now() - timedelta(days=days_ago)
-                    
-                    # Обновляем updated_at, если новая дата больше
-                    db.execute(text("""
-                        UPDATE normalized.jira_issues 
-                        SET updated_at = GREATEST(updated_at, :update_date)
-                        WHERE id = :issue_id
-                    """), {"issue_id": issue[0], "update_date": update_date})
-            
-            print(f"   ✅ {project_key}: добавлена активность")
-        
-        db.commit()
-        print("   ✅ Активность проектов обновлена")
         
         # ============================================================
-        # 5. СТАТИСТИКА
+        # 4. СТАТИСТИКА
         # ============================================================
         print("\n" + "=" * 70)
         print("📊 ИТОГОВАЯ СТАТИСТИКА")
@@ -890,31 +702,25 @@ def main():
             SELECT 
                 p.key,
                 COUNT(DISTINCT ji.id) as issues,
-                COUNT(DISTINCT CASE WHEN ji.status IN ('Внедрение', 'Done', 'Closed', 'Resolved', 'Готово') THEN ji.id END) as closed,
-                COUNT(DISTINCT pr.id) as prs,
-                COUNT(DISTINCT c.id) as commits
+                COUNT(DISTINCT CASE WHEN ji.status IN ('Внедрение', 'Done', 'Closed', 'Resolved', 'Готово') THEN ji.id END) as closed
             FROM core.projects p
             LEFT JOIN normalized.jira_issues ji ON ji.project_key = p.jira_project_key AND ji.is_deleted = false
-            LEFT JOIN normalized.github_pull_requests pr ON pr.project_id = p.id
-            LEFT JOIN normalized.github_commits c ON c.project_id = p.id
             GROUP BY p.key
             ORDER BY p.key
         """)).fetchall()
         
         print("\n📈 Данные по проектам:")
-        print(f"   {'Проект':<10} {'Задач':>8} {'Закрыто':>10} {'PR':>6} {'Commits':>10}")
-        print("   " + "-" * 50)
+        print(f"   {'Проект':<10} {'Задач':>8} {'Закрыто':>10}")
+        print("   " + "-" * 35)
         for row in stats:
-            print(f"   {row[0]:<10} {row[1]:>8} {row[2]:>10} {row[3]:>6} {row[4]:>10}")
+            print(f"   {row[0]:<10} {row[1]:>8} {row[2]:>10}")
         
         print("\n💡 Готово! Данные для всех метрик:")
-        print("   ✅ Cycle Time (через changelog)")
+        print("   ✅ Workload Index")
+        print("   ✅ Cycle Time")
         print("   ✅ Lead Time")
         print("   ✅ SLA Score")
-        print("   ✅ Workload Index")
-        print("   ✅ PR Metrics")
         print("   ✅ Health Score")
-        print("\n🎯 Можешь запускать фронтенд и смотреть демо!")
         
     except Exception as e:
         print(f"\n❌ Ошибка: {e}")

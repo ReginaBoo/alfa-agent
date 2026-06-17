@@ -17,7 +17,7 @@ from app.services.project_sync_service import sync_projects_from_jira
 logger = logging.getLogger(__name__)
 
 
-def sync_jira_task(user_id: int, instance_name: str, project_key: str = None, sync_statuses_first: bool = True) -> dict:
+def sync_jira_task(user_id: int, instance_name: str, project_key: str = None, sync_statuses_first: bool = True, full_sync: bool = False) -> dict:
     """
     Фоновая задача для синхронизации Jira проектов.
 
@@ -28,6 +28,7 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None, sy
         sync_statuses_first: Синхронизировать ли статусы проектов перед задачами
     """
     logger.info(f"Starting Jira sync for user {user_id}, instance {instance_name}")
+    logger.info(f"Full sync: {full_sync}")
     if project_key:
         logger.info(f"Project filter: {project_key}")
     logger.info(f"Sync statuses first: {sync_statuses_first}")
@@ -57,14 +58,27 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None, sy
         if project_key:
             project_keys = [project_key]
         else:
+            # Получаем проекты из Jira API для этого инстанса
             import requests
             projects_url = f"https://api.atlassian.com/ex/jira/{token.instance_id}/rest/api/3/project"
             headers = {"Authorization": f"Bearer {token.access_token}"}
             response = requests.get(projects_url, headers=headers, timeout=30)
             response.raise_for_status()
-            projects = response.json()
-            project_keys = [p["key"] for p in projects]
-            logger.info(f"Found {len(project_keys)} projects: {project_keys}")
+            jira_projects = response.json()
+            jira_project_keys = [p["key"] for p in jira_projects]
+            logger.info(f"Found {len(jira_project_keys)} projects from Jira API: {jira_project_keys}")
+            
+            # Фильтруем только те проекты, которые есть в БД у пользователя
+            from app.db.models.core import Project, UserProject
+            user_projects = db.query(Project).join(
+                UserProject, UserProject.project_id == Project.id
+            ).filter(
+                UserProject.user_id == user_id,
+                Project.is_active == True,
+                Project.jira_project_key.in_(jira_project_keys)  # ← только те, что есть в Jira API
+            ).all()
+            project_keys = [p.jira_project_key or p.key for p in user_projects]
+            logger.info(f"Found {len(project_keys)} projects from DB matching Jira API: {project_keys}")
 
         # Синхронизируем задачи каждого проекта
         sync_service = JiraSyncService(db)
@@ -82,11 +96,17 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None, sy
         for p_key in project_keys:
             try:
                 logger.info(f"Syncing issues for project {p_key}...")
+                if not full_sync:
+                    jql_filter = f"project = {p_key} AND updated >= -1h"
+                else:
+                    jql_filter = f"project = {p_key}"
+                
                 result = sync_service.sync_project_issues(
                     user_id=user_id,
                     instance_name=instance_name,
                     project_key=p_key,
-                    sync_statuses=False  # статусы уже синхронизированы выше
+                    jql=jql_filter,  # ← передаем JQL
+                    sync_statuses=False
                 )
 
                 total_result["issues"]["created"] += result["created"]
