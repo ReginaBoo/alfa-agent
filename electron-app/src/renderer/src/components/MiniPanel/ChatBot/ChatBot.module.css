@@ -58,6 +58,8 @@
   border-radius: 12px;
   max-width: 600px;
   word-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .aiBubble {
