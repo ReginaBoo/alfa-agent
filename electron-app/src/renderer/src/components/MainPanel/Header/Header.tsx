@@ -8,7 +8,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useProjects } from '../../../hooks/useDashboardData';
 import { useAuth } from '../../../hooks/useHeader';
 import { logout } from '../../../api/logout';
-
+import logo from '../../../assets/logo.svg';
 import { useState } from 'react';
 export const Header = () => {
   const navigate = useNavigate();
@@ -77,7 +77,9 @@ export const Header = () => {
   return (
     <header className={s.header}>
       <div className={s.leftSection}>
-        <RocketOutlined className={s.rocketIcon} />
+        <div className={s.headerDragArea}>
+          <img src={logo} alt="rocket" width={24} height={24} />
+        </div>
         <div className={s.logoTitle}>
           {currentProjectId === 'all' ? (
             <AppstoreFilled className={s.logo} />

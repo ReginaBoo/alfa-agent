@@ -110,12 +110,10 @@
   width: 100%;
 }
 
-/* Base grid styling: Now only animates opacity, and slightly slower for a nicer fade */
 .cardsRow {
-  width: 100%;
-  transition: opacity 0.3s ease-in-out;
-  /* Slower, ease-in-out makes it feel more deliberate and smoother */
-  will-change: opacity;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
 }
 
 /* The state where content is visible (default) */

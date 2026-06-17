@@ -52,7 +52,6 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-
   /* УБИРАЕМ жесткие height: 20% и min-height: 200px */
   height: auto;
 

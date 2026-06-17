@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Row, Col, Card, Typography, Empty } from 'antd';
+import { Card, Typography, Empty } from 'antd';
 import { InfoCircleOutlined, FlagFilled, ArrowRightOutlined } from '@ant-design/icons';
 import { ProjectStatsItem } from '../../../../types/dashboard';
 import s from './ProjectStats.module.css';
@@ -28,8 +28,6 @@ export const ProjectStats = ({ data }: ProjectStatsProps) => {
   const [currentPage, setCurrentPage] = useState(0);
   const [displayedPage, setDisplayedPage] = useState(0); // Which data is currently rendered
   const [isAnimating, setIsAnimating] = useState(false);
-  const cardsRowRef = useRef<HTMLDivElement>(null);
-
   const itemsPerPage = 6;
 
   if (!Array.isArray(data) || data.length === 0) {
@@ -78,108 +76,99 @@ export const ProjectStats = ({ data }: ProjectStatsProps) => {
 
   return (
     <div className={s.carouselContainer}>
-      <Row
-        ref={cardsRowRef}
-        gutter={[16, 16]}
-        // Fade in/out by applying the visibility class
-        className={`${s.cardsRow} ${isAnimating ? s.fadeOut : s.fadeIn}`}
-      >
-        {visibleData.map((p, index) => {
+      <div className={s.cardsRow}>
+        {visibleData.map((p) => {
           const { color, icon } = getStatusConfig(p.status);
           const isError = p.status === 'error';
           const isWarning = p.status === 'warning';
 
           return (
-            <Col
-              xs={24}
-              sm={12}
-              xl={8}
-              key={`${p.id}-${index}`}
-              style={{ display: 'flex' }}
+
+            <Card
+              className={s.projectCard}
+              style={{ borderTop: `4px solid ${color}`, width: '100%' }}
+              onClick={() => handleCardClick(p.project_id || p.id)}
             >
-              <Card
-                className={s.projectCard}
-                style={{ borderTop: `4px solid ${color}`, width: '100%' }}
-                onClick={() => handleCardClick(p.project_id || p.id)}
-              >
-                <div className={s.cardHeader}>
-                  <Title level={5} className={s.projectTitle}>
-                    <span title={p.name}>{p.name}</span>
-                    {p.jira_url && (
-                      <ArrowRightOutlined
-                        className={s.arrow}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleProjectClick(p.jira_url);
-                        }}
-                      />
-                    )}
-                  </Title>
-                  {icon}
+              <div className={s.cardHeader}>
+                <Title level={5} className={s.projectTitle}>
+                  <span title={p.name}>{p.name}</span>
+                  {p.jira_url && (
+                    <ArrowRightOutlined
+                      className={s.arrow}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleProjectClick(p.jira_url);
+                      }}
+                    />
+                  )}
+                </Title>
+                {icon}
+              </div>
+
+              {p.noData ? (
+                <div className={s.noDataWrapper}>
+                  <span className={s.noDataText}>Нет данных за период</span>
                 </div>
-
-                {p.noData ? (
-                  <div className={s.noDataWrapper}>
-                    <span className={s.noDataText}>Нет данных за период</span>
+              ) : (
+                <div className={s.statsGrid}>
+                  <div className={s.statItem}>
+                    <div className={s.statValue} style={{ color: isError ? '#FF4D4F' : '#3460DC' }}>
+                      {p.stats.workload}%
+                    </div>
+                    <div className={s.statLabel}>Загрузка</div>
                   </div>
-                ) : (
-                  <div className={s.statsGrid}>
-                    <div className={s.statItem}>
-                      <div className={s.statValue} style={{ color: isError ? '#FF4D4F' : '#3460DC' }}>
-                        {p.stats.workload}%
-                      </div>
-                      <div className={s.statLabel}>Загрузка</div>
-                    </div>
 
-                    <div className={s.statItem}>
-                      <div className={s.statValue}>{p.stats.reviewTime}</div>
-                      <div className={s.statLabel}>Ревью</div>
-                    </div>
-
-                    <div className={s.statItem}>
-                      <div className={s.statValue}>{p.stats.bugs}</div>
-                      <div className={s.statLabel}>Баги</div>
-                    </div>
-
-                    <div className={s.statItem}>
-                      <div className={s.statValue} style={{ color: isError ? '#FF4D4F' : isWarning ? '#FAAD14' : '#3460DC' }}>
-                        {p.stats.prCount}
-                      </div>
-                      <div className={s.statLabel}>PR</div>
-                    </div>
-
-                    <div className={s.statItem}>
-                      <div className={s.statValue}>{p.stats.commits}</div>
-                      <div className={s.statLabel}>Коммиты</div>
-                    </div>
-
-                    <div className={s.statItem}>
-                      <div className={s.statValue} style={{ color: isError ? '#FAAD14' : '#3460DC' }}>
-                        {p.stats.sla}%
-                      </div>
-                      <div className={s.statLabel}>SLA</div>
-                    </div>
+                  <div className={s.statItem}>
+                    <div className={s.statValue}>{p.stats.reviewTime}</div>
+                    <div className={s.statLabel}>Ревью</div>
                   </div>
-                )}
-              </Card>
-            </Col>
+
+                  <div className={s.statItem}>
+                    <div className={s.statValue}>{p.stats.bugs}</div>
+                    <div className={s.statLabel}>Баги</div>
+                  </div>
+
+                  <div className={s.statItem}>
+                    <div className={s.statValue} style={{ color: isError ? '#FF4D4F' : isWarning ? '#FAAD14' : '#3460DC' }}>
+                      {p.stats.prCount}
+                    </div>
+                    <div className={s.statLabel}>PR</div>
+                  </div>
+
+                  <div className={s.statItem}>
+                    <div className={s.statValue}>{p.stats.commits}</div>
+                    <div className={s.statLabel}>Коммиты</div>
+                  </div>
+
+                  <div className={s.statItem}>
+                    <div className={s.statValue} style={{ color: isError ? '#FAAD14' : '#3460DC' }}>
+                      {p.stats.sla}%
+                    </div>
+                    <div className={s.statLabel}>SLA</div>
+                  </div>
+                </div>
+              )}
+            </Card>
+
           );
         })}
-      </Row>
+      </div>
 
-      {totalPages > 1 && (
-        <div className={s.customPagination}>
-          {Array.from({ length: totalPages }).map((_, pageIndex) => (
-            <button
-              key={pageIndex}
-              type="button"
-              className={`${s.dot} ${currentPage === pageIndex ? s.activeDot : ''}`}
-              onClick={() => handlePageChange(pageIndex)}
-              aria-label={`Перейти к странице ${pageIndex + 1}`}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+      {
+        totalPages > 1 && (
+          <div className={s.customPagination}>
+            {Array.from({ length: totalPages }).map((_, pageIndex) => (
+              <button
+                key={pageIndex}
+                type="button"
+                className={`${s.dot} ${currentPage === pageIndex ? s.activeDot : ''}`}
+                onClick={() => handlePageChange(pageIndex)}
+                aria-label={`Перейти к странице ${pageIndex + 1}`}
+              />
+            ))}
+          </div>
+        )
+      }
+    </div >
   );
 };

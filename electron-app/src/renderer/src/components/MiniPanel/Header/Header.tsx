@@ -1,10 +1,11 @@
 import s from './Header.module.css';
 import { Button, Dropdown, Space } from 'antd';
+
+import logo from '../../../assets/logo.svg';
 import {
   MenuOutlined,
   CloseOutlined,
   MinusOutlined,
-  RocketOutlined,
   BellOutlined,
   MessageOutlined,
   AppstoreOutlined,
@@ -63,7 +64,7 @@ export const Header = ({ onTabChange }: HeaderProps) => {
       </div>
 
       <div className={s.headerDragArea}>
-        <RocketOutlined style={{ color: '#3460DC' }} />
+        <img src={logo} alt="rocket" width={20} height={20} />
       </div>
 
       <div className="no-drag">

@@ -51,6 +51,7 @@ function createAuthWindow(): void {
   authWindow = new BrowserWindow({
     width: 900,
     height: 700,
+    icon: iconPath,
     parent: mainWindow || undefined,
     modal: true,
     show: false,
@@ -113,6 +114,7 @@ function createWindow(): void {
     x: x,
     y: y,
     show: false,
+    icon: iconPath,
     autoHideMenuBar: true,
     alwaysOnTop: true,
     frame: false,
