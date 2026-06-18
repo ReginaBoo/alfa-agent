@@ -43,13 +43,8 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "your-secret-key-change-in-production"
     
     REDIS_URL: str = "redis://redis:6379/0"
-    ALPHABANK_API_KEY: Optional[str] = None
-
-    ALPHABANK_MODEL: str = "openai/gpt-oss-120b"
-
-    ALPHABANK_API_URL: str = (
-            "https://ai-api.pincode-infra.ru/v1/chat/completions"
-    )
+    OPENROUTER_API_KEY: str
+    OPENROUTER_MODEL: str = "openai/gpt-4o-mini"
 
     JIRA_SYNC_EXCLUDED_USERS: str = ""
 
