@@ -238,7 +238,21 @@ def get_or_create_project(db, project_key, project_name, jira_project_key):
     return result.fetchone()[0]
 
 
-def ensure_user_project_link(db, project_id, user_id=2):
+def get_user_by_email(db, email):
+    """Получает пользователя по email"""
+    from app.db.models.identity import User
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        raise ValueError(f"User with email {email} not found")
+    return user
+
+
+def ensure_user_project_link(db, project_id, user_id=None, email=None):
+    """Создаёт связь пользователя с проектом"""
+    if email:
+        user = get_user_by_email(db, email)
+        user_id = user.id
+    
     result = db.execute(text("""
         SELECT id FROM core.user_projects 
         WHERE project_id = :project_id AND user_id = :user_id
@@ -570,7 +584,7 @@ def main():
                 print(f"   ⚠️ Не удалось создать проект {project_key}, пропускаем")
                 continue
             
-            ensure_user_project_link(db, project_id)
+            ensure_user_project_link(db, project_id, email="test.jira.test@yandex.ru")
             
             print(f"   📁 {project_key}: {config['issue_count']} задач")
             

@@ -46,9 +46,12 @@ function ElectronAuthChecker({ children }: ElectronAuthCheckerProps) {
   };
 
   const syncTokenFromMain = async () => {
+    console.log('[React] syncTokenFromMain called');
     if (window.electron?.getSessionToken) {
       const token = await window.electron.getSessionToken();
+      console.log('[React] Token from main:', token ? '✅ exists' : '❌ no');
       if (token) {
+        localStorage.setItem('session_token', token);
         setAuthToken(token);
         return true;
       }
@@ -57,11 +60,26 @@ function ElectronAuthChecker({ children }: ElectronAuthCheckerProps) {
   };
 
   const handleLogin = async () => {
+    console.log('[React] handleLogin called');
     setIsLoggingIn(true);
     if (window.electron?.startLogin) {
       await window.electron.startLogin();
     }
     setIsLoggingIn(false);
+
+    // После закрытия браузера проверяем токен
+    console.log('[React] Checking token after login...');
+    setTimeout(async () => {
+      const token = await window.electron?.getSessionToken();
+      if (token) {
+        console.log('[React] ✅ Token found after login');
+        localStorage.setItem('session_token', token);
+        setAuthToken(token);
+        await checkAuth();
+      } else {
+        console.log('[React] ❌ No token found after login');
+      }
+    }, 3000);
   };
 
   useEffect(() => {
@@ -80,6 +98,18 @@ function ElectronAuthChecker({ children }: ElectronAuthCheckerProps) {
       window.electron?.removeAuthListener?.();
     };
 
+  }, []);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      console.log('[React] Window focused, checking auth...');
+      syncTokenFromMain().then(() => {
+        checkAuth();
+      });
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
   useEffect(() => {

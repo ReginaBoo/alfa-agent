@@ -1,10 +1,10 @@
 {
   "name": "electron-app",
   "version": "1.0.0",
-  "description": "An Electron application with React and TypeScript",
+  "description": "Alfa Agent - AI Assistant for Jira and Confluence",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "Alfa Agent Team",
+  "homepage": "https://alfa-agent.ru",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
@@ -12,13 +12,78 @@
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "start": "electron-vite preview",
-    "dev": "electron-vite dev",
+    "dev": "cross-env VITE_BACKEND_URL=https://89.169.165.170.nip.io electron-vite dev",
+    "dev:local": "cross-env VITE_BACKEND_URL=http://localhost:8000 electron-vite dev",
+    "dev:prod": "cross-env VITE_BACKEND_URL=https://89.169.165.170.nip.io electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
+    "build:icon": "electron-icon-builder --input=./resources/icon.png --output=./resources --flatten",
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electron-builder --win",
-    "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux"
+    "build:web": "cd src/renderer && npx vite build --outDir ../../out/web",
+    "build:win": "npm run build && electron-builder --win --config",
+    "build:mac": "npm run build && electron-builder --mac --config",
+    "build:linux": "npm run build && electron-builder --linux --config",
+    "build:all": "npm run build:win && npm run build:mac && npm run build:linux"
+  },
+  "build": {
+    "appId": "com.alfagent.app",
+    "productName": "Alfa Agent",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        "portable"
+      ],
+      "icon": "resources/icons/icon.ico"
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "icon": "resources/icons/icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "resources/icons/512x512.png",
+      "category": "Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Alfa Agent",
+      "perMachine": true
+    },
+    "portable": {
+      "artifactName": "AlfaAgent-Portable.exe"
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 410,
+          "y": 180,
+          "type": "link",
+          "path": "/Applications"
+        },
+        {
+          "x": 130,
+          "y": 180,
+          "type": "file"
+        }
+      ]
+    },
+    "appImage": {
+      "artifactName": "AlfaAgent.AppImage"
+    }
   },
   "dependencies": {
     "@ant-design/charts": "^2.6.7",
@@ -40,8 +105,10 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "cross-env": "^10.1.0",
     "electron": "^39.2.6",
     "electron-builder": "^26.0.12",
+    "electron-icon-builder": "^2.0.1",
     "electron-vite": "^5.0.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react": "^7.37.5",

@@ -115,7 +115,6 @@ export const mockProjectsData = [
 ];
 
 export const mockGanttData: GanttProjectResponse = {
-  // Наш бэкенд решил показать период с марта по май 2026 года
   viewRange: {
     start: '2026-03-01',
     end: '2027-01-31',
@@ -123,118 +122,186 @@ export const mockGanttData: GanttProjectResponse = {
   tasks: [
     {
       id: '1',
+      issueKey: 'PROJ-1',        // добавлено
       task: 'Этап 1. Аналитика и Архитектура',
       duration: '24 дня',
       progress: 65,
+      responsible: 'Команда',     // добавлено
+      start: '2026-03-02',       // добавлено
+      end: '2026-03-29',         // добавлено
+      isOverdue: false,          // добавлено
+      overdueSince: null,        // добавлено
+      status: 'В работе',        // добавлено
       children: [
         {
           id: '1-1',
+          issueKey: 'PROJ-1-1',
           task: 'Сбор требований и ТЗ',
           duration: '7 дней',
           progress: 100,
           responsible: 'Соня',
-          start: '2026-03-02', // Понедельник (Неделя 10)
-          end: '2026-03-08',   // Воскресенье (Неделя 10) -> Рендерится ровно на ВСЮ ячейку
+          start: '2026-03-02',
+          end: '2026-03-08',
+          isOverdue: false,
+          overdueSince: null,
+          status: 'Готово'
         },
         {
           id: '1-2',
+          issueKey: 'PROJ-1-2',
           task: 'Проектирование базы данных',
           duration: '17 дней',
           progress: 45,
           responsible: 'Иван',
-          start: '2026-03-09', // Понедельник (Неделя 11)
-          end: '2026-03-25',   // Среда (Неделя 13) -> Пройдет сквозь 11, 12 недели и обрежется посреди 13-й
+          start: '2026-03-09',
+          end: '2026-03-25',
+          isOverdue: false,
+          overdueSince: null,
+          status: 'В работе'
         },
         {
           id: '1-3',
+          issueKey: 'PROJ-1-3',
           task: 'Согласование архитектуры',
           duration: '7 дней',
           progress: 0,
           responsible: 'Анна',
-          start: '2026-03-23', // Понедельник (Неделя 13)
-          end: '2026-03-29',   // Воскресенье (Неделя 13) -> Накладывается параллельно Ивану на 13-й неделе
+          start: '2026-03-23',
+          end: '2026-03-29',
+          isOverdue: false,
+          overdueSince: null,
+          status: 'Backlog'
         }
       ]
     },
     {
       id: '2',
+      issueKey: 'PROJ-2',        // добавлено
       task: 'Этап 2. Разработка базового функционала',
       duration: '30 дней',
       progress: 15,
+      responsible: 'Команда',     // добавлено
+      start: '2026-04-06',       // добавлено
+      end: '2026-05-03',         // добавлено
+      isOverdue: false,          // добавлено
+      overdueSince: null,        // добавлено
+      status: 'В работе',        // добавлено
       children: [
         {
           id: '2-1',
+          issueKey: 'PROJ-2-1',
           task: 'Разработка API (Backend)',
           duration: '14 дней',
           progress: 30,
-          responsible: 'Дмитрий', // Новый сотрудник, для него цвет сгенерируется автоматически!
-          start: '2026-04-06', // Неделя 15
-          end: '2026-04-19',   // Неделя 16
+          responsible: 'Дмитрий',
+          start: '2026-04-06',
+          end: '2026-04-19',
+          isOverdue: false,
+          overdueSince: null,
+          status: 'В работе'
         },
         {
           id: '2-2',
+          issueKey: 'PROJ-2-2',
           task: 'Интеграция UI компонентов',
           duration: '12 дней',
           progress: 0,
           responsible: 'Анна',
-          start: '2026-04-22', // Среда (Неделя 17) -> Начнется со смещением внутри ячейки
-          end: '2026-05-03',   // Воскресенье (Неделя 18)
+          start: '2026-04-22',
+          end: '2026-05-03',
+          isOverdue: false,
+          overdueSince: null,
+          status: 'Backlog'
         }
       ]
     },
     {
       id: '3',
+      issueKey: 'PROJ-3',        // добавлено
       task: 'Этап 3. Тестирование и Релиз',
       duration: '10 дней',
       progress: 0,
+      responsible: 'Команда',     // добавлено
+      start: '2026-05-11',       // добавлено
+      end: '2026-05-20',         // добавлено
+      isOverdue: false,          // добавлено
+      overdueSince: null,        // добавлено
+      status: 'Backlog',         // добавлено
       children: [
         {
           id: '3-1',
+          issueKey: 'PROJ-3-1',
           task: 'QA Автоматизация',
           duration: '10 дней',
           progress: 0,
           responsible: 'Соня',
-          start: '2026-05-11', // Неделя 20
-          end: '2026-05-20',   // Неделя 21
+          start: '2026-05-11',
+          end: '2026-05-20',
+          isOverdue: false,
+          overdueSince: null,
+          status: 'Backlog'
         }
       ]
     },
     {
       id: '4',
-      task: 'Этап 5. Деплой',
+      issueKey: 'PROJ-4',        // добавлено
+      task: 'Этап 4. Деплой',
       duration: '5 дней',
       progress: 0,
+      responsible: 'Команда',     // добавлено
+      start: '2026-05-11',       // добавлено
+      end: '2026-05-20',         // добавлено
+      isOverdue: false,          // добавлено
+      overdueSince: null,        // добавлено
+      status: 'Backlog',         // добавлено
       children: [
         {
           id: '4-1',
-          task: 'QA Автоматизация',
+          issueKey: 'PROJ-4-1',
+          task: 'Настройка окружения',
           duration: '10 дней',
           progress: 0,
           responsible: 'Соня',
-          start: '2026-05-11', // Неделя 20
-          end: '2026-05-20',   // Неделя 21
+          start: '2026-05-11',
+          end: '2026-05-20',
+          isOverdue: false,
+          overdueSince: null,
+          status: 'Backlog'
         }
       ]
     },
     {
       id: '5',
-      task: 'Этап 6. Правки',
+      issueKey: 'PROJ-5',        // добавлено
+      task: 'Этап 5. Правки',
       duration: '7 дней',
       progress: 0,
+      responsible: 'Команда',     // добавлено
+      start: '2026-05-11',       // добавлено
+      end: '2026-05-20',         // добавлено
+      isOverdue: false,          // добавлено
+      overdueSince: null,        // добавлено
+      status: 'Backlog',         // добавлено
       children: [
         {
           id: '5-1',
-          task: 'QA Автоматизация',
+          issueKey: 'PROJ-5-1',
+          task: 'Исправление багов',
           duration: '10 дней',
           progress: 0,
           responsible: 'Соня',
-          start: '2026-05-11', // Неделя 20
-          end: '2026-05-20',   // Неделя 21
+          start: '2026-05-11',
+          end: '2026-05-20',
+          isOverdue: false,
+          overdueSince: null,
+          status: 'Backlog'
         }
       ]
     }
   ],
 };
+
 
 export const mockProjectInsightsData: InsightItem[] = [
   {
@@ -267,6 +334,13 @@ export const mockProjectCycleTimeData: CycleTimeData = {
     { id: "3", label: "Ревью", hours: 15 },
     { id: "4", label: "Тестирование", hours: 20 },
     { id: "5", label: "Тестирование 2", hours: 10 }
+  ],
+  statuses: [
+    { id: "todo", label: "To Do", hours: 0 },
+    { id: "in-progress", label: "In Progress", hours: 0 },
+    { id: "review", label: "Review", hours: 0 },
+    { id: "completed", label: "Completed", hours: 0 },
+    { id: "blocked", label: "Blocked", hours: 0 }
   ]
 };
 

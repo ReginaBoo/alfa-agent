@@ -1,6 +1,5 @@
 import s from './Header.module.css';
 import { Button, Dropdown, Space } from 'antd';
-
 import logo from '../../../assets/logo.svg';
 import {
   MenuOutlined,
@@ -10,9 +9,13 @@ import {
   MessageOutlined,
   AppstoreOutlined,
 } from '@ant-design/icons';
+
 interface HeaderProps {
   onTabChange: (key: string) => void;
 }
+
+// Получаем URL из переменных окружения
+const FRONTEND_URL = import.meta.env.VITE_FRONTEND_URL || 'http://localhost:5173';
 
 export const Header = ({ onTabChange }: HeaderProps) => {
   const menuItems = [
@@ -35,8 +38,8 @@ export const Header = ({ onTabChange }: HeaderProps) => {
       onClick: () => {
         const token = localStorage.getItem('session_token');
         const url = token
-          ? `http://localhost:5173/login?token=${encodeURIComponent(token)}`
-          : 'http://localhost:5173/login';
+          ? `${FRONTEND_URL}/login?token=${encodeURIComponent(token)}`
+          : `${FRONTEND_URL}/login`;
 
         if ((window as any).electron?.openExternal) {
           (window as any).electron.openExternal(url);

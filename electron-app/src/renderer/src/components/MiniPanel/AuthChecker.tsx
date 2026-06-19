@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Spin, Button, Typography, Card } from 'antd';
 import { LoginOutlined } from '@ant-design/icons';
-import api from '../../api/client';
-import setAuthToken from '../../api/client';
+import api, { setAuthToken } from '../../api/client';
+
 const { Title, Text } = Typography;
 
 interface AuthCheckerProps {
@@ -14,10 +14,13 @@ const AuthChecker: React.FC<AuthCheckerProps> = ({ children }) => {
   const [authorized, setAuthorized] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
+  // ВРЕМЕННО - для продакшена захардкодим URL
+  const BACKEND_URL = 'https://89.169.165.170.nip.io';
+  // const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+
   const checkAuth = async () => {
     try {
       console.log('🔍 Checking auth...');
-      // Теперь baseURL уже включает /api
       const response = await api.get('/auth/me');
       console.log('✅ Auth response:', response.data);
       setAuthorized(true);
@@ -32,21 +35,15 @@ const AuthChecker: React.FC<AuthCheckerProps> = ({ children }) => {
   };
 
   useEffect(() => {
-    // Проверяем, есть ли токен в URL параметрах (при переходе из Electron)
     const urlParams = new URLSearchParams(window.location.search);
     const tokenFromUrl = urlParams.get('token');
 
     if (tokenFromUrl) {
       console.log('✅ Token found in URL, saving to localStorage');
-      // Сохраняем токен через функцию
       setAuthToken(tokenFromUrl);
-      // Убираем токен из URL, чтобы не светился
       window.history.replaceState({}, document.title, window.location.pathname);
-
-      // Перенаправляем на дашборд после сохранения токена
       window.location.href = '/dashboard';
     } else {
-      // Проверяем, есть ли токен в localStorage
       const savedToken = localStorage.getItem('session_token');
       if (savedToken) {
         setAuthToken(savedToken);
@@ -57,16 +54,15 @@ const AuthChecker: React.FC<AuthCheckerProps> = ({ children }) => {
 
   const handleLogin = () => {
     setIsLoggingIn(true);
-    const loginUrl = 'http://localhost:8000/auth/login';
+    const loginUrl = `${BACKEND_URL}/auth/login`;
+    console.log('🔑 Login URL:', loginUrl);
 
-    // Открываем в браузере
     if (window.electron?.openExternal) {
       window.electron.openExternal(loginUrl);
     } else {
       window.open(loginUrl, '_blank');
     }
 
-    // Polling: проверяем авторизацию каждые 2 секунды
     const interval = setInterval(async () => {
       try {
         await api.get('/auth/me');

@@ -1,20 +1,24 @@
 import { useEffect, useState } from 'react';
 
-export const useMinLoading = (loading: boolean, minTime = 200) => {
+export const useMinLoading = (loading: boolean, minTime = 200): boolean => {
   const [show, setShow] = useState(true);
 
   useEffect(() => {
-    const start = Date.now();
+    let timer: NodeJS.Timeout | null = null;
 
     if (!loading) {
-      const diff = Date.now() - start;
-      const wait = Math.max(minTime - diff, 0);
-
-      const t = setTimeout(() => setShow(false), wait);
-      return () => clearTimeout(t);
+      timer = setTimeout(() => {
+        setShow(false);
+      }, minTime);
     } else {
       setShow(true);
     }
+
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
   }, [loading, minTime]);
 
   return show;

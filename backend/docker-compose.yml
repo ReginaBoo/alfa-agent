@@ -37,6 +37,21 @@ services:
     networks:
       - app-network
 
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    networks:
+      - app-network
+
   backend:
     build: .
     depends_on:
@@ -44,8 +59,8 @@ services:
         condition: service_healthy
       timescaledb:
         condition: service_healthy
-    ports:
-      - "8000:8000"
+      redis:
+        condition: service_healthy
     env_file:
       - .env
     volumes:
@@ -67,30 +82,11 @@ services:
     dns:
       - 8.8.8.8
       - 8.8.4.4
-    extra_hosts:  # ← ДОБАВЛЕНО
+    networks:
+      - app-network
+    extra_hosts:
       - "auth.atlassian.com:13.227.180.4"
       - "api.atlassian.com:13.227.180.4"
-    command: >
-      sh -c "alembic upgrade head &&
-            python scripts/init_timescale.py &&
-            uvicorn app.main:app --host 0.0.0.0 --port 8000 --http h11 --reload"
-    networks:
-      - app-network
-
-  redis:
-    image: redis:7-alpine
-    restart: always
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 3
-    networks:
-      - app-network
 
   worker:
     build: .
@@ -124,11 +120,32 @@ services:
     dns:
       - 8.8.8.8
       - 8.8.4.4
-    extra_hosts:  # ← ДОБАВЛЕНО
-      - "auth.atlassian.com:13.227.180.4"
-      - "api.atlassian.com:13.227.180.4"
     networks:
       - app-network
+    extra_hosts:
+      - "auth.atlassian.com:13.227.180.4"
+      - "api.atlassian.com:13.227.180.4"
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
 volumes:
   postgres_data:

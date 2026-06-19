@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
+// ВРЕМЕННО - для продакшена
+const BACKEND_URL = 'https://89.169.165.170.nip.io';
+// const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
 export interface User {
   id: string;
@@ -15,7 +17,6 @@ export interface AuthStatus {
 }
 
 const authApi = {
-  // Проверка текущей авторизации
   checkAuth: async (): Promise<AuthStatus> => {
     try {
       const response = await axios.get(`${BACKEND_URL}/api/auth/me`, {
@@ -30,17 +31,14 @@ const authApi = {
       if (error.response?.status === 401) {
         return { isAuthenticated: false };
       }
-      // Сетевая ошибка — тоже считаем неавторизованным
       return { isAuthenticated: false };
     }
   },
 
-  // Получить URL для OAuth логина
   getLoginUrl: (): string => {
     return `${BACKEND_URL}/api/auth/login`;
   },
 
-  // Логаут (опционально)
   logout: async (): Promise<void> => {
     try {
       await axios.post(`${BACKEND_URL}/api/auth/logout`, {}, {

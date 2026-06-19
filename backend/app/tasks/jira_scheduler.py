@@ -61,7 +61,7 @@ async def schedule_jira_sync():
                         sync_jira_task,
                         user_id=user.id,
                         instance_name=token.instance_name,
-                        full_sync=full_sync,  # ← передаем параметр
+                        full_sync=full_sync,  # ← используем full_sync
                         job_timeout="1h" if full_sync else "10m"
                     )
                     

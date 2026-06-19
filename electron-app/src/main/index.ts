@@ -6,7 +6,16 @@ import iconPath from '../../resources/icon.png?asset'
 let tray: Tray | null = null
 let mainWindow: BrowserWindow | null = null
 let authWindow: BrowserWindow | null = null
-let URL = 'http://localhost:5173/dashboard'
+
+// URL для сайта (большие страницы)
+const WEBSITE_URL = is.dev
+  ? 'https://frontend-aa.website.yandexcloud.net/dashboard'
+  : 'https://frontend-aa.website.yandexcloud.net';
+
+// URL бекенда
+const BACKEND_URL = 'https://89.169.165.170.nip.io';
+console.log(`[MAIN] Backend URL: ${BACKEND_URL}`);
+console.log(`[MAIN] Website URL: ${WEBSITE_URL}`);
 
 declare global {
   namespace Electron {
@@ -20,25 +29,20 @@ declare global {
 async function setupSession(): Promise<void> {
   const ses = session.defaultSession;
 
+  await ses.cookies.remove('http://localhost:8000', 'session_token').catch(() => {});
+  await ses.cookies.remove('https://localhost:8000', 'session_token').catch(() => {});
+  await ses.cookies.remove(BACKEND_URL, 'session_token').catch(() => {});
+
   await ses.cookies.set({
-    url: 'http://localhost:8000',
+    url: BACKEND_URL,
     name: 'session_token',
     value: '',
-    secure: false,
+    secure: BACKEND_URL.startsWith('https'),
     httpOnly: true,
     sameSite: 'lax'
   }).catch(err => console.error('Cookie setup error:', err));
 
-  await ses.cookies.set({
-    url: 'https://localhost:8000',
-    name: 'session_token',
-    value: '',
-    secure: true,
-    httpOnly: true,
-    sameSite: 'lax'
-  }).catch(err => console.error('Cookie setup error:', err));
-
-  console.log('Session configured for cookie persistence');
+  console.log(`Session configured for ${BACKEND_URL}`);
 }
 
 // Функция для создания окна авторизации
@@ -62,34 +66,27 @@ function createAuthWindow(): void {
     }
   });
 
-  // Загружаем страницу логина
-  authWindow.loadURL('http://localhost:8000/auth/login');
+  authWindow.loadURL(`${BACKEND_URL}/auth/login`);
 
   authWindow.on('ready-to-show', () => {
     authWindow?.show();
   });
 
-  // Перехватываем редирект с code
   authWindow.webContents.on('will-redirect', async (event, navigationUrl) => {
     console.log('[Auth] Redirecting to:', navigationUrl);
 
-    // Проверяем, что редирект на страницу dashboard (после успешного логина)
-    if (navigationUrl.includes('http://localhost:5173/dashboard')) {
+    if (navigationUrl.includes(WEBSITE_URL) || navigationUrl.includes('/dashboard')) {
       event.preventDefault();
 
-      // Получаем session_token из cookies
-      const cookies = await session.defaultSession.cookies.get({ url: 'http://localhost:8000' });
+      const cookies = await session.defaultSession.cookies.get({ url: BACKEND_URL });
       const sessionCookie = cookies.find(c => c.name === 'session_token');
 
       if (sessionCookie && sessionCookie.value) {
-        console.log('[Auth] Session token obtained:', sessionCookie.value.substring(0, 20) + '...');
-
-        // Отправляем токен в renderer процесс
+        console.log('[Auth] Session token obtained!');
         mainWindow?.webContents.send('auth-success', sessionCookie.value);
-
-        // Закрываем окно авторизации
         authWindow?.close();
         authWindow = null;
+        mainWindow?.reload();
       }
     }
   });
@@ -146,6 +143,19 @@ function createWindow(): void {
     mainWindow?.show()
   })
 
+  mainWindow.webContents.on('did-finish-load', async () => {
+    console.log('[MAIN] Page loaded, checking authentication...');
+    const cookies = await session.defaultSession.cookies.get({ url: BACKEND_URL });
+    const sessionCookie = cookies.find(c => c.name === 'session_token');
+    if (sessionCookie && sessionCookie.value) {
+      console.log('[MAIN] ✅ User already authenticated');
+      mainWindow?.webContents.send('auth-success', sessionCookie.value);
+    } else {
+      console.log('[MAIN] ❌ No token, user needs to login');
+      mainWindow?.webContents.send('auth-logout');
+    }
+  });
+
   ipcMain.on('window-minimize', () => {
     mainWindow?.minimize()
   })
@@ -177,8 +187,6 @@ function createWindow(): void {
     }
   });
 
-
-  // Обработчик для запуска авторизации из renderer
   ipcMain.handle('start-login', async () => {
     console.log('[IPC] Starting login flow');
     createAuthWindow();
@@ -187,7 +195,7 @@ function createWindow(): void {
 
   ipcMain.handle('get-session-token', async () => {
     try {
-      const cookies = await session.defaultSession.cookies.get({ url: 'http://localhost:8000' });
+      const cookies = await session.defaultSession.cookies.get({ url: BACKEND_URL });
       const sessionCookie = cookies.find(c => c.name === 'session_token');
       console.log('[IPC] get-session-token:', sessionCookie?.value);
       return sessionCookie?.value || null;
@@ -199,13 +207,10 @@ function createWindow(): void {
 
   ipcMain.handle('logout', async () => {
     console.log('[MAIN] logout IPC received ');
-
     await session.defaultSession.clearStorageData({
       storages: ['cookies']
     });
-
     mainWindow?.webContents.send('auth-logout');
-
     console.log('[MAIN] auth-logout sent to renderer');
   });
 
@@ -217,7 +222,7 @@ function createWindow(): void {
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    mainWindow.loadURL(WEBSITE_URL)
   }
 }
 
@@ -226,7 +231,7 @@ function createTray(): void {
   tray = new Tray(trayIcon)
 
   const contextMenu = Menu.buildFromTemplate([
-    { label: 'Перейти на сайт', click: () => shell.openExternal(URL) },
+    { label: 'Перейти на сайт', click: () => shell.openExternal(WEBSITE_URL) },
     {
       label: 'Чат', click: () => {
         mainWindow?.webContents.send('open-tab', 'chat');
@@ -273,8 +278,6 @@ app.whenReady().then(async () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
-
-
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

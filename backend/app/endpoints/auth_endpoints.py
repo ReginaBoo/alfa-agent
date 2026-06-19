@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session as DbSession
 from datetime import datetime, timedelta
 import secrets
 import logging
+import os  # ← ДОБАВЬ ЭТУ СТРОКУ В НАЧАЛЕ ФАЙЛА
 
 
 from app.auth.models import AtlassianResource
@@ -126,8 +127,10 @@ async def callback(request: Request, db: DbSession = Depends(get_db)):
         }
 
         # 8. Создаём Response с HTTP-only cookie
+        # ИСПРАВЛЕННЫЙ БЛОК (без табуляций, только пробелы):
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
         response = RedirectResponse(
-            url="http://localhost:5173/dashboard",
+            url=f"{frontend_url}/dashboard",
             status_code=302
         )
 
@@ -215,4 +218,3 @@ async def get_electron_token(
         return JSONResponse({"error": "Invalid session"}, status_code=401)
     
     return {"session_token": session_token}
-

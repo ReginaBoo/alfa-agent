@@ -3,8 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Button, Typography, message } from 'antd';
 import api from '../../api/client';
 import { LoginOutlined } from '@ant-design/icons';
-import s from './LoginPage.module.css'; // Убедись, что путь к стилям правильный
+import s from './LoginPage.module.css';
+
 const { Title, Text } = Typography;
+
+// 🔥 Жестко задаем бекенд URL
+const BACKEND_URL = 'https://89.169.165.170.nip.io';
+
 export const LoginPage = () => {
   const navigate = useNavigate();
 
@@ -16,31 +21,34 @@ export const LoginPage = () => {
     console.log('[LoginPage] Token from URL:', token);
 
     if (token) {
-      console.log('Saving token to localStorage...');
+      console.log('✅ Saving token to localStorage...');
       localStorage.setItem('session_token', token);
 
       console.log('🔧 Setting token in API headers...');
       api.defaults.headers.common['X-Session-Token'] = token;
 
-      console.log('Token saved, redirecting to /dashboard');
+      console.log('Token in localStorage:', localStorage.getItem('session_token'));
+      console.log('Token in API headers:', api.defaults.headers.common['X-Session-Token']);
+
       message.success('Авторизация успешна!');
 
       setTimeout(() => {
+        console.log('🚀 Redirecting to /dashboard...');
         navigate('/dashboard', { replace: true });
-      }, 20);
+      }, 500);
     } else {
-      console.log('No token in URL');
+      console.log('❌ No token in URL');
     }
   }, [navigate]);
 
   const handleLogin = () => {
-    window.location.href = 'http://localhost:8000/auth/login';
+    console.log('🔑 Redirecting to:', `${BACKEND_URL}/auth/login`);
+    window.location.href = `${BACKEND_URL}/auth/login`;
   };
 
   return (
     <div className={s.pageWrapper}>
       <div className={s.loginCard}>
-        {/* Заголовок входа */}
         <Title level={3} className={s.loginTitle}>
           Вход в систему
         </Title>
@@ -49,7 +57,6 @@ export const LoginPage = () => {
           Для продолжения работы вам необходимо пройти аутентификацию.
         </Text>
 
-        {/* Контейнер с кнопкой авторизации */}
         <div className={s.socialButtons}>
           <Button
             type="primary"

@@ -26,6 +26,7 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None, sy
         instance_name: Имя инстанса Jira
         project_key: Ключ проекта (если None — синхронизирует ВСЕ проекты пользователя)
         sync_statuses_first: Синхронизировать ли статусы проектов перед задачами
+        full_sync: Полная синхронизация (True) или инкрементальная (False)
     """
     logger.info(f"Starting Jira sync for user {user_id}, instance {instance_name}")
     logger.info(f"Full sync: {full_sync}")
@@ -75,7 +76,7 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None, sy
             ).filter(
                 UserProject.user_id == user_id,
                 Project.is_active == True,
-                Project.jira_project_key.in_(jira_project_keys)  # ← только те, что есть в Jira API
+                Project.jira_project_key.in_(jira_project_keys)
             ).all()
             project_keys = [p.jira_project_key or p.key for p in user_projects]
             logger.info(f"Found {len(project_keys)} projects from DB matching Jira API: {project_keys}")
@@ -96,16 +97,27 @@ def sync_jira_task(user_id: int, instance_name: str, project_key: str = None, sy
         for p_key in project_keys:
             try:
                 logger.info(f"Syncing issues for project {p_key}...")
-                if not full_sync:
-                    jql_filter = f"project = {p_key} AND updated >= -1h"
-                else:
+                
+                # 🔥 ГЛАВНОЕ ИЗМЕНЕНИЕ: если full_sync=True или задач в БД нет — синхронизируем всё
+                from app.db.models import JiraIssue
+                # Проверяем, есть ли задачи в БД для этого проекта
+                existing_issues_count = db.query(JiraIssue).filter(
+                    JiraIssue.project_key == p_key,
+                    JiraIssue.is_deleted == False
+                ).count()
+
+                if full_sync or existing_issues_count == 0:
+                    # Полная синхронизация
                     jql_filter = f"project = {p_key}"
+                else:
+                    # Инкрементальная (только обновления за час)
+                    jql_filter = f"project = {p_key} AND updated >= -1h"
                 
                 result = sync_service.sync_project_issues(
                     user_id=user_id,
                     instance_name=instance_name,
                     project_key=p_key,
-                    jql=jql_filter,  # ← передаем JQL
+                    jql=jql_filter,
                     sync_statuses=False
                 )
 
